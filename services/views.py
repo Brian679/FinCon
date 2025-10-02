@@ -50,3 +50,16 @@ def staff_dashboard_view(request):
         'in_progress_requests': in_progress_requests,
     }
     return render(request, 'services/staff_dashboard.html', context)
+
+def about_view(request):
+    return render(request, 'about.html')
+
+def contact_view(request):
+    if request.method == 'POST':
+        name = request.POST.get('name')
+        email = request.POST.get('email')
+        subject = request.POST.get('subject')
+        message = request.POST.get('message')
+        messages.success(request, 'Thank you for contacting us! We will get back to you soon.')
+        return redirect('contact')
+    return render(request, 'contact.html')
