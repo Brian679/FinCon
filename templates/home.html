@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="hero">
+    <div class="container">
+        <h1>FinCon</h1>
+        <p class="lead">Professional Financial Consultancy Services</p>
+        <p>Need help with Accounting?</p>
+        <a href="{% url 'services_list' %}" class="btn btn-light btn-lg mt-3">View Our Services</a>
+    </div>
+</div>
+
+<div class="container">
+    <div class="row mb-5">
+        <div class="col-12 text-center">
+            <h2 class="mb-4">Our Services</h2>
+        </div>
+    </div>
+    
+    <div class="row g-4">
+        {% for service in featured_services %}
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ service.name }}</h5>
+                    <p class="card-text">{{ service.description|truncatewords:20 }}</p>
+                    <p class="text-primary fw-bold">${{ service.price }}</p>
+                    <a href="{% url 'service_detail' service.slug %}" class="btn btn-primary">Learn More</a>
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <p class="text-center">No services available yet. Please check back soon!</p>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="row mt-5">
+        <div class="col-12 text-center">
+            <a href="{% url 'services_list' %}" class="btn btn-primary btn-lg">View All Services</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
