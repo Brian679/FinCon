@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h4">{{ task.reference }} – {{ task.title }} <span class="badge text-bg-secondary">{{ task.get_status_display }}</span>{% if task.is_overdue %} <span class="badge text-bg-danger">Overdue</span>{% endif %}</h1>
+<div class="row g-3"><div class="col-lg-7">
+<div class="card shadow-sm mb-3"><div class="card-body">
+<dl class="row mb-0"><dt class="col-sm-3 fw-normal text-muted">Type</dt><dd class="col-sm-9">{{ task.get_kind_display }}</dd>
+<dt class="col-sm-3 fw-normal text-muted">From</dt><dd class="col-sm-9">{{ task.assigned_by }}</dd>
+<dt class="col-sm-3 fw-normal text-muted">To</dt><dd class="col-sm-9">{{ task.assigned_to|default:"Head of department" }} · {{ task.get_department_display }}</dd>
+<dt class="col-sm-3 fw-normal text-muted">Priority</dt><dd class="col-sm-9">{{ task.get_priority_display }}</dd>
+<dt class="col-sm-3 fw-normal text-muted">Due</dt><dd class="col-sm-9">{{ task.due_date|default:"–" }}</dd>
+<dt class="col-sm-3 fw-normal text-muted">Progress</dt><dd class="col-sm-9"><div class="progress"><div class="progress-bar bg-success" style="width: {{ task.progress }}%">{{ task.progress }}%</div></div></dd></dl>
+<hr><p class="mb-0">{{ task.description|linebreaksbr }}</p></div></div>
+<div class="card shadow-sm"><div class="card-header">Conversation</div><ul class="list-group list-group-flush">
+{% for c in comments %}<li class="list-group-item"><strong>{{ c.author }}</strong> <span class="small text-muted">{{ c.created_at }}</span><br>{{ c.body|linebreaksbr }}</li>{% empty %}<li class="list-group-item text-muted">No comments yet.</li>{% endfor %}
+</ul></div></div>
+<div class="col-lg-5"><div class="card shadow-sm"><div class="card-header">Update</div><div class="card-body">
+<form method="post">{% csrf_token %}
+<label class="form-label">Status</label><select class="form-select mb-2" name="status"><option value="">(no change)</option>{% for v, l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+<label class="form-label">Progress %</label><input class="form-range mb-2" type="range" name="progress" min="0" max="100" step="10" value="{{ task.progress }}">
+<label class="form-label">Comment / report back</label><textarea class="form-control mb-2" name="comment" rows="3"></textarea>
+<button class="btn btn-primary">Save</button></form></div></div></div></div>
+{% endblock %}

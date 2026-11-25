@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Purchase requisition – {{ user.get_department_display }}</h1>
+<form method="post">{% csrf_token %}
+<div class="card shadow-sm mb-3"><div class="card-body">{% include "generic/_form_fields.html" %}</div></div>
+<div class="card shadow-sm mb-3"><div class="card-header">Items</div><div class="card-body">
+{{ formset.management_form }}
+{% for e in formset.non_form_errors %}<div class="alert alert-danger">{{ e }}</div>{% endfor %}
+<table class="table table-sm"><thead><tr><th>Description</th><th style="width:120px">Qty</th><th style="width:160px">Unit cost (USD)</th><th>Remove</th></tr></thead>
+{% for f in formset %}<tr>{% for h in f.hidden_fields %}{{ h }}{% endfor %}<td>{{ f.description }}{{ f.description.errors }}</td><td>{{ f.quantity }}{{ f.quantity.errors }}</td><td>{{ f.unit_cost }}{{ f.unit_cost.errors }}</td><td>{% if f.DELETE %}{{ f.DELETE }}{% endif %}</td></tr>{% endfor %}
+</table></div></div>
+<button class="btn btn-outline-primary" name="save">Save draft</button>
+<button class="btn btn-primary" name="submit" value="1">Save & submit for approval</button>
+</form>
+{% endblock %}

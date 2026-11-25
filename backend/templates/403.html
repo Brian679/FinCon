@@ -1,0 +1,2 @@
+{% extends "base.html" %}
+{% block content %}<div class="text-center py-5"><h1 class="h3">Access denied</h1><p>{{ reason|default:"Your role does not allow this action." }}</p><p class="text-muted small">This attempt has been recorded in the audit trail.</p><a class="btn btn-primary" href="{% url 'accounts:home' %}">Back to my dashboard</a></div>{% endblock %}

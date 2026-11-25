@@ -1,0 +1,68 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f7a3a">
+  <title>{% block title %}{{ title|default:"Council System" }}{% endblock %} · {{ COUNCIL.SHORT_NAME }}</title>
+  <link rel="manifest" href="{% url 'core:manifest' %}">
+  <link rel="icon" href="{% static 'img/logo.svg' %}">
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+<div id="offline-banner" class="offline-banner d-none">You are offline – showing saved pages. Forms marked “offline ready” will be sent automatically when you reconnect. <span id="queue-count"></span></div>
+<nav class="navbar navbar-expand-lg navbar-dark topbar no-print">
+  <div class="container-fluid">
+    {% if user.is_authenticated %}<button class="btn btn-sm btn-outline-light d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">☰</button>{% endif %}
+    <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'accounts:home' %}">
+      <img src="{% static 'img/logo.svg' %}" alt="" width="34" height="34">
+      <span><strong>{{ COUNCIL.SHORT_NAME }}</strong> <small class="d-none d-md-inline opacity-75">· {{ COUNCIL.CHARTER }}</small></span>
+    </a>
+    <div class="ms-auto d-flex align-items-center gap-3 text-white">
+      {% if user.is_authenticated %}
+        <a class="text-white text-decoration-none position-relative" href="{% if user.is_client %}{% url 'portal:notifications' %}{% else %}{% url 'core:notifications' %}{% endif %}" title="Notifications">🔔{% if unread_notifications %}<span class="badge rounded-pill bg-danger notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
+        <span class="d-none d-md-inline small">{{ user.get_full_name|default:user.username }}{% if user.is_staff_member %} · <span class="opacity-75">{{ user.role_label }}</span>{% endif %}</span>
+        <a class="btn btn-sm btn-outline-light" href="{% url 'accounts:password_change' %}">Password</a>
+        <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-light">Log out</button></form>
+      {% else %}
+        <a class="btn btn-sm btn-light" href="{% url 'accounts:login' %}">Log in</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+<div class="container-fluid">
+  <div class="row">
+    {% if user.is_authenticated and nav_items %}
+    <aside class="col-lg-2 p-0 no-print">
+      <div class="offcanvas-lg offcanvas-start sidebar" tabindex="-1" id="sidebar">
+        <div class="offcanvas-header d-lg-none"><h5 class="offcanvas-title">Menu</h5><button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#sidebar"></button></div>
+        <div class="offcanvas-body d-block p-2">
+          {% if user.is_staff_member %}<div class="px-2 pt-2 pb-1 small text-muted">{{ user.get_department_display }}</div>{% endif %}
+          {% for section in nav_items %}
+            <div class="nav-section">{{ section.title }}</div>
+            <ul class="nav flex-column">
+            {% for item in section.items %}<li class="nav-item"><a class="nav-link {% if request.path == item.url %}active{% endif %}" href="{{ item.url }}">{{ item.label }}</a></li>{% endfor %}
+            </ul>
+          {% endfor %}
+        </div>
+      </div>
+    </aside>
+    <main class="col-lg-10 py-3 px-lg-4">
+    {% else %}
+    <main class="col-12 py-3">
+    {% endif %}
+      {% for message in messages %}
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show no-print" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+      {% endfor %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+<footer class="text-center small text-muted py-3 no-print">{{ COUNCIL.NAME }} · {{ COUNCIL.ADDRESS }} · {{ COUNCIL.PHONE }} · {{ COUNCIL.EMAIL }}</footer>
+<script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'js/offline.js' %}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

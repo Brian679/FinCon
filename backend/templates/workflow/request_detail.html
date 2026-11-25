@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h4">{{ sr.reference }} – {{ sr.get_category_display }} <span class="badge text-bg-secondary">{{ sr.get_status_display }}</span>{% if sr.is_overdue %} <span class="badge text-bg-danger">Past charter deadline</span>{% endif %}</h1>
+<div class="row g-3"><div class="col-lg-7"><div class="card shadow-sm"><div class="card-body">
+<dl class="row mb-0">
+<dt class="col-sm-4 fw-normal text-muted">Location</dt><dd class="col-sm-8">{{ sr.location }}{% if sr.ward %} · Ward {{ sr.ward }}{% endif %}{% if sr.latitude %} · <a href="https://www.openstreetmap.org/?mlat={{ sr.latitude }}&mlon={{ sr.longitude }}#map=17/{{ sr.latitude }}/{{ sr.longitude }}" target="_blank" rel="noopener">map</a>{% endif %}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Department</dt><dd class="col-sm-8">{{ sr.get_department_display }}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Reported by</dt><dd class="col-sm-8">{{ sr.reporter_name|default:"–" }} {{ sr.reporter_phone }}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Reported</dt><dd class="col-sm-8">{{ sr.created_at }}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Charter deadline</dt><dd class="col-sm-8">{{ sr.due_at }}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Priority</dt><dd class="col-sm-8">{{ sr.get_priority_display }}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Assigned to</dt><dd class="col-sm-8">{{ sr.assigned_to|default:"–" }}</dd>
+<dt class="col-sm-4 fw-normal text-muted">Resolution</dt><dd class="col-sm-8">{{ sr.resolution|default:"–"|linebreaksbr }}</dd>
+</dl><hr><p class="mb-0">{{ sr.description|linebreaksbr }}</p></div></div></div>
+<div class="col-lg-5">{% if sr.status != 'CLOSED' %}<div class="card shadow-sm"><div class="card-header">Actions</div><div class="card-body">
+<form method="post" class="mb-3">{% csrf_token %}<input type="hidden" name="action" value="assign"><select class="form-select mb-2" name="assignee">{% for o in officers %}<option value="{{ o.pk }}">{{ o }}</option>{% endfor %}</select><button class="btn btn-outline-primary">Assign officer</button></form>
+<form method="post" class="mb-3">{% csrf_token %}<input type="hidden" name="action" value="start"><button class="btn btn-outline-warning">Mark work in progress</button></form>
+<form method="post" class="mb-3">{% csrf_token %}<input type="hidden" name="action" value="resolve"><textarea class="form-control mb-2" name="note" placeholder="Work done" required></textarea><button class="btn btn-success">Resolved</button></form>
+<form method="post" class="mb-3">{% csrf_token %}<input type="hidden" name="action" value="reject"><input class="form-control mb-2" name="note" placeholder="Reason" required><button class="btn btn-outline-danger">Not council responsibility</button></form>
+{% if sr.status == 'RESOLVED' %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="close"><button class="btn btn-outline-dark">Close</button></form>{% endif %}
+</div></div>{% endif %}</div></div>
+{% endblock %}

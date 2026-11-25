@@ -1,0 +1,2 @@
+{% extends "base.html" %}
+{% block content %}<h1 class="h3">Notifications</h1><div class="list-group shadow-sm">{% for n in items %}<div class="list-group-item"><strong>{{ n.title }}</strong><div class="small">{{ n.body }}</div><div class="small text-muted">{{ n.created_at }}</div></div>{% empty %}<div class="list-group-item text-muted">No notifications.</div>{% endfor %}</div>{% endblock %}

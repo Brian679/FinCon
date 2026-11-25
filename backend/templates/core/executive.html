@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Executive overview – all departments</h1>
+{% include "core/_fin_kpis.html" %}
+<div class="row g-3 mb-3">
+{% for label, value, n in charter %}
+  <div class="col-md-4"><div class="card kpi {% if value is None %}{% elif value >= 90 %}{% elif value >= 70 %}warn{% else %}bad{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">{{ label }} (last 90 days)</div><div class="value">{% if value is None %}–{% else %}{{ value }}%{% endif %}</div><div class="small">{{ n }} case(s) measured</div></div></div></div>
+{% endfor %}
+</div>
+<div class="row g-3">
+<div class="col-xl-7">
+  <div class="card shadow-sm mb-3"><div class="card-header">Departments at a glance</div><div class="table-responsive"><table class="table table-sm mb-0">
+  <thead><tr><th>Department</th><th>Open tasks</th><th>Overdue</th><th>Complaints</th><th>Service requests</th><th>Audit findings</th></tr></thead>
+  {% for d in departments %}<tr><td>{{ d.label }}</td><td>{{ d.tasks_open }}</td><td>{% if d.tasks_overdue %}<span class="badge text-bg-danger">{{ d.tasks_overdue }}</span>{% else %}0{% endif %}</td><td>{{ d.complaints_open }}</td><td>{{ d.requests_open }}</td><td>{{ d.findings_open }}</td></tr>{% endfor %}
+  </table></div></div>
+  <div class="card shadow-sm"><div class="card-header">Projects in progress</div><ul class="list-group list-group-flush">{% for p in projects %}<li class="list-group-item"><a href="{% url 'departments:project' p.pk %}">{{ p.name }}</a> · {{ p.get_status_display }}<div class="progress mt-1" style="height:6px"><div class="progress-bar bg-success" style="width: {{ p.progress }}%"></div></div></li>{% empty %}<li class="list-group-item text-muted">No active projects.</li>{% endfor %}</ul></div>
+</div>
+<div class="col-xl-5">
+  {% include "core/_approvals.html" %}
+  <div class="card shadow-sm"><div class="card-body small">
+    <div>Licence applications in progress: <strong>{{ licences_pending }}</strong></div>
+    <div>Stand applications on waiting list: <strong>{{ stands_waiting }}</strong></div>
+    <div>Staff on leave today: <strong>{{ staff_on_leave }}</strong></div>
+    <a class="btn btn-sm btn-primary mt-2" href="{% url 'workflow:task_new' %}">Assign a task / request</a>
+  </div></div>
+</div>
+</div>
+{% endblock %}

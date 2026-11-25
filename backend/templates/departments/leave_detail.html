@@ -1,0 +1,2 @@
+{% extends "generic/detail.html" %}
+{% block actions %}{% if can_decide %}<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Decision</div><div class="card-body"><form method="post" action="{% url 'departments:leave_decide' object.pk %}">{% csrf_token %}<input class="form-control mb-2" name="comment" placeholder="Comment"><button class="btn btn-success" name="decision" value="approve">Approve</button> <button class="btn btn-outline-danger" name="decision" value="reject">Reject</button></form></div></div>{% endif %}{% endblock %}

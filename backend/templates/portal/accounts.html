@@ -1,0 +1,5 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3"><h1 class="h3">My accounts</h1><a class="btn btn-primary" href="{% url 'portal:link' %}">+ Link an account</a></div>
+<div class="list-group shadow-sm">{% for a in accounts %}<a class="list-group-item list-group-item-action d-flex justify-content-between" href="{% url 'portal:account' a.pk %}"><span><strong>{{ a.account_number }}</strong> {{ a.name }}</span><span>${{ a.balance|floatformat:2|intcomma }}</span></a>{% empty %}<div class="list-group-item text-muted">No accounts linked.</div>{% endfor %}</div>
+{% endblock %}

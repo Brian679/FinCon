@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1 class="h4">{{ account.account_number }} – {{ account.name }}</h1>
+<p>Balance owed: <strong>${{ account.balance|floatformat:2|intcomma }}</strong> <a class="btn btn-sm btn-primary ms-2" href="{% url 'portal:pay' %}">Pay</a></p>
+<div class="row g-3"><div class="col-lg-6"><div class="card shadow-sm"><div class="card-header">Bills</div><table class="table table-sm mb-0">{% for b in bills %}<tr><td>{{ b.number }}</td><td>{{ b.description }}</td><td class="text-end">{{ b.amount|floatformat:2 }}</td><td>{{ b.get_status_display }}</td><td>{% if b.status != 'PAID' %}<a href="{% url 'portal:pay' %}?bill={{ b.pk }}">pay</a>{% endif %}</td></tr>{% empty %}<tr><td class="text-muted">No bills.</td></tr>{% endfor %}</table></div></div>
+<div class="col-lg-6"><div class="card shadow-sm"><div class="card-header">Payments</div><table class="table table-sm mb-0">{% for r in receipts %}<tr><td><a href="{% url 'portal:receipt' r.pk %}">{{ r.number }}</a></td><td>{{ r.created_at|date:"d M Y" }}</td><td class="text-end">{{ r.currency }} {{ r.amount|floatformat:2 }}</td></tr>{% empty %}<tr><td class="text-muted">No payments.</td></tr>{% endfor %}</table></div>
+<div class="card shadow-sm mt-3"><div class="card-header">Properties</div><ul class="list-group list-group-flush">{% for p in properties %}<li class="list-group-item">{{ p }} – rates ${{ p.monthly_rates }}/month</li>{% empty %}<li class="list-group-item text-muted">None</li>{% endfor %}</ul></div></div></div>
+{% endblock %}

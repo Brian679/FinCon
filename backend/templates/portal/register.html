@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-7">
+<h1 class="h3">Create your client account</h1>
+<p class="text-muted">For residents, ratepayers and businesses in Chipinge District. Use it to pay rates and levies, apply for licences and report problems – on the web or in the Chipinge RDC app.</p>
+<div class="card shadow-sm"><div class="card-body"><form method="post">{% csrf_token %}{% include "generic/_form_fields.html" %}<button class="btn btn-primary mt-3">Create account</button></form></div></div>
+<p class="small text-muted mt-2">Your information is kept private and confidential in line with the Client Charter.</p>
+</div></div>
+{% endblock %}

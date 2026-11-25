@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1 class="h4">{{ title }}</h1><p class="text-muted">{{ bank.bank }} {{ bank.account_number }} · {{ bank.currency }} · Opening balance {{ bank.opening_balance|floatformat:2|intcomma }} on {{ bank.opening_date }} · <strong>Current balance {{ bank.balance|floatformat:2|intcomma }}</strong></p>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-sm mb-0"><thead class="table-light"><tr><th>Date</th><th>Details</th><th class="text-end">Money in</th><th class="text-end">Money out</th><th class="text-end">Balance</th></tr></thead>
+{% for e in book %}<tr><td>{{ e.ts|date:"d M Y H:i" }}</td><td>{{ e.text }}</td><td class="text-end text-success">{% if e.in %}{{ e.in|floatformat:2|intcomma }}{% endif %}</td><td class="text-end text-danger">{% if e.out %}{{ e.out|floatformat:2|intcomma }}{% endif %}</td><td class="text-end">{{ e.balance|floatformat:2|intcomma }}</td></tr>{% empty %}<tr><td colspan="5" class="text-muted p-3">No transactions.</td></tr>{% endfor %}
+</table></div></div>
+{% endblock %}

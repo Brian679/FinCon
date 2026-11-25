@@ -1,0 +1,5 @@
+{% extends "generic/detail.html" %}
+{% block actions %}
+{% if object.status == 'ISSUED' %}<div class="card shadow-sm mb-3"><div class="card-header">Goods received note</div><div class="card-body"><form method="post" action="{% url 'finance:order_receive' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="comment" placeholder="Delivery note no., condition, quantities"></textarea><button class="btn btn-success">Confirm goods / services received</button></form></div></div>{% endif %}
+{% if object.status == 'DELIVERED' and 'voucher.prepare' in user.capabilities %}<a class="btn btn-primary mb-3" href="{% url 'finance:voucher_new' %}?po={{ object.pk }}">Prepare payment voucher</a>{% endif %}
+{% endblock %}

@@ -1,0 +1,18 @@
+{% extends "generic/detail.html" %}
+{% block header_buttons %}{% if can_submit %}<a class="btn btn-outline-primary" href="{% url 'finance:requisition_edit' object.pk %}">Edit draft</a>{% endif %}{% endblock %}
+{% block below_details %}
+<div class="card shadow-sm mt-3"><div class="card-header">Items</div><table class="table table-sm mb-0"><thead><tr><th>Description</th><th class="text-end">Qty</th><th class="text-end">Unit cost</th><th class="text-end">Total</th></tr></thead>
+{% for i in object.items.all %}<tr><td>{{ i.description }}</td><td class="text-end">{{ i.quantity }}</td><td class="text-end">{{ i.unit_cost }}</td><td class="text-end">{{ i.total }}</td></tr>{% endfor %}
+<tr class="fw-bold"><td colspan="3">Total</td><td class="text-end">{{ object.total }}</td></tr></table></div>
+{% if po %}<div class="alert alert-success mt-3">Purchase order <a href="{% url 'finance:order' po.pk %}">{{ po.number }}</a> issued to {{ po.supplier.name }}.</div>{% endif %}
+{% endblock %}
+{% block actions %}
+<div class="card shadow-sm mb-3"><div class="card-body small">Workflow: Department → Head of Department → Accountant (funds check) → Treasurer → CEO (if ≥ threshold) → Purchase order. No one can approve their own request or approve twice.</div></div>
+{% if can_submit %}<form method="post" action="{% url 'finance:requisition_action' object.pk %}" class="mb-3">{% csrf_token %}<button class="btn btn-primary" name="action" value="submit">Submit for approval</button></form>{% endif %}
+{% if next_action %}
+<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Your decision: {{ next_action }}</div><div class="card-body"><form method="post" action="{% url 'finance:requisition_action' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="comment" placeholder="Comment (required when rejecting)"></textarea><button class="btn btn-success" name="action" value="approve">Approve</button> <button class="btn btn-outline-danger" name="action" value="reject">Reject</button></form></div></div>
+{% endif %}
+{% if can_order %}
+<div class="card shadow-sm mb-3"><div class="card-header">Issue purchase order</div><div class="card-body"><form method="post" action="{% url 'finance:requisition_action' object.pk %}">{% csrf_token %}{% with form=po_form %}{% include "generic/_form_fields.html" %}{% endwith %}<button class="btn btn-primary mt-2" name="action" value="order">Issue PO</button></form></div></div>
+{% endif %}
+{% endblock %}

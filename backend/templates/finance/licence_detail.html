@@ -1,0 +1,12 @@
+{% extends "generic/detail.html" %}
+{% block header_buttons %}{% if object.status == 'ISSUED' %}<a class="btn btn-success" href="{% url 'finance:licence_certificate' object.pk %}">Licence certificate</a>{% endif %}{% endblock %}
+{% block actions %}
+{% if object.status == 'INSPECTION' and 'licence.inspect' in user.capabilities %}
+<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Inspection (Health / Building)</div><div class="card-body"><form method="post" action="{% url 'finance:licence_inspect' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="comment" required placeholder="Inspection findings"></textarea><button class="btn btn-success" name="decision" value="pass">Passed</button> <button class="btn btn-outline-danger" name="decision" value="fail">Failed</button></form></div></div>
+{% endif %}
+{% if object.status == 'APPLIED' or object.status == 'INSPECTED' %}{% if 'licence.approve' in user.capabilities %}
+<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Licence decision (Treasurer)</div><div class="card-body"><form method="post" action="{% url 'finance:licence_decide' object.pk %}">{% csrf_token %}<label class="form-label">Licence fee (USD)</label><input class="form-control mb-2" name="fee" type="number" step="0.01" value="{{ object.fee }}"><textarea class="form-control mb-2" name="comment" placeholder="Comment / reason"></textarea><button class="btn btn-success" name="decision" value="approve">Approve & bill fee</button> <button class="btn btn-outline-danger" name="decision" value="reject">Reject</button></form>
+<div class="small text-muted mt-2">On approval a bill is raised; the licence is issued automatically once the fee is paid.</div></div></div>
+{% endif %}{% endif %}
+{% if object.status == 'APPROVED' and object.bill and 'receipt.create' in user.capabilities %}<a class="btn btn-primary mb-3" href="{% url 'finance:receipt_new' %}?bill={{ object.bill.pk }}">Receive licence fee</a>{% endif %}
+{% endblock %}

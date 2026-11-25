@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3"><h1 class="h3">My licences</h1><a class="btn btn-primary" href="{% url 'portal:licence_apply' %}">+ Apply / renew</a></div>
+<div class="card shadow-sm"><table class="table mb-0"><thead><tr><th>No.</th><th>Type</th><th>Business</th><th>Status</th><th>Fee</th><th>Expires</th><th></th></tr></thead>
+{% for l in licences %}<tr><td>{{ l.number }}</td><td>{{ l.get_licence_type_display }}</td><td>{{ l.business_name }}</td><td>{{ l.get_status_display }}</td><td>${{ l.fee }}</td><td>{{ l.expiry_date|default:"" }}</td><td>{% if l.status == 'APPROVED' and l.bill %}<a class="btn btn-sm btn-primary" href="{% url 'portal:pay' %}?bill={{ l.bill.pk }}">Pay fee</a>{% elif l.status == 'ISSUED' %}<a class="btn btn-sm btn-success" href="{% url 'portal:licence_certificate' l.pk %}">Certificate</a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7" class="text-muted">No licences.</td></tr>{% endfor %}</table></div>
+{% endblock %}

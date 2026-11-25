@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3"><h1 class="h3">Notifications</h1><form method="post">{% csrf_token %}<button class="btn btn-outline-secondary btn-sm">Mark all as read</button></form></div>
+<div class="list-group shadow-sm">
+{% for n in page %}<a class="list-group-item list-group-item-action {% if not n.is_read %}fw-semibold{% endif %}" href="{% url 'core:notification_open' n.pk %}">{{ n.title }}<div class="small text-muted fw-normal">{{ n.body }} · {{ n.created_at }}</div></a>
+{% empty %}<div class="list-group-item text-muted">No notifications.</div>{% endfor %}
+</div>
+{% endblock %}

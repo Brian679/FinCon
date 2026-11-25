@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Client Charter{% endblock %}
+{% block content %}
+<div class="container" style="max-width:960px">
+<h1 class="h3">{{ COUNCIL.NAME }} – {{ COUNCIL.CHARTER }}</h1>
+<p class="text-muted"><em>A Provider of Responsive Quality Municipal Services by 2030</em></p>
+<h2 class="h5 mt-4">Mission</h2><p>{{ COUNCIL.MISSION }}</p>
+<h2 class="h5">Service standards</h2>
+<table class="table table-striped"><thead><tr><th>Service</th><th>Standard</th></tr></thead>
+{% for s in standards %}<tr><td>{{ s.service }}{% if s.is_digital %} <span class="badge text-bg-info">digital</span>{% endif %}</td><td>{{ s.standard_text }}</td></tr>{% endfor %}</table>
+<div class="row">
+<div class="col-md-6"><h2 class="h5">Clients' rights</h2><ul><li>Quality and affordable services</li><li>Access to information</li><li>Fair and courteous treatment</li><li>Participation in development planning</li><li>Privacy and confidentiality</li><li>Transparent governance</li><li>Submit complaints and suggestions</li><li>Equal treatment without discrimination</li></ul></div>
+<div class="col-md-6"><h2 class="h5">Clients' responsibilities</h2><ul><li>Pay rates and charges promptly</li><li>Observe Council by-laws</li><li>Protect Council infrastructure</li><li>Participate in development meetings</li><li>Provide accurate information</li><li>Protect the environment</li><li>Report service delivery challenges</li></ul></div>
+</div>
+<h2 class="h5">Feedback & complaints</h2><p>Through the Chief Executive Officer, suggestion boxes, council offices, email, telephone, community consultations, social media – and now this portal and the mobile app. <strong>All complaints shall be acknowledged within 48 hours.</strong></p>
+<p class="pledge">“{{ COUNCIL.PLEDGE }}”</p>
+</div>
+{% endblock %}

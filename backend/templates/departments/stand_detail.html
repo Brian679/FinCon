@@ -1,0 +1,9 @@
+{% extends "generic/detail.html" %}
+{% block actions %}{% if 'stands.manage' in user.capabilities and object.status != 'ALLOCATED' and object.status != 'REJECTED' %}
+<div class="card shadow-sm mb-3"><div class="card-header">Process application</div><div class="card-body">
+<form method="post" action="{% url 'departments:stand_action' object.pk %}">{% csrf_token %}
+<input class="form-control mb-2" name="note" placeholder="Note">
+{% if 'stands.allocate' in user.capabilities %}<input class="form-control mb-2" name="stand" placeholder="Stand number to allocate">{% endif %}
+<button class="btn btn-outline-primary" name="action" value="shortlist">Shortlist</button>
+{% if 'stands.allocate' in user.capabilities %}<button class="btn btn-success" name="action" value="allocate">Allocate stand</button>{% endif %}
+<button class="btn btn-outline-danger" name="action" value="reject">Reject</button></form></div></div>{% endif %}{% endblock %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3"><h1 class="h3">{{ title }}</h1><a class="btn btn-primary" href="{% url new_url %}">+ New</a></div>
+<div class="list-group shadow-sm">
+{% for i in items %}<div class="list-group-item"><div class="d-flex justify-content-between"><strong>{{ i.reference }}</strong><span class="badge text-bg-secondary">{{ i.get_status_display }}</span></div>
+{% if kind == 'complaint' %}{{ i.get_kind_display }}: {{ i.subject }}{% if i.resolution %}<div class="small text-success">Response: {{ i.resolution }}</div>{% endif %}
+{% elif kind == 'request' %}{{ i.get_category_display }} – {{ i.location }}{% if i.resolution %}<div class="small text-success">{{ i.resolution }}</div>{% endif %}
+{% else %}{{ i.get_stand_type_display }} stand – {{ i.preferred_location }}{% if i.allocated_stand %}<div class="small text-success">Allocated: {{ i.allocated_stand }}</div>{% endif %}{% endif %}
+<div class="small text-muted">{{ i.created_at }}</div></div>
+{% empty %}<div class="list-group-item text-muted">Nothing yet.</div>{% endfor %}</div>
+{% endblock %}

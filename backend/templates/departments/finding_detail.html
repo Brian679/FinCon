@@ -1,0 +1,6 @@
+{% extends "generic/detail.html" %}
+{% block actions %}
+{% if object.status == 'OPEN' and 'audit.respond' in user.capabilities %}{% if user.department == object.department or user.is_ceo %}
+<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Management response</div><div class="card-body"><form method="post" action="{% url 'departments:finding_action' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="note" required placeholder="Agreed action"></textarea><label class="form-label small">Implementation date</label><input type="date" class="form-control mb-2" name="date"><button class="btn btn-primary" name="action" value="respond">Submit response</button></form></div></div>{% endif %}{% endif %}
+{% if 'audit.findings_manage' in user.capabilities and object.status != 'CLOSED' %}<form method="post" action="{% url 'departments:finding_action' object.pk %}" class="mb-3">{% csrf_token %}<button class="btn btn-outline-warning" name="action" value="implementing">Mark implementing</button> <button class="btn btn-success" name="action" value="close">Verify & close</button></form>{% endif %}
+{% endblock %}

@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-6"><div class="card shadow-sm"><div class="card-body text-center p-4">
+<h1 class="h4">Payment {{ p.reference }}</h1>
+<p class="fs-4">{{ p.currency }} {{ p.amount }} · {{ p.account.account_number }}</p>
+{% if p.status == 'PAID' %}<div class="alert alert-success">Paid. Receipt <a href="{% url 'portal:receipt' p.receipt.pk %}">{{ p.receipt.number }}</a> issued.</div>
+{% elif p.status == 'PENDING' %}
+  <p>Check your phone ({{ p.phone }}) and enter your PIN to approve the payment.</p>
+  <form method="post">{% csrf_token %}
+  {% if p.provider == 'simulated' %}<div class="alert alert-warning small">Test mode: no real money moves. Press “Confirm” to simulate the customer approving the prompt.</div><button class="btn btn-success" name="confirm" value="1">Confirm (simulate phone approval)</button>{% else %}<button class="btn btn-primary" name="check" value="1">I have approved – check status</button>{% endif %}
+  <button class="btn btn-outline-secondary" name="cancel" value="1">Cancel</button></form>
+{% else %}<div class="alert alert-danger">This payment was {{ p.get_status_display|lower }}.</div><a class="btn btn-primary" href="{% url 'portal:pay' %}">Try again</a>{% endif %}
+</div></div></div></div>
+{% endblock %}

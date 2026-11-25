@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1 class="h3 mb-3">End-of-day cash-up</h1>
+<div class="row g-3"><div class="col-lg-5"><div class="card shadow-sm"><div class="card-header">My receipts not yet cashed-up</div><table class="table table-sm mb-0"><thead><tr><th>Currency</th><th>Method</th><th class="text-end">Count</th><th class="text-end">Total</th></tr></thead>
+{% for s in summary %}<tr><td>{{ s.currency }}</td><td>{{ s.method }}</td><td class="text-end">{{ s.n }}</td><td class="text-end">{{ s.t|floatformat:2|intcomma }}</td></tr>{% empty %}<tr><td colspan="4" class="text-muted p-3">Nothing to cash up.</td></tr>{% endfor %}</table></div></div>
+<div class="col-lg-7"><div class="card shadow-sm"><div class="card-body"><p class="small text-muted">Count the physical cash in your drawer for the selected currency and declare it. Any difference is recorded as a variance and reported to the Accountant.</p>
+<form method="post">{% csrf_token %}{% include "generic/_form_fields.html" %}<button class="btn btn-primary mt-3">Submit cash-up</button></form></div></div></div></div>
+{% endblock %}

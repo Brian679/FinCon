@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card shadow-sm receipt-paper"><div class="card-body">
+<div class="text-center"><strong>{{ COUNCIL.NAME|upper }}</strong><br>{{ COUNCIL.ADDRESS }}<hr><strong>OFFICIAL RECEIPT</strong></div>
+<table class="table table-sm table-borderless mb-0">
+<tr><td>Receipt no.</td><td class="text-end">{{ r.number }}</td></tr><tr><td>Date</td><td class="text-end">{{ r.created_at|date:"d/m/Y H:i" }}</td></tr>
+<tr><td>Account</td><td class="text-end">{{ r.account.account_number }}</td></tr><tr><td>Received from</td><td class="text-end">{{ r.payer_name }}</td></tr>
+<tr><td>For</td><td class="text-end">{{ r.revenue_head.name }}</td></tr><tr class="fw-bold"><td>AMOUNT</td><td class="text-end">{{ r.currency }} {{ r.amount|floatformat:2 }}</td></tr>
+<tr><td>Method</td><td class="text-end">{{ r.get_method_display }} {{ r.reference }}</td></tr><tr><td>Balance after payment</td><td class="text-end">USD {{ r.account.balance|floatformat:2 }}</td></tr></table>
+</div></div><div class="text-center mt-3 no-print"><button class="btn btn-primary" onclick="window.print()">Print / save PDF</button></div>
+{% endblock %}

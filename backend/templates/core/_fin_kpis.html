@@ -1,0 +1,7 @@
+{% load humanize %}
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3"><div class="card kpi shadow-sm"><div class="card-body"><div class="text-muted small">Collected today (USD equiv.)</div><div class="value">${{ fin.today.t|default:0|floatformat:2|intcomma }}</div><div class="small">{{ fin.today.n }} receipt(s)</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="text-muted small">Collected this month</div><div class="value">${{ fin.month.t|default:0|floatformat:2|intcomma }}</div><div class="small">{{ fin.month.n }} receipt(s)</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="text-muted small">Paid out this month</div><div class="value">${{ fin.paid_out_month|floatformat:2|intcomma }}</div><div class="small">payment vouchers</div></div></div></div>
+  <div class="col-sm-6 col-xl-3"><div class="card kpi bad shadow-sm"><div class="card-body"><div class="text-muted small">Debtors (owed to council)</div><div class="value">${{ fin.debtors.t|default:0|floatformat:2|intcomma }}</div><div class="small">{{ fin.debtors.n }} accounts · {{ fin.overdue_bills }} overdue bills</div></div></div></div>
+</div>

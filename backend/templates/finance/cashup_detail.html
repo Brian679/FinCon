@@ -1,0 +1,9 @@
+{% extends "generic/detail.html" %}
+{% block below_details %}
+<div class="card shadow-sm mt-3"><div class="card-header">Receipts in this cash-up</div><table class="table table-sm mb-0">{% for r in object.receipts.all %}<tr><td><a href="{% url 'finance:receipt' r.pk %}">{{ r.number }}</a></td><td>{{ r.payer_name }}</td><td>{{ r.get_method_display }}</td><td class="text-end">{{ r.currency }} {{ r.amount|floatformat:2 }}</td></tr>{% endfor %}</table></div>
+{% endblock %}
+{% block actions %}
+{% if object.status == 'SUBMITTED' and 'cashup.verify' in user.capabilities and object.cashier_id != user.pk %}
+<div class="card shadow-sm mb-3"><div class="card-header">Verify cash-up</div><div class="card-body"><form method="post" action="{% url 'finance:cashup_verify' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="comment" placeholder="Comment"></textarea><button class="btn btn-success" name="decision" value="verify">Verify – cash banked</button> <button class="btn btn-outline-danger" name="decision" value="query">Query</button></form></div></div>
+{% endif %}
+{% endblock %}

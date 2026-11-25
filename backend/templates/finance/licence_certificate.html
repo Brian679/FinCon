@@ -1,0 +1,17 @@
+{% extends "base.html" %}{% load static %}
+{% block content %}
+<div class="card mx-auto shadow" style="max-width:720px"><div class="card-body p-5 text-center" style="border:6px double #1f7a3a">
+<img src="{% static 'img/logo.svg' %}" width="80" alt="">
+<h1 class="h4 mt-2">{{ COUNCIL.NAME|upper }}</h1>
+<h2 class="h3 my-3">{{ lic.get_licence_type_display|upper }}</h2>
+<p class="lead">This is to certify that</p>
+<p class="fs-3 fw-bold">{{ lic.business_name }}</p>
+<p>trading as <em>{{ lic.business_activity|default:"general dealer" }}</em> at <strong>{{ lic.premises }}</strong>{% if lic.ward %}, Ward {{ lic.ward }}{% endif %}</p>
+<p>is licensed by Chipinge Rural District Council for the period</p>
+<p class="fs-5"><strong>{{ lic.issue_date|date:"d F Y" }}</strong> to <strong>{{ lic.expiry_date|date:"d F Y" }}</strong></p>
+<p>Licence no. <strong>{{ lic.number }}</strong> · Account {{ lic.account.account_number }} · Fee paid USD {{ lic.fee }}</p>
+<div class="row mt-5"><div class="col"><hr>Treasurer<br><small>{{ lic.approved_by.get_full_name }}</small></div><div class="col"><hr>Chief Executive Officer</div></div>
+<p class="small mt-4 text-muted">This licence must be displayed conspicuously at the premises. Verify authenticity with council quoting the licence number.</p>
+</div></div>
+<div class="text-center mt-3 no-print"><button class="btn btn-primary" onclick="window.print()">Print</button></div>
+{% endblock %}

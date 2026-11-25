@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-lg-7">
+<h1 class="h3">Pay rates, levies & fees</h1>
+<div class="card shadow-sm"><div class="card-body"><form method="post">{% csrf_token %}{% if bill %}<input type="hidden" name="bill" value="{{ bill.pk }}"><div class="alert alert-info">Paying bill {{ bill.number }}: {{ bill.description }}</div>{% endif %}
+{% include "generic/_form_fields.html" %}<button class="btn btn-primary btn-lg mt-3">Send payment prompt to my phone</button></form></div></div>
+<p class="small text-muted mt-2">You will receive a prompt on your phone to enter your PIN. Your official receipt is issued immediately once payment is confirmed (Client Charter: payment confirmation – immediate).</p>
+</div></div>
+{% endblock %}

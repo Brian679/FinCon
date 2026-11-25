@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3"><h1 class="h3 mb-0">{{ title }}</h1>
+<div class="d-flex gap-2"><form><input class="form-control" type="number" name="year" value="{{ year }}" onchange="this.form.submit()" style="width:110px"></form>{% if can_manage %}<a class="btn btn-primary" href="{% url 'finance:budget_new' %}">+ Budget line</a><a class="btn btn-outline-primary" href="{% url 'finance:revenue_heads' %}">Revenue heads</a>{% endif %}</div></div>
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-sm align-middle mb-0">
+<thead class="table-light"><tr><th>Vote</th><th>Description</th><th>Dept</th><th>Type</th><th class="text-end">Budget</th><th class="text-end">Actual</th><th class="text-end">Committed</th><th class="text-end">Available</th><th style="width:140px">Used</th></tr></thead>
+{% for r in rows %}<tr><td>{% if can_manage %}<a href="{% url 'finance:budget_edit' r.line.pk %}">{{ r.line.vote_code }}</a>{% else %}{{ r.line.vote_code }}{% endif %}</td><td>{{ r.line.description }}</td><td>{{ r.line.department }}</td><td>{{ r.line.get_kind_display }}</td>
+<td class="text-end">{{ r.line.budget|floatformat:2|intcomma }}</td><td class="text-end">{{ r.actual|floatformat:2|intcomma }}</td><td class="text-end">{{ r.committed|floatformat:2|intcomma }}</td><td class="text-end {% if r.available < 0 %}text-danger{% endif %}">{{ r.available|floatformat:2|intcomma }}</td>
+<td><div class="progress" style="height:8px"><div class="progress-bar {% if r.pct > 100 %}bg-danger{% elif r.pct > 85 %}bg-warning{% else %}bg-success{% endif %}" style="width: {% if r.pct > 100 %}100{% else %}{{ r.pct }}{% endif %}%"></div></div><small>{{ r.pct }}%</small></td></tr>
+{% empty %}<tr><td colspan="9" class="text-muted p-3">No budget lines for {{ year }}.</td></tr>{% endfor %}
+</table></div></div>
+<div class="row g-3 mt-1">{% for kind, t in totals.items %}<div class="col-md-4"><div class="card shadow-sm"><div class="card-body small"><strong>{{ kind|title }}</strong><br>Budget ${{ t.0|floatformat:2|intcomma }} · Actual ${{ t.1|floatformat:2|intcomma }} · Committed ${{ t.2|floatformat:2|intcomma }}</div></div></div>{% endfor %}</div>
+{% endblock %}

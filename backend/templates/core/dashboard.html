@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-1">Welcome, {{ user.first_name|default:user.username }}</h1>
+<p class="text-muted">{{ user.role_label }} · {{ user.get_department_display }}</p>
+{% if fin %}{% include "core/_fin_kpis.html" %}{% endif %}
+<div class="row g-3 mb-3">
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:complaints' %}"><div class="card kpi {% if complaints_unacked %}bad{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Open complaints {% if not user.sees_all_departments %}(my department){% endif %}</div><div class="value">{{ complaints_open_count }}</div><div class="small">{{ complaints_unacked }} not yet acknowledged (48h standard)</div></div></div></a></div>
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:requests' %}"><div class="card kpi {% if requests_overdue %}warn{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Open service requests</div><div class="value">{{ requests_open_count }}</div><div class="small">{{ requests_overdue }} past charter deadline</div></div></div></a></div>
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:tasks' %}"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="text-muted small">My open tasks</div><div class="value">{{ my_tasks|length }}</div><div class="small">assigned to me</div></div></div></a></div>
+  {% if open_findings is not None %}<div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'departments:findings' %}"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="text-muted small">Open audit findings</div><div class="value">{{ open_findings }}</div><div class="small">internal audit</div></div></div></a></div>{% endif %}
+</div>
+<div class="row g-3">
+  <div class="col-xl-7">{% include "core/_approvals.html" %}
+    {% if projects %}<div class="card shadow-sm"><div class="card-header">Projects</div><ul class="list-group list-group-flush">{% for p in projects %}<li class="list-group-item"><a href="{% url 'departments:project' p.pk %}">{{ p.name }}</a> <span class="text-muted small">Ward {{ p.ward|default:"–" }}</span><div class="progress mt-1" style="height:6px"><div class="progress-bar bg-success" style="width: {{ p.progress }}%"></div></div></li>{% endfor %}</ul></div>{% endif %}
+  </div>
+  <div class="col-xl-5">
+    <div class="card shadow-sm"><div class="card-header">My tasks</div><ul class="list-group list-group-flush">
+    {% for t in my_tasks %}<li class="list-group-item"><a href="{% url 'workflow:task' t.pk %}">{{ t.title }}</a> {% if t.is_overdue %}<span class="badge text-bg-danger">overdue</span>{% endif %}<div class="small text-muted">{{ t.reference }} · due {{ t.due_date|default:"–" }} · from {{ t.assigned_by }}</div></li>
+    {% empty %}<li class="list-group-item text-muted">No open tasks.</li>{% endfor %}</ul></div>
+  </div>
+</div>
+{% endblock %}

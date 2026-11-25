@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Receipting counter</h1>
+<div class="row g-3"><div class="col-lg-8">
+<div class="card shadow-sm"><div class="card-body">
+<form method="post">{% csrf_token %}
+{% include "generic/_form_fields.html" %}
+<div class="mt-4"><button class="btn btn-primary btn-lg">Issue receipt</button></div>
+</form></div></div></div>
+<div class="col-lg-4"><div class="card shadow-sm"><div class="card-body small">
+<h2 class="h6">Rules</h2>
+<ul class="mb-2"><li>Receipts cannot be edited or deleted. Mistakes are corrected by a <strong>void request</strong> approved by the Accountant/Treasurer.</li>
+<li>Non-cash payments need the transaction reference.</li>
+<li>Payment against an account is automatically allocated to the oldest unpaid bills.</li>
+<li>Submit your cash-up at the end of the day.</li></ul>
+<h2 class="h6">Exchange rates (per 1 USD)</h2>
+{% for cur, rate in rates.items %}<div>{{ cur }}: {{ rate }}</div>{% empty %}<div class="text-muted">USD only.</div>{% endfor %}
+</div></div></div></div>
+{% endblock %}

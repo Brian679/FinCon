@@ -1,0 +1,11 @@
+{% extends "generic/detail.html" %}{% load humanize %}
+{% block actions %}
+<div class="card shadow-sm mb-3"><div class="card-body small">Workflow: Prepared (clerk) → Checked (Accountant) → Approved (Treasurer) → Authorised (CEO, if ≥ threshold) → Paid. Segregation of duties is enforced.
+{% if budget %}<div class="mt-2">Budget vote available: <strong>${{ budget.available|floatformat:2|intcomma }}</strong> of ${{ budget.budget|floatformat:2|intcomma }}</div>{% endif %}</div></div>
+{% if next_action %}
+<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Your decision: {{ next_action }}</div><div class="card-body"><form method="post" action="{% url 'finance:voucher_action' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="comment" placeholder="Comment"></textarea><button class="btn btn-success" name="action" value="approve">Approve</button> <button class="btn btn-outline-danger" name="action" value="reject">Reject</button></form></div></div>
+{% endif %}
+{% if can_pay %}
+<div class="card shadow-sm mb-3 border-success"><div class="card-header">Release payment</div><div class="card-body"><form method="post" action="{% url 'finance:voucher_action' object.pk %}">{% csrf_token %}{% with form=pay_form %}{% include "generic/_form_fields.html" %}{% endwith %}<button class="btn btn-success mt-2" name="action" value="pay">Mark as paid</button></form></div></div>
+{% endif %}
+{% endblock %}

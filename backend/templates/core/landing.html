@@ -1,0 +1,37 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Welcome{% endblock %}
+{% block content %}
+<div class="container">
+<div class="charter-hero p-4 p-md-5 mb-4">
+  <div class="row align-items-center g-4">
+    <div class="col-md-8">
+      <h1 class="display-6 fw-bold">{{ COUNCIL.NAME }}</h1>
+      <p class="lead mb-1">{{ COUNCIL.CHARTER }}</p>
+      <p class="mb-4"><em>{{ COUNCIL.VISION }}</em></p>
+      <a class="btn btn-light btn-lg me-2" href="{% url 'portal:dashboard' %}">Residents & businesses: pay rates online</a>
+      <a class="btn btn-outline-light btn-lg" href="{% url 'accounts:login' %}">Council staff login</a>
+    </div>
+    <div class="col-md-4 text-center"><img src="{% static 'img/logo.svg' %}" width="150" alt="Council logo"></div>
+  </div>
+</div>
+<div class="row g-4">
+  <div class="col-lg-4"><div class="card h-100 shadow-sm"><div class="card-body">
+    <h2 class="h5">What you can do online</h2>
+    <ul class="mb-3"><li>Pay rates, levies and licence fees (EcoCash, OneMoney, cards)</li><li>Check your balance, bills and receipts</li><li>Apply for or renew a shop / business licence</li><li>Report water, road or refuse problems</li><li>Lodge complaints, compliments & suggestions</li><li>Apply for a residential or commercial stand</li></ul>
+    <a class="btn btn-primary" href="{% url 'portal:register' %}">Create a free account</a>
+  </div></div></div>
+  <div class="col-lg-4"><div class="card h-100 shadow-sm"><div class="card-body">
+    <h2 class="h5">Our service standards</h2>
+    <table class="table table-sm mb-0">{% for s in standards %}<tr><td>{{ s.service }}</td><td class="text-nowrap">{{ s.standard_text }}</td></tr>{% endfor %}</table>
+  </div></div></div>
+  <div class="col-lg-4"><div class="card h-100 shadow-sm"><div class="card-body">
+    <h2 class="h5">Core values (PITTA)</h2>
+    <p class="mb-1"><strong>P</strong>roactive · <strong>I</strong>ntegrity · <strong>T</strong>eamwork · <strong>T</strong>ransparency · <strong>A</strong>ccountability</p>
+    <h2 class="h5 mt-3">Contact</h2>
+    <p class="mb-0">Chief Executive Officer<br>{{ COUNCIL.ADDRESS }}<br>☎ {{ COUNCIL.PHONE }}<br>✉ {{ COUNCIL.EMAIL }}<br>Facebook: {{ COUNCIL.FACEBOOK }} · X: {{ COUNCIL.X }}</p>
+    <a href="{% url 'core:charter' %}" class="d-block mt-2">Read the full Client Charter →</a>
+  </div></div></div>
+</div>
+<p class="pledge text-center mt-4">“{{ COUNCIL.PLEDGE }}”</p>
+</div>
+{% endblock %}
