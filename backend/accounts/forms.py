@@ -59,6 +59,11 @@ class StaffUserForm(BootstrapFormMixin, forms.ModelForm):
 class ClientRegistrationForm(BootstrapFormMixin, forms.ModelForm):
     password1 = forms.CharField(label="Password", widget=forms.PasswordInput)
     password2 = forms.CharField(label="Confirm password", widget=forms.PasswordInput)
+    # Optional: the stand / shop the client owns, occupies or trades from.
+    stand_number = forms.CharField(max_length=40, required=False, label="Stand number (optional)",
+                                   help_text="If you own or run a shop/house on a council stand, enter its number to link it to your account.")
+    area = forms.ModelChoiceField(queryset=None, required=False, label="Shopping centre / township")
+    business_name = forms.CharField(max_length=200, required=False, label="Shop / business name (if any)")
 
     class Meta:
         model = User
@@ -69,6 +74,9 @@ class ClientRegistrationForm(BootstrapFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         for f in ("first_name", "last_name", "phone", "national_id"):
             self.fields[f].required = True
+        from finance.models import TradingArea
+
+        self.fields["area"].queryset = TradingArea.objects.alive().filter(is_active=True)
 
     def clean(self):
         data = super().clean()

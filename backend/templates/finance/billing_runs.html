@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="h3 mb-3">Billing runs</h1>
+<p class="text-muted">Each run is safe to repeat – a stand or lease already billed for the period is skipped.</p>
+<div class="row g-3">
+<div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-header">Monthly property rates</div><div class="card-body"><form method="post">{% csrf_token %}{% with form=rates_form %}{% include "generic/_form_fields.html" %}{% endwith %}<button class="btn btn-primary mt-3" name="run" value="rates">Raise rates bills</button></form></div></div></div>
+<div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-header">Monthly lease rent</div><div class="card-body"><form method="post">{% csrf_token %}{% with form=lease_form %}{% include "generic/_form_fields.html" %}{% endwith %}<button class="btn btn-primary mt-3" name="run" value="leases">Raise rent bills</button></form></div></div></div>
+<div class="col-lg-4"><div class="card shadow-sm h-100"><div class="card-header">Annual levies (development levy, unit tax …)</div><div class="card-body"><form method="post">{% csrf_token %}{% with form=levy_form %}{% include "generic/_form_fields.html" %}{% endwith %}<button class="btn btn-primary mt-3" name="run" value="levy">Raise levy bills</button></form></div></div></div>
+</div>
+{% endblock %}

@@ -120,8 +120,9 @@ fun ClientHome(ctx: CCtx) {
         ScrollColumn {
             Text("Hello, ${ctx.me.fullName.ifBlank { ctx.me.username }}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             if (accounts.isEmpty()) {
-                InfoBox("Link your council account using the account number on your bill (or visit the council offices to open one).")
-                PrimaryButton("Link my account", onClick = { ctx.go(CScreen.LinkAccount) })
+                InfoBox("Register your stand or shop, or link your council account using the account number on your bill.")
+                PrimaryButton("Register my stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
+                PrimaryButton("Link with account number", color = CrdcColors.Blue, onClick = { ctx.go(CScreen.LinkAccount) })
             } else {
                 Kpi("Total amount due", "$${money(total.toString())}", "${unpaid.size} unpaid bill(s)", if (total > 0) CrdcColors.Danger else CrdcColors.Green, Modifier.fillMaxWidth())
                 PrimaryButton("Pay now (EcoCash / OneMoney / InnBucks)", onClick = { ctx.go(CScreen.Pay(null, null)) })
@@ -130,6 +131,7 @@ fun ClientHome(ctx: CCtx) {
                 }
             }
             val tiles = listOf(
+                "My stands & shops" to CScreen.MyStands, "Building plans" to CScreen.Plans,
                 "Payment history" to CScreen.Receipts, "Licences" to CScreen.Licences, "Report a problem" to CScreen.Problems,
                 "Complaints & feedback" to CScreen.Feedback, "Stand applications" to CScreen.Stands,
                 "Notifications (${notes.count { !it.isRead }})" to CScreen.Notifications, "Link another account" to CScreen.LinkAccount,
@@ -366,6 +368,8 @@ fun ApplyLicenceScreen(ctx: CCtx) {
     val accounts by ctx.sdk.observe(Entities.ACCOUNTS, ClientAccount.serializer()).collectAsState(initial = emptyList())
     var account by remember { mutableStateOf<ClientAccount?>(null) }
     if (account == null && accounts.isNotEmpty()) account = accounts.first()
+    val props by ctx.sdk.observe(Entities.PROPERTIES, Property.serializer()).collectAsState(initial = emptyList())
+    var stand by remember { mutableStateOf<Property?>(null) }
     var type by remember { mutableStateOf("SHOP") }
     var name by remember { mutableStateOf("") }
     var activity by remember { mutableStateOf("") }
@@ -379,6 +383,11 @@ fun ApplyLicenceScreen(ctx: CCtx) {
                 return@ScrollColumn
             }
             Picker("Council account", accounts, account, { "${it.accountNumber} – ${it.name}" }, { account = it })
+            Picker("Stand / shop", props.filter { it.account == account?.id }, stand, { "Stand ${it.standNumber} ${it.areaName} ${it.businessName}" }, {
+                stand = it
+                if (name.isBlank()) name = it.businessName
+                if (premises.isBlank()) premises = "Stand ${it.standNumber}, ${it.areaName.ifBlank { it.location }}"
+            })
             ChoicePicker("Licence type", Choices.licenceTypes, type) { type = it }
             Field("Business / trading name", name, { name = it })
             Field("Business activity", activity, { activity = it })
@@ -394,7 +403,7 @@ fun ApplyLicenceScreen(ctx: CCtx) {
                     put("updated_at", now); put("local_note", "Saved on your phone – it will be sent when you are online")
                 }
                 ctx.sdk.enqueue("licence.apply", "Licence application: $name", Entities.LICENCES, id, optimistic) {
-                    put("id", id); put("account", account!!.id); put("licence_type", type); put("business_name", name)
+                    put("id", id); put("account", account!!.id); stand?.let { put("property", it.id) }; put("licence_type", type); put("business_name", name)
                     put("business_activity", activity); put("premises", premises); ward.toIntOrNull()?.let { put("ward", it) }
                 }
                 ctx.back()

@@ -24,6 +24,19 @@ object Entities {
     const val LEAVE = "leave"
     const val NOTIFICATIONS = "notifications"
     const val ONLINE_PAYMENTS = "online_payments"
+    const val STAFF = "staff"
+    const val TRADING_AREAS = "trading_areas"
+    const val LEASES = "leases"
+    const val CLAIMS = "claims"
+    const val ASSETS = "assets"
+    const val INCIDENTS = "incidents"
+    const val ACTIVITIES = "activities"
+    const val BUILDING_PLANS = "building_plans"
+    const val RISKS = "risks"
+    const val MEETINGS = "meetings"
+    const val RESOLUTIONS = "resolutions"
+    const val ICT_TICKETS = "ict_tickets"
+    const val POLICIES = "policies"
 }
 
 @Serializable
@@ -44,13 +57,16 @@ data class ClientAccount(
 
 @Serializable
 data class Property(
-    val id: String, val account: String = "", val standNumber: String = "", val location: String = "", val ward: Int? = null,
-    val landUse: String = "", val landUseLabel: String = "", val valuation: String = "0", val monthlyRates: String = "0",
+    val id: String, val account: String = "", val accountName: String = "", val accountNumber: String = "", val accountPhone: String = "",
+    val registered: Boolean = false, val area: String? = null, val areaName: String = "", val standNumber: String = "", val businessName: String = "",
+    val location: String = "", val ward: Int? = null, val landUse: String = "", val landUseLabel: String = "", val valuation: String = "0",
+    val monthlyRates: String = "0", val isCouncilOwned: Boolean = false, val isActive: Boolean = true,
 )
 
 @Serializable
 data class Bill(
-    val id: String, val number: String = "", val account: String = "", val revenueHead: String = "", val description: String = "",
+    val id: String, val number: String = "", val account: String = "", val property: String? = null, val revenueHead: String = "",
+    val revenueHeadCategory: String = "", val description: String = "",
     val period: String = "", val amount: String = "0", val amountPaid: String = "0", val outstanding: String = "0",
     val issueDate: String = "", val dueDate: String = "", val status: String = "", val statusLabel: String = "",
 )
@@ -69,6 +85,7 @@ data class Receipt(
 @Serializable
 data class Licence(
     val id: String, val number: String = "", val licenceType: String = "", val licenceTypeLabel: String = "", val account: String = "",
+    val property: String? = null,
     val accountNumber: String = "", val businessName: String = "", val businessActivity: String = "", val premises: String = "",
     val ward: Int? = null, val status: String = "", val statusLabel: String = "", val fee: String = "0", val bill: String? = null,
     val inspectionNotes: String = "", val rejectionReason: String = "", val issueDate: String? = null, val expiryDate: String? = null,
@@ -172,6 +189,85 @@ data class OnlinePayment(
     val receipt: String? = null, val receiptNumber: String? = null, val paidAt: String? = null, val createdAt: String = "",
 )
 
+@Serializable
+data class StaffMember(val id: String, val userId: Long = 0, val username: String = "", val fullName: String = "", val department: String = "",
+                       val role: String = "", val roleLabel: String = "", val phone: String = "", val isActive: Boolean = true)
+
+@Serializable
+data class TradingArea(val id: String, val name: String = "", val kind: String = "", val kindLabel: String = "", val ward: Int? = null,
+                       val isActive: Boolean = true)
+
+@Serializable
+data class Lease(val id: String, val number: String = "", val lessee: String = "", val lesseeName: String = "", val premises: String = "",
+                 val premisesName: String = "", val purpose: String = "", val monthlyRent: String = "0", val deposit: String = "0",
+                 val startDate: String = "", val endDate: String = "", val status: String = "", val statusLabel: String = "")
+
+@Serializable
+data class AccountClaim(val id: String, val reference: String = "", val userName: String = "", val claimType: String = "", val claimTypeLabel: String = "",
+                        val standNumber: String = "", val area: String? = null, val areaName: String = "", val location: String = "",
+                        val businessName: String = "", val idNumber: String = "", val phone: String = "", val notes: String = "", val status: String = "",
+                        val statusLabel: String = "", val matchedProperty: String? = null, val matched: String = "", val accountNumber: String = "",
+                        val decisionNote: String = "", val createdAt: String = "", val localNote: String? = null)
+
+@Serializable
+data class AssetHistory(val date: String = "", val workDone: String = "", val cost: String = "0", val condition: String = "")
+
+@Serializable
+data class Asset(val id: String, val assetNumber: String = "", val name: String = "", val category: String = "", val categoryLabel: String = "",
+                 val department: String = "", val departmentLabel: String = "", val serialNumber: String = "", val location: String = "", val ward: Int? = null,
+                 val acquisitionDate: String? = null, val cost: String = "0", val bookValue: String = "0", val custodianName: String = "",
+                 val condition: String = "", val conditionLabel: String = "", val status: String = "", val statusLabel: String = "", val notes: String = "",
+                 val history: List<AssetHistory> = emptyList(), val localNote: String? = null)
+
+@Serializable
+data class Incident(val id: String, val reference: String = "", val incidentType: String = "", val incidentTypeLabel: String = "", val title: String = "",
+                    val description: String = "", val ward: Int? = null, val location: String = "", val occurredAt: String = "",
+                    val householdsAffected: Int = 0, val peopleInjured: Int = 0, val deaths: Int = 0, val livestockLost: Int = 0,
+                    val cropsHectares: String = "0", val response: String = "", val status: String = "", val statusLabel: String = "",
+                    val leadOfficerName: String = "", val localNote: String? = null)
+
+@Serializable
+data class CommunityActivity(val id: String, val reference: String = "", val activityType: String = "", val activityTypeLabel: String = "",
+                             val title: String = "", val department: String = "", val departmentLabel: String = "", val ward: Int? = null, val venue: String = "",
+                             val date: String = "", val participants: Int = 0, val report: String = "", val status: String = "", val statusLabel: String = "",
+                             val officerId: Long? = null, val officerName: String = "", val localNote: String? = null)
+
+@Serializable
+data class BuildingPlan(val id: String, val reference: String = "", val applicantName: String = "", val phone: String = "", val standNumber: String = "",
+                        val location: String = "", val ward: Int? = null, val developmentType: String = "", val developmentTypeLabel: String = "",
+                        val description: String = "", val floorArea: String = "0", val fee: String = "0", val bill: String? = null,
+                        val billStatus: String? = null, val status: String = "", val statusLabel: String = "", val reviewedById: Long? = null,
+                        val reviewNotes: String = "", val decisionNotes: String = "", val inspectionLog: String = "", val dueAt: String? = null,
+                        val createdAt: String = "", val localNote: String? = null)
+
+@Serializable
+data class Risk(val id: String, val reference: String = "", val department: String = "", val departmentLabel: String = "", val title: String = "",
+                val description: String = "", val category: String = "", val categoryLabel: String = "", val likelihood: Int = 0, val impact: Int = 0,
+                val score: Int = 0, val rating: String = "", val existingControls: String = "", val mitigation: String = "", val ownerName: String = "",
+                val reviewDate: String? = null, val status: String = "", val statusLabel: String = "")
+
+@Serializable
+data class CouncilMeeting(val id: String, val reference: String = "", val meetingType: String = "", val meetingTypeLabel: String = "", val title: String = "",
+                          val date: String = "", val venue: String = "", val agenda: String = "", val minutes: String = "", val status: String = "",
+                          val statusLabel: String = "")
+
+@Serializable
+data class Resolution(val id: String, val number: String = "", val meeting: String = "", val meetingTitle: String = "", val text: String = "",
+                      val department: String = "", val departmentLabel: String = "", val responsibleId: Long? = null, val responsibleName: String = "",
+                      val dueDate: String? = null, val status: String = "", val statusLabel: String = "", val progressNote: String = "",
+                      val localNote: String? = null)
+
+@Serializable
+data class IctTicket(val id: String, val reference: String = "", val raisedById: Long? = null, val raisedByName: String = "", val department: String = "",
+                     val category: String = "", val categoryLabel: String = "", val subject: String = "", val description: String = "",
+                     val priority: String = "", val priorityLabel: String = "", val status: String = "", val statusLabel: String = "",
+                     val resolution: String = "", val createdAt: String = "", val localNote: String? = null)
+
+@Serializable
+data class Policy(val id: String, val title: String = "", val kind: String = "", val kindLabel: String = "", val department: String = "",
+                  val departmentLabel: String = "", val version: String = "", val summary: String = "", val status: String = "", val statusLabel: String = "",
+                  val adoptedOn: String? = null, val reviewDate: String? = null)
+
 /** Choice lists mirrored from the server so forms work offline. */
 object Choices {
     val currencies = listOf("USD" to "US Dollar", "ZWG" to "Zimbabwe Gold")
@@ -195,4 +291,22 @@ object Choices {
         "STUDY" to "Study", "UNPAID" to "Unpaid")
     val taskStatuses = listOf("IN_PROGRESS" to "In progress", "DONE" to "Completed - awaiting sign-off", "CLOSED" to "Closed")
     val mobileMoney = listOf("ECOCASH" to "EcoCash", "ONEMONEY" to "OneMoney", "INNBUCKS" to "InnBucks")
+    val incidentTypes = listOf("FIRE" to "Veld / structure fire", "FLOOD" to "Flood", "STORM" to "Storm / cyclone", "DROUGHT" to "Drought",
+        "HWC" to "Human-wildlife conflict", "DISEASE" to "Disease outbreak", "ACCIDENT" to "Accident", "COLLAPSE" to "Structure collapse", "OTHER" to "Other")
+    val incidentStatuses = listOf("REPORTED" to "Reported", "RESPONDING" to "Response under way", "CONTAINED" to "Contained – recovery",
+        "CLOSED" to "Closed (HOD signs off)")
+    val activityTypes = listOf("HYGIENE" to "Hygiene promotion (WASH)", "HEALTH" to "Public health programme", "ENV" to "Environmental campaign",
+        "CONSERVE" to "Natural resource conservation", "RECLAIM" to "Land reclamation", "FIRE" to "Fire management / fireguards",
+        "SAFETY" to "Public safety awareness", "PREPARE" to "Emergency preparedness / drill", "SECURITY" to "Community security programme",
+        "COMMUNITY" to "Community services", "CONSULT" to "Community consultation / WDC / village assembly", "TRAINING" to "Training")
+    val devTypes = listOf("RES" to "Residential house", "COM" to "Commercial / shop", "IND" to "Industrial", "INST" to "Institutional",
+        "ALT" to "Alteration / extension", "COU" to "Change of use / subdivision")
+    val assetConditions = listOf("GOOD" to "Good / working", "FAIR" to "Fair", "POOR" to "Poor – needs repair", "BROKEN" to "Broken down / not working")
+    val ictCategories = listOf("HW" to "Computer / hardware", "SW" to "Software / system", "NET" to "Network / internet", "ACCT" to "User account / password",
+        "PRINT" to "Printer / scanner", "PHONE" to "Telephone / mobile app", "OTHER" to "Other")
+    val priorities = listOf("LOW" to "Low", "NORMAL" to "Normal", "HIGH" to "High", "URGENT" to "Urgent")
+    val resolutionStatuses = listOf("PENDING" to "Not started", "IN_PROGRESS" to "Being implemented", "DONE" to "Implemented")
+    val projectStatuses = listOf("PLANNED" to "Planned", "PROCUREMENT" to "Procurement", "ONGOING" to "Ongoing", "COMPLETED" to "Completed", "SUSPENDED" to "Suspended")
+    val taskKinds = listOf("TASK" to "Task / assignment", "REQUEST" to "Request for information / report", "MEMO" to "Memo / directive")
+    val claimTypes = listOf("OWNER" to "I own / occupy this stand", "SHOP" to "I run a shop / business at this stand", "TENANT" to "I lease these council premises")
 }

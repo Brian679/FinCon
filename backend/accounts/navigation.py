@@ -15,12 +15,14 @@ def build_nav(user):
             {"title": "My council", "items": [
                 _item("Dashboard", "portal:dashboard"),
                 _item("My accounts & bills", "portal:accounts"),
+                _item("My stands & shops", "portal:claims"),
                 _item("Pay rates / levies", "portal:pay"),
                 _item("Payment history", "portal:receipts"),
                 _item("Licences", "portal:licences"),
                 _item("Report a problem", "portal:request_new"),
                 _item("Complaints & feedback", "portal:complaints"),
                 _item("Stand applications", "portal:stands"),
+                _item("Building plans", "portal:plans"),
             ]},
         ]
     c = user.has_cap
@@ -37,6 +39,16 @@ def build_nav(user):
         fin.append(_item("Receipts (income)", "finance:receipts"))
         if c("accounts.manage", "finance.view_all"):
             fin += [_item("Client accounts", "finance:accounts"), _item("Bills", "finance:bills")]
+        if c("areas.view", "accounts.manage"):
+            fin.append(_item("Shops & stands by area (paid / unpaid)", "finance:areas"))
+        if c("claims.review"):
+            fin.append(_item("Stand registration requests", "finance:claims"))
+        if c("leases.view", "leases.manage"):
+            fin.append(_item("Leases", "finance:leases"))
+        if c("billing.run"):
+            fin.append(_item("Billing runs", "finance:billing_runs"))
+        if c("messages.view", "reminders.send"):
+            fin.append(_item("Messages & reminders", "finance:messages"))
         if c("cashup.submit", "cashup.verify"):
             fin.append(_item("Cash-ups", "finance:cashups"))
         if c("licence.view"):
@@ -67,17 +79,41 @@ def build_nav(user):
         services.append(_item("Correspondence register", "workflow:correspondence"))
     sections.append({"title": "Client service (Charter)", "items": services})
 
-    dept = []
-    if c("stands.view"):
-        dept.append(_item("Stand allocation", "departments:stands"))
-    if c("projects.view"):
-        dept.append(_item("Projects & infrastructure", "departments:projects"))
-    if c("audit.findings_view", "audit.respond"):
-        dept.append(_item("Internal audit findings", "departments:findings"))
-    dept.append(_item("Leave", "departments:leave"))
+    if c("dept.overview", "dept.overview_all"):
+        general.insert(1, _item("My department (overview)", "departments:overview"))
+
+    admin_items = [_item("Council meetings", "departments:meetings"), _item("Council resolutions", "departments:resolutions"),
+                   _item("Policies & by-laws", "departments:policies")]
     if c("hr.view"):
-        dept.append(_item("Staff directory", "departments:staff"))
-    sections.append({"title": "Departments", "items": dept})
+        admin_items.append(_item("Staff directory", "departments:staff"))
+    admin_items += [_item("Leave", "departments:leave"), _item("ICT helpdesk", "departments:tickets"), _item("Assets & infrastructure", "departments:assets")]
+    sections.append({"title": "Administration & corporate", "items": admin_items})
+
+    social = []
+    if c("stands.view"):
+        social.append(_item("Housing & stand allocation", "departments:stands"))
+    if c("incidents.view"):
+        social.append(_item("Incidents & disasters", "departments:incidents"))
+    if c("activities.manage", "activities.verify", "dept.overview"):
+        social.append(_item("Community programmes & campaigns", "departments:activities"))
+    if social:
+        sections.append({"title": "Social services", "items": social})
+
+    tech = []
+    if c("projects.view"):
+        tech.append(_item("Projects & infrastructure", "departments:projects"))
+    if c("plans.view"):
+        tech.append(_item("Building plans (development control)", "departments:plans"))
+    if tech:
+        sections.append({"title": "Technical services", "items": tech})
+
+    audit_items = []
+    if c("audit.findings_view", "audit.respond"):
+        audit_items.append(_item("Internal audit findings", "departments:findings"))
+    if c("risks.view", "risks.manage"):
+        audit_items.append(_item("Risk register", "departments:risks"))
+    if audit_items:
+        sections.append({"title": "Internal audit", "items": audit_items})
 
     gov = []
     if c("audit.view_trail"):

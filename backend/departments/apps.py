@@ -11,4 +11,5 @@ class DepartmentsConfig(AppConfig):
 
         from . import models as m
 
-        audit.register(m.LeaveRequest, m.StandApplication, m.Project, m.AuditFinding)
+        audit.register(m.LeaveRequest, m.StandApplication, m.Project, m.AuditFinding, m.Asset, m.AssetMaintenance, m.Incident,
+                       m.CommunityActivity, m.BuildingPlan, m.Risk, m.CouncilMeeting, m.Resolution, m.ICTTicket, m.Policy)

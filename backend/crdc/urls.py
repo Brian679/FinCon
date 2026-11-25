@@ -1,3 +1,8 @@
+"""Development / single-host URLs: client site at /, staff site at /staff/.
+
+In production the two sites run on separate hosts (see CLIENT_HOSTS and
+STAFF_HOSTS) using crdc.urls_public and crdc.urls_staff.
+"""
 from django.contrib import admin
 from django.urls import include, path
 
@@ -7,7 +12,7 @@ urlpatterns = [
     path("", core_views.landing, name="landing"),
     path("sw.js", core_views.service_worker, name="sw"),
     path("system-admin/", admin.site.urls),
-    path("accounts/", include("accounts.urls")),
+    path("staff/", include("accounts.urls")),
     path("", include("core.urls")),
     path("staff/finance/", include("finance.urls")),
     path("staff/", include("workflow.urls")),

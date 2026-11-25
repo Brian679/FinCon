@@ -1,0 +1,16 @@
+{% extends "generic/detail.html" %}
+{% block below_details %}
+{% for sec in sections %}<div class="card shadow-sm mt-3"><div class="card-header">{{ sec.title }}</div><ul class="list-group list-group-flush">{% for a, b in sec.rows %}<li class="list-group-item small"><strong>{{ a }}</strong><br>{{ b }}</li>{% empty %}<li class="list-group-item text-muted small">None yet.</li>{% endfor %}</ul></div>{% endfor %}
+{% endblock %}
+{% block actions %}
+{% for act in actions %}
+<div class="card shadow-sm mb-3 border-warning"><div class="card-header">{{ act.title }}</div><div class="card-body">
+<form method="post" action="{{ action_url }}">{% csrf_token %}
+{% for name, label, kind, choices in act.fields %}<div class="mb-2"><label class="form-label small">{{ label }}</label>
+{% if kind == 'textarea' %}<textarea class="form-control" name="{{ name }}" rows="3"></textarea>
+{% elif kind == 'select' %}<select class="form-select" name="{{ name }}">{% for v, l in choices %}<option value="{{ v }}" {% if v == object.status or v == object.condition %}selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+{% else %}<input class="form-control" type="{{ kind }}" name="{{ name }}" {% if kind == 'number' %}step="any" min="0"{% endif %}>{% endif %}</div>{% endfor %}
+{% for value, label, css in act.buttons %}<button class="btn btn-{{ css }} me-1 mb-1" name="action" value="{{ value }}">{{ label }}</button>{% endfor %}
+</form></div></div>
+{% endfor %}
+{% endblock %}

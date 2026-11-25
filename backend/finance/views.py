@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib import messages
+from django.core.exceptions import PermissionDenied
 from django.db import transaction
 from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncDate
@@ -20,7 +21,7 @@ from core.views import finance_kpis, pending_approvals
 
 from . import forms, services
 from .models import (
-    BankAccount, Bill, BudgetLine, CashUp, ClientAccount, ExchangeRate, Licence, OnlinePayment, PaymentVoucher,
+    ApprovalRecord, BankAccount, Bill, BudgetLine, CashUp, ClientAccount, ExchangeRate, Licence, OnlinePayment, PaymentVoucher,
     PurchaseOrder, Receipt, Requisition, RevenueHead, Supplier,
 )
 
@@ -230,7 +231,7 @@ class BillList(GenericListView):
     columns = [("Bill no.", "number"), ("Issued", "issue_date"), ("Account", "account"), ("Revenue head", "revenue_head.name"),
                ("Period", "period"), ("Amount", "amount"), ("Paid", "amount_paid"), ("Due", "due_date"), ("Status", "status")]
     search_fields = ["number", "account__account_number", "account__name", "description"]
-    extra_buttons = [("Monthly rates billing run", "finance:billing_run", ("billing.run",))]
+    extra_buttons = [("Billing runs (rates, levies, leases)", "finance:billing_runs", ("billing.run",))]
 
     def row_url(self, obj):
         return reverse("finance:account", args=[obj.account_id])
@@ -331,7 +332,8 @@ def licence_new(request):
     if request.method == "POST" and form.is_valid():
         d = form.cleaned_data
         lic = run_action(request, services.apply_licence, account=d["account"], licence_type=d["licence_type"], business_name=d["business_name"],
-                         premises=d["premises"], business_activity=d["business_activity"], ward=d["ward"], success="Application captured.")
+                         premises=d["premises"], business_activity=d["business_activity"], ward=d["ward"], property=d.get("property"),
+                         success="Application captured.")
         if lic:
             return redirect("finance:licence", pk=lic.pk)
     return render(request, "generic/form.html", {"form": form, "title": "Capture licence application"})
@@ -757,3 +759,223 @@ def reports(request):
                         v.budget_line.vote_code if v.budget_line else "", v.currency, v.amount, v.base_amount, v.payment_reference])
         return resp
     return render(request, "finance/reports.html", ctx)
+
+
+# ================================================================ areas
+from .models import AccountClaim, Lease, Property, TradingArea  # noqa: E402
+
+
+class AreaList(GenericListView):
+    model = TradingArea
+    required_caps = ("areas.view", "accounts.manage")
+    title = "Trading areas – shopping centres, growth points, townships, markets"
+    columns = [("Name", "name"), ("Type", "kind"), ("Ward", "ward"), ("Stands / shops", lambda a: a.properties.alive().count()),
+               ("Active", "is_active")]
+    search_fields = ["name", "description"]
+    filter_field = "kind"
+    detail_url_name = "finance:area"
+    create_url_name = "finance:area_new"
+    create_caps = ("areas.manage",)
+    extra_buttons = [("Import stands / shops (CSV)", "finance:register_import", ("accounts.manage",)),
+                     ("Send message to clients", "finance:broadcast", ("reminders.send",))]
+
+
+class AreaCreate(GenericCreateView):
+    model = TradingArea
+    form_class = forms.TradingAreaForm
+    required_caps = ("areas.manage",)
+    detail_url_name = "finance:area"
+
+
+class AreaUpdate(GenericUpdateView):
+    model = TradingArea
+    form_class = forms.TradingAreaForm
+    required_caps = ("areas.manage",)
+    detail_url_name = "finance:area"
+
+
+@cap_required("areas.view", "accounts.manage")
+def area_detail(request, pk):
+    """Shop / stand board: who has paid and who has not."""
+    area = get_object_or_404(TradingArea.objects.alive(), pk=pk)
+    rows = [services.property_compliance(p) for p in area.properties.alive().filter(is_active=True).select_related("account").order_by("stand_number")]
+    show = request.GET.get("show", "")
+    if show == "owing":
+        rows = [r for r in rows if not r["ok"]]
+    elif show == "paid":
+        rows = [r for r in rows if r["ok"]]
+    elif show == "unregistered":
+        rows = [r for r in rows if not r["registered"]]
+    if request.method == "POST":
+        if not request.user.has_cap("reminders.send"):
+            raise PermissionDenied
+        ids = request.POST.getlist("selected")
+        props = area.properties.alive().filter(pk__in=ids) if ids else area.properties.alive().filter(is_active=True)
+        sent = run_action(request, services.send_compliance_reminders, props, campaign=f"Reminder – {area.name}",
+                          extra=request.POST.get("extra", "").strip(), success="Reminders sent.")
+        if sent is not None:
+            messages.info(request, f"{sent} message(s) sent (app notification and SMS). Accounts that are fully paid were skipped.")
+        return redirect("finance:area", pk=pk)
+    all_rows = [services.property_compliance(p) for p in area.properties.alive().filter(is_active=True)]
+    summary = {
+        "stands": len(all_rows), "paid": sum(1 for r in all_rows if r["ok"]), "owing": sum(1 for r in all_rows if not r["ok"]),
+        "amount": sum((r["total"] for r in all_rows), Decimal(0)), "unregistered": sum(1 for r in all_rows if not r["registered"]),
+        "no_licence": sum(1 for r in all_rows if r["licence"] in ("NONE", "UNPAID", "EXPIRED")),
+    }
+    return render(request, "finance/area_detail.html", {"title": area.name, "area": area, "rows": rows, "summary": summary, "show": show})
+
+
+@cap_required("accounts.manage")
+def register_import(request):
+    form = forms.ImportForm(request.POST or None, request.FILES or None)
+    stats = None
+    if request.method == "POST" and form.is_valid():
+        import io
+
+        raw = form.cleaned_data["file"].read().decode("utf-8-sig", errors="replace")
+        rows = list(csv.DictReader(io.StringIO(raw)))
+        stats = run_action(request, services.import_register, rows, success="Import finished.")
+    return render(request, "finance/import.html", {"form": form, "stats": stats, "title": "Import stands & shops", "columns": services.IMPORT_COLUMNS})
+
+
+@cap_required("accounts.manage")
+def register_template(request):
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = 'attachment; filename="crdc-stand-register-template.csv"'
+    w = csv.writer(resp)
+    w.writerow(services.IMPORT_COLUMNS)
+    w.writerow(["Checheche Growth Point", 22, "B14", "Tafara Hardware (Pvt) Ltd", "BUS", "0772000001", "4455/2019", "", "COM",
+                "Tafara Hardware", "40", "35000", "no"])
+    w.writerow(["Chipinge Township", 1, "205", "Rumbidzai Moyo", "IND", "0713000002", "63-112233D63", "", "RES", "", "15", "15000", "no"])
+    return resp
+
+
+@cap_required("reminders.send")
+def broadcast(request):
+    form = forms.BroadcastForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        accs = ClientAccount.objects.alive().exclude(status="CLOSED")
+        if d["area"]:
+            accs = accs.filter(properties__area=d["area"]).distinct()
+        if d["only_owing"]:
+            accs = accs.filter(balance__gt=0)
+        sent = run_action(request, services.broadcast, list(accs), d["subject"], d["message"], success="Message sent.")
+        if sent is not None:
+            messages.info(request, f"{sent} message(s) sent to {accs.count()} account(s).")
+            return redirect("finance:messages")
+    return render(request, "generic/form.html", {"form": form, "title": "Send message / notice to clients (app + SMS)"})
+
+
+class MessageList(GenericListView):
+    from core.models import MessageLog
+
+    model = MessageLog
+    required_caps = ("messages.view", "reminders.send")
+    title = "Messages sent to clients (SMS, email, app)"
+    columns = [("When", "created_at"), ("Channel", "channel"), ("To", "to"), ("Account", "account_number"), ("Campaign", "campaign"),
+               ("Message", lambda m: m.body[:90]), ("Sent by", "sent_by"), ("Status", "status")]
+    search_fields = ["to", "account_number", "body", "campaign"]
+    filter_field = "channel"
+
+
+# --------------------------------------------------------------- leases
+class LeaseList(GenericListView):
+    model = Lease
+    required_caps = ("leases.view", "leases.manage")
+    title = "Leases of council premises"
+    columns = [("Lease no.", "number"), ("Lessee", "lessee.name"), ("Premises", "premises"), ("Purpose", "purpose"),
+               ("Rent / month", "monthly_rent"), ("From", "start_date"), ("To", "end_date"), ("Status", "status")]
+    search_fields = ["number", "lessee__name", "premises__stand_number", "purpose"]
+    detail_url_name = "finance:lease"
+    create_url_name = "finance:lease_new"
+    create_caps = ("leases.manage",)
+
+
+@cap_required("leases.manage")
+def lease_new(request):
+    form = forms.LeaseForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        lease = run_action(request, services.create_lease, success="Lease registered.", **form.cleaned_data)
+        if lease:
+            return redirect("finance:lease", pk=lease.pk)
+    return render(request, "generic/form.html", {"form": form, "title": "Register a lease"})
+
+
+class LeaseDetail(GenericDetailView):
+    model = Lease
+    required_caps = ("leases.view", "leases.manage")
+    template_name = "finance/lease_detail.html"
+    fields = [("Lessee", "lessee"), ("Premises", "premises"), ("Purpose", "purpose"), ("Monthly rent (USD)", "monthly_rent"),
+              ("Deposit", "deposit"), ("Start", "start_date"), ("End", "end_date"), ("Notes", "notes")]
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx["rent_bills"] = Bill.objects.alive().filter(property=self.object.premises, account=self.object.lessee,
+                                                        revenue_head__code="RENT").order_by("-issue_date")[:24]
+        return ctx
+
+
+@cap_required("leases.manage")
+@require_POST
+def lease_status(request, pk):
+    lease = get_object_or_404(Lease, pk=pk)
+    new = request.POST.get("status")
+    if new in (Lease.Status.TERMINATED, Lease.Status.EXPIRED):
+        lease.status = new
+        lease.notes = (lease.notes + "\n" + request.POST.get("note", "")).strip()
+        lease.save()
+        messages.success(request, f"Lease {lease.get_status_display().lower()}.")
+    return redirect("finance:lease", pk=pk)
+
+
+# --------------------------------------------------------------- claims
+class ClaimList(GenericListView):
+    model = AccountClaim
+    required_caps = ("claims.review",)
+    title = "Stand / shop registration requests from clients"
+    columns = [("Ref.", "reference"), ("Date", "created_at"), ("Client", "user"), ("Type", "claim_type"), ("Stand", "stand_number"),
+               ("Area", lambda c: c.area.name if c.area else c.location), ("Business", "business_name"),
+               ("Matched in register", lambda c: str(c.matched_property) if c.matched_property else "No"), ("Status", "status")]
+    search_fields = ["reference", "stand_number", "business_name", "user__first_name", "user__last_name", "phone"]
+    detail_url_name = "finance:claim"
+
+
+@cap_required("claims.review")
+def claim_detail(request, pk):
+    claim = get_object_or_404(AccountClaim.objects.alive(), pk=pk)
+    initial = {"account": claim.matched_property.account_id if claim.matched_property else None}
+    form = forms.ClaimDecisionForm(request.POST or None, initial=initial)
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        run_action(request, services.decide_claim, claim, request.POST.get("decision") == "approve", account=d["account"],
+                   note=d["note"], create_account=d["create_account"], monthly_rates=d["monthly_rates"], land_use=d["land_use"] or "COM",
+                   success="Decision recorded and the client notified.")
+        return redirect("finance:claim", pk=pk)
+    similar = Property.objects.alive().filter(stand_number__iexact=claim.stand_number).select_related("account", "area")[:10]
+    return render(request, "finance/claim_detail.html", {"claim": claim, "form": form, "similar": similar, "title": str(claim),
+                                                         "approvals": ApprovalRecord.for_object(claim)})
+
+
+# ------------------------------------------------------- billing runs v2
+@cap_required("billing.run")
+def billing_runs(request):
+    today = timezone.localdate()
+    rates_form = forms.BillingRunForm(request.POST if request.POST.get("run") == "rates" else None, initial={"year": today.year, "month": today.month}, prefix="r")
+    lease_form = forms.BillingRunForm(request.POST if request.POST.get("run") == "leases" else None, initial={"year": today.year, "month": today.month}, prefix="l")
+    levy_form = forms.LevyRunForm(request.POST if request.POST.get("run") == "levy" else None, initial={"year": today.year}, prefix="v")
+    result = None
+    if request.method == "POST":
+        run = request.POST.get("run")
+        if run == "rates" and rates_form.is_valid():
+            result = run_action(request, services.run_rates_billing, rates_form.cleaned_data["year"], rates_form.cleaned_data["month"], success="Rates billing done.")
+        elif run == "leases" and lease_form.is_valid():
+            result = run_action(request, services.run_lease_billing, lease_form.cleaned_data["year"], lease_form.cleaned_data["month"], success="Lease billing done.")
+        elif run == "levy" and levy_form.is_valid():
+            d = levy_form.cleaned_data
+            result = run_action(request, services.run_levy_billing, d["revenue_head"], d["year"], area=d["area"], land_use=d["land_use"] or None,
+                                amount=d["amount"], success="Levy billing done.")
+        if result:
+            messages.info(request, f"{result[0]} bill(s) raised; {result[1]} were already billed for that period.")
+            return redirect("finance:bills")
+    return render(request, "finance/billing_runs.html", {"title": "Billing runs", "rates_form": rates_form, "lease_form": lease_form, "levy_form": levy_form})

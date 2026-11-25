@@ -55,7 +55,8 @@ class BillingRunForm(BootstrapFormMixin, forms.Form):
 class LicenceForm(BaseModelForm):
     class Meta:
         model = Licence
-        fields = ["account", "licence_type", "business_name", "business_activity", "premises", "ward"]
+        fields = ["account", "property", "licence_type", "business_name", "business_activity", "premises", "ward"]
+        help_texts = {"property": "The stand / shop (links the licence to the area paid/unpaid board)"}
 
 
 class SupplierForm(BaseModelForm):
@@ -151,3 +152,54 @@ class CashUpForm(BootstrapFormMixin, forms.Form):
 
 class CommentForm(BootstrapFormMixin, forms.Form):
     comment = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+
+from .models import AccountClaim, Lease, TradingArea  # noqa: E402
+
+
+class TradingAreaForm(BaseModelForm):
+    class Meta:
+        model = TradingArea
+        fields = ["name", "kind", "ward", "description", "is_active"]
+
+
+class LeaseForm(BaseModelForm):
+    class Meta:
+        model = Lease
+        fields = ["lessee", "premises", "purpose", "monthly_rent", "deposit", "start_date", "end_date", "notes"]
+        widgets = date_widgets("start_date", "end_date")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["premises"].queryset = Property.objects.alive().select_related("area").order_by("location", "stand_number")
+        self.fields["premises"].help_text = "The council-owned shop, stall or premises being leased"
+
+
+class LevyRunForm(BootstrapFormMixin, forms.Form):
+    revenue_head = forms.ModelChoiceField(queryset=RevenueHead.objects.alive().filter(category__in=["LEVY", "LICENCE", "FEES"]),
+                                          label="Levy / annual charge")
+    year = forms.IntegerField(min_value=2020, max_value=2100)
+    amount = forms.DecimalField(max_digits=12, decimal_places=2, required=False, help_text="Leave blank to use the tariff amount")
+    area = forms.ModelChoiceField(queryset=TradingArea.objects.alive(), required=False, help_text="Blank = whole district")
+    land_use = forms.ChoiceField(choices=[("", "All land uses")] + list(Property.LandUse.choices), required=False)
+
+
+class ImportForm(BootstrapFormMixin, forms.Form):
+    file = forms.FileField(help_text="CSV with columns: area, ward, stand_number, owner_name, account_type, phone, id_number, email, "
+                                     "land_use, business_name, monthly_rates, valuation, council_owned")
+
+
+class ClaimDecisionForm(BootstrapFormMixin, forms.Form):
+    account = forms.ModelChoiceField(queryset=ClientAccount.objects.alive(), required=False,
+                                     help_text="Link to this existing account (leave blank to use the matched stand's owner)")
+    create_account = forms.BooleanField(required=False, label="Stand not in the register – register a new account and stand from this claim")
+    land_use = forms.ChoiceField(choices=Property.LandUse.choices, initial="COM", required=False)
+    monthly_rates = forms.DecimalField(max_digits=12, decimal_places=2, required=False)
+    note = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))
+
+
+class BroadcastForm(BootstrapFormMixin, forms.Form):
+    area = forms.ModelChoiceField(queryset=TradingArea.objects.alive(), required=False, help_text="Blank = every account in the district")
+    only_owing = forms.BooleanField(required=False, initial=True, label="Only accounts that owe money")
+    subject = forms.CharField(max_length=120)
+    message = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), max_length=400)

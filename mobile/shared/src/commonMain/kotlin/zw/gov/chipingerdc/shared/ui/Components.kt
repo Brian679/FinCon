@@ -318,3 +318,28 @@ class Navigator<S>(start: S) {
     fun pop() { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
     fun replaceAll(screen: S) { stack.clear(); stack.add(screen) }
 }
+
+/** One input in an [ActionPanel]. kind: text, number, multiline, choice. */
+data class FieldSpec(val key: String, val label: String, val kind: String = "text", val choices: List<Pair<String, String>> = emptyList(), val initial: String = "")
+
+/** A small form with several buttons (stage actions such as recommend / approve / reject). */
+@Composable
+fun ActionPanel(title: String, fields: List<FieldSpec>, buttons: List<Pair<String, String>>, note: String? = null,
+                onAction: (action: String, values: Map<String, String>) -> Unit) {
+    val values = remember(title) { androidx.compose.runtime.mutableStateMapOf<String, String>().apply { fields.forEach { put(it.key, it.initial.ifBlank { it.choices.firstOrNull()?.first ?: "" }) } } }
+    SectionCard(title) {
+        fields.forEach { f ->
+            when (f.kind) {
+                "choice" -> ChoicePicker(f.label, f.choices, values[f.key] ?: "") { values[f.key] = it }
+                "multiline" -> Field(f.label, values[f.key] ?: "", { values[f.key] = it }, singleLine = false, minLines = 3)
+                "number" -> Field(f.label, values[f.key] ?: "", { values[f.key] = it }, number = true)
+                else -> Field(f.label, values[f.key] ?: "", { values[f.key] = it })
+            }
+        }
+        buttons.forEachIndexed { i, (action, label) ->
+            if (i == 0) PrimaryButton(label, onClick = { onAction(action, values.toMap()) })
+            else SecondaryButton(label, { onAction(action, values.toMap()) })
+        }
+        if (note != null) Text(note, fontSize = 11.sp, color = CrdcColors.Muted)
+    }
+}

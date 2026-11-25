@@ -8,8 +8,8 @@
       <h1 class="display-6 fw-bold">{{ COUNCIL.NAME }}</h1>
       <p class="lead mb-1">{{ COUNCIL.CHARTER }}</p>
       <p class="mb-4"><em>{{ COUNCIL.VISION }}</em></p>
-      <a class="btn btn-light btn-lg me-2" href="{% url 'portal:dashboard' %}">Residents & businesses: pay rates online</a>
-      <a class="btn btn-outline-light btn-lg" href="{% url 'accounts:login' %}">Council staff login</a>
+      <a class="btn btn-light btn-lg me-2" href="{% url 'portal:register' %}">Create your free account</a>
+      <a class="btn btn-outline-light btn-lg" href="{% url 'portal:login' %}">Log in</a>
     </div>
     <div class="col-md-4 text-center"><img src="{% static 'img/logo.svg' %}" width="150" alt="Council logo"></div>
   </div>
@@ -17,7 +17,7 @@
 <div class="row g-4">
   <div class="col-lg-4"><div class="card h-100 shadow-sm"><div class="card-body">
     <h2 class="h5">What you can do online</h2>
-    <ul class="mb-3"><li>Pay rates, levies and licence fees (EcoCash, OneMoney, cards)</li><li>Check your balance, bills and receipts</li><li>Apply for or renew a shop / business licence</li><li>Report water, road or refuse problems</li><li>Lodge complaints, compliments & suggestions</li><li>Apply for a residential or commercial stand</li></ul>
+    <ul class="mb-3"><li>Pay rates, levies and licence fees (EcoCash, OneMoney, cards)</li><li>Check your balance, bills and receipts</li><li>Apply for or renew a shop / business licence</li><li>Report water, road or refuse problems</li><li>Lodge complaints, compliments & suggestions</li><li>Apply for a residential or commercial stand</li><li>Register your stand or shop so your bills and licences come to your phone</li></ul>
     <a class="btn btn-primary" href="{% url 'portal:register' %}">Create a free account</a>
   </div></div></div>
   <div class="col-lg-4"><div class="card h-100 shadow-sm"><div class="card-body">
@@ -32,6 +32,7 @@
     <a href="{% url 'core:charter' %}" class="d-block mt-2">Read the full Client Charter →</a>
   </div></div></div>
 </div>
+<p class="text-center small mt-3"><a class="text-muted" href="{{ STAFF_LOGIN_URL }}">Council employees: staff website</a></p>
 <p class="pledge text-center mt-4">“{{ COUNCIL.PLEDGE }}”</p>
 </div>
 {% endblock %}

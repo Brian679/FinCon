@@ -15,17 +15,27 @@ from .models import User
 
 
 class LoginView(auth_views.LoginView):
+    """Staff website login. Residents / businesses are sent to the client site."""
+
     template_name = "accounts/login.html"
     authentication_form = LoginForm
     redirect_authenticated_user = True
 
+    def form_valid(self, form):
+        if form.get_user().is_client:
+            audit.log(AuditLog.Action.ACCESS_DENIED, form.get_user(), user=form.get_user(), message="Client tried to use the staff website")
+            form.add_error(None, "This website is for council staff only. Residents and businesses: please use the council's online services site.")
+            return self.form_invalid(form)
+        return super().form_valid(form)
+
 
 @require_POST
 def logout_view(request):
+    was_client = request.user.is_authenticated and request.user.is_client
     if request.user.is_authenticated:
         audit.log(AuditLog.Action.LOGOUT, request.user, request=request)
     logout(request)
-    return redirect("accounts:login")
+    return redirect("portal:login" if was_client or getattr(request, "site_kind", "") == "client" else "accounts:login")
 
 
 @login_required

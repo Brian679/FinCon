@@ -51,24 +51,48 @@ fun HomeScreen(ctx: Ctx) {
     val openRequests = requests.filter { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") }
     val unread = notes.count { !it.isRead }
 
-    val tiles = buildList {
-        if (me.can("receipt.create")) add(Tile("Issue receipt", Screen.NewReceipt))
-        if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts))
-        if (me.can("accounts.manage", "finance.view_all", "receipt.create")) add(Tile("Client accounts", Screen.Accounts))
-        add(Tile("Approvals", Screen.Approvals, approvals.size))
-        if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
-        if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
-        add(Tile("Tasks", Screen.Tasks, myTasks.size))
-        add(Tile("Complaints", Screen.Complaints, unacked))
-        add(Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }))
-        if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
-        if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands))
-        if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
-        add(Tile("Leave", Screen.Leave))
-        add(Tile("Notifications", Screen.Notifications, unread))
-        add(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()))
-        add(Tile("Client Charter", Screen.Charter))
-    }
+    val sections = buildList {
+        add("General" to buildList {
+            if (me.can("dept.overview", "dept.overview_all")) add(Tile("My department (overview)", Screen.Department()))
+            add(Tile("Approvals", Screen.Approvals, approvals.size))
+            add(Tile("Tasks", Screen.Tasks, myTasks.size))
+            if (me.can("tasks.assign_any", "tasks.assign_department")) add(Tile("Assign a task", Screen.NewTask))
+            add(Tile("Requisitions", Screen.Requisitions))
+            add(Tile("Notifications", Screen.Notifications, unread))
+        })
+        add("Finance" to buildList {
+            if (me.can("receipt.create")) add(Tile("Issue receipt", Screen.NewReceipt))
+            if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts))
+            if (me.can("accounts.manage", "finance.view_all", "receipt.create")) add(Tile("Client accounts", Screen.Accounts))
+            if (me.can("areas.view", "accounts.manage")) add(Tile("Shops by area (paid/unpaid)", Screen.Areas))
+            if (me.can("claims.review")) add(Tile("Stand registrations", Screen.Claims))
+            if (me.can("leases.view", "leases.manage")) add(Tile("Leases", Screen.Leases))
+            if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
+            if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
+        })
+        add("Client service (Charter)" to listOf(
+            Tile("Complaints", Screen.Complaints, unacked),
+            Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }),
+        ))
+        add("Social services" to buildList {
+            if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands))
+            if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents))
+            if (me.can("activities.manage", "activities.verify", "dept.overview")) add(Tile("Community programmes", Screen.Activities))
+        })
+        add("Technical services" to buildList {
+            if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
+            if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
+        })
+        add("Internal audit" to buildList {
+            if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
+            if (me.can("risks.view", "risks.manage")) add(Tile("Risk register", Screen.Risks))
+        })
+        add("Administration" to listOf(
+            Tile("Council meetings", Screen.Meetings), Tile("Resolutions", Screen.Resolutions), Tile("Policies & by-laws", Screen.Policies),
+            Tile("Assets & infrastructure", Screen.Assets), Tile("ICT helpdesk", Screen.Tickets), Tile("Leave", Screen.Leave),
+        ))
+        add("This phone" to listOf(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()), Tile("Client Charter", Screen.Charter)))
+    }.filter { it.second.isNotEmpty() }
 
     AppScreen("Chipinge RDC", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
         TextButton(onClick = { ctx.sdk.logout() }) { Text("Log out", color = Color.White) }
@@ -87,7 +111,7 @@ fun HomeScreen(ctx: Ctx) {
                 Kpi("Open complaints", openComplaints.size.toString(), "$unacked not acknowledged (48h)", if (unacked > 0) CrdcColors.Danger else CrdcColors.Green, Modifier.weight(1f)) { ctx.go(Screen.Complaints) }
                 Kpi("Service requests", openRequests.size.toString(), "${openRequests.count { isPast(it.dueAt) }} overdue", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Requests) }
             }
-            SectionCard("What would you like to do?") {
+            sections.forEach { (title, tiles) -> SectionCard(title) {
                 tiles.chunked(2).forEach { pair ->
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         pair.forEach { t ->
@@ -97,7 +121,7 @@ fun HomeScreen(ctx: Ctx) {
                         if (pair.size == 1) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                     }
                 }
-            }
+            } }
         }
     }
 }

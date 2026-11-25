@@ -39,6 +39,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "core.middleware.SiteRoutingMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -139,6 +140,24 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "UPDATE_LAST_LOGIN": True,
 }
+
+# ---------------------------------------------------------------------------
+# Two websites from one system
+#   * public client site  (e.g. https://www.chipingerdc.gov.zw)  - residents, ratepayers, shop owners
+#   * staff site          (e.g. https://staff.chipingerdc.gov.zw) - council employees only
+# When the request's host is in neither list (development, localhost) both
+# sites are served together: client pages at /, staff pages at /staff/.
+# ---------------------------------------------------------------------------
+CLIENT_HOSTS = config("CLIENT_HOSTS", default="", cast=Csv())
+STAFF_HOSTS = config("STAFF_HOSTS", default="", cast=Csv())
+PUBLIC_SITE_URL = config("PUBLIC_SITE_URL", default="")   # e.g. https://www.chipingerdc.gov.zw
+STAFF_SITE_URL = config("STAFF_SITE_URL", default="")     # e.g. https://staff.chipingerdc.gov.zw
+
+# SMS reminders / invitations: "console" (logged only) or "http" (generic HTTP SMS gateway)
+SMS_BACKEND = config("SMS_BACKEND", default="console")
+SMS_HTTP_URL = config("SMS_HTTP_URL", default="")
+SMS_HTTP_TOKEN = config("SMS_HTTP_TOKEN", default="")
+SMS_SENDER_ID = config("SMS_SENDER_ID", default="ChipingeRDC")
 
 # ---------------------------------------------------------------------------
 # Council business rules

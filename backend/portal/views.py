@@ -8,7 +8,10 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from accounts.forms import ClientRegistrationForm
+from django.contrib.auth import views as auth_views
+from django.urls import reverse
+
+from accounts.forms import ClientRegistrationForm, LoginForm
 from core import audit
 from core.crud import idempotent
 from core.models import AuditLog
@@ -23,15 +26,35 @@ from .services import link_account
 
 
 def client_required(view):
-    @login_required
     @wraps(view)
     def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            from django.contrib.auth.views import redirect_to_login
+
+            return redirect_to_login(request.get_full_path(), "portal:login")
         if not request.user.is_client:
             messages.info(request, "The client portal is for residents and businesses. Staff use the council system.")
             return redirect("accounts:home")
         return view(request, *args, **kwargs)
 
     return wrapper
+
+
+class ClientLoginView(auth_views.LoginView):
+    """Login for the public client website. Staff are sent to the staff website."""
+
+    template_name = "portal/login.html"
+    authentication_form = LoginForm
+    redirect_authenticated_user = True
+
+    def form_valid(self, form):
+        if form.get_user().is_staff_member:
+            form.add_error(None, "Council staff must log in on the staff website.")
+            return self.form_invalid(form)
+        return super().form_valid(form)
+
+    def get_default_redirect_url(self):
+        return reverse("portal:dashboard")
 
 
 def register(request):
@@ -42,8 +65,18 @@ def register(request):
         user = form.save()
         audit.log(AuditLog.Action.CREATE, user, user=user, message="Client self-registration")
         login(request, user, backend="accounts.backends.LockoutModelBackend")
-        messages.success(request, "Welcome! Link your council account using the account number on your bill.")
-        return redirect("portal:link")
+        d = form.cleaned_data
+        if d.get("stand_number"):
+            claim = fin.submit_claim(user, stand_number=d["stand_number"], area=d.get("area"), business_name=d.get("business_name", ""),
+                                     claim_type="SHOP" if d.get("business_name") else "OWNER")
+            if claim.status == claim.Status.APPROVED:
+                messages.success(request, f"Welcome! Stand {claim.stand_number} matched our register and is now linked to your account.")
+            else:
+                messages.info(request, f"Welcome! Your stand {claim.stand_number} has been sent to the council for verification "
+                                       f"(reference {claim.reference}). You will be notified once it is approved.")
+            return redirect("portal:dashboard")
+        messages.success(request, "Welcome! Link your council account or register your stand / shop.")
+        return redirect("portal:claims")
     return render(request, "portal/register.html", {"form": form, "title": "Create client account"})
 
 
@@ -174,7 +207,8 @@ def licence_apply(request):
         account = next((a for a in accounts if str(a.pk) == request.POST.get("account")), accounts[0])
         d = form.cleaned_data
         lic = fin.apply_licence(request.user, account=account, licence_type=d["licence_type"], business_name=d["business_name"],
-                                premises=d["premises"], business_activity=d["business_activity"], ward=d["ward"])
+                                premises=d["premises"], business_activity=d["business_activity"], ward=d["ward"],
+                                property=account.properties.alive().filter(pk=request.POST.get("property") or None).first())
         messages.success(request, f"Application {lic.number} submitted. We will process it within 30 working days.")
         return redirect("portal:licences")
     return render(request, "portal/licence_apply.html", {"form": form, "accounts": accounts, "title": "Apply for a licence"})
@@ -247,3 +281,49 @@ def notifications(request):
     qs = request.user.notifications.alive().order_by("-created_at")[:100]
     request.user.notifications.filter(is_read=False).update(is_read=True)
     return render(request, "portal/notifications.html", {"title": "Notifications", "items": qs})
+
+
+@client_required
+@idempotent
+def claim_new(request):
+    form = forms.ClaimForm(request.POST or None, initial={"phone": request.user.phone, "id_number": request.user.national_id})
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        claim = fin.submit_claim(request.user, stand_number=d["stand_number"], area=d["area"], location=d["location"],
+                                 business_name=d["business_name"], id_number=d["id_number"], phone=d["phone"], claim_type=d["claim_type"],
+                                 notes=d["notes"])
+        if claim.status == claim.Status.APPROVED:
+            messages.success(request, f"Stand {claim.stand_number} matched the council register and is now linked to your account.")
+        else:
+            messages.info(request, f"Sent for verification (reference {claim.reference}). The council will check and approve it.")
+        return redirect("portal:claims")
+    return render(request, "generic/form.html", {"form": form, "title": "Register my stand / shop", "offline_capable": True})
+
+
+@client_required
+def claims(request):
+    from finance.models import AccountClaim
+
+    items = AccountClaim.objects.alive().filter(user=request.user)
+    return render(request, "portal/claims.html", {"title": "My stands & shops", "items": items, "accounts": my_accounts(request.user)})
+
+
+@client_required
+def plans(request):
+    from departments.models import BuildingPlan
+
+    return render(request, "portal/list.html", {"title": "My building plans", "items": BuildingPlan.objects.alive().filter(applicant=request.user),
+                                                "new_url": "portal:plan_new", "kind": "plan"})
+
+
+@client_required
+@idempotent
+def plan_new(request):
+    from departments import services as dept
+
+    form = forms.ClientPlanForm(request.POST or None, initial={"phone": request.user.phone})
+    if request.method == "POST" and form.is_valid():
+        plan = dept.submit_building_plan(request.user, **form.cleaned_data)
+        messages.success(request, f"Plan {plan.reference} submitted. Pay the plan fee to start the review (decision within 30 working days).")
+        return redirect("portal:plans")
+    return render(request, "generic/form.html", {"form": form, "title": "Submit a building plan for approval"})

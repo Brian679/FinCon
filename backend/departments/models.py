@@ -175,3 +175,436 @@ class AuditFinding(SyncModel):
         if not self.reference:
             self.reference = SequenceCounter.next("AUD", 4)
         super().save(*args, **kwargs)
+
+
+# =====================================================================
+# Assets & infrastructure (Finance: asset management; WASH: boreholes &
+# public ablutions; Technical: roads, bridges, public lighting)
+# =====================================================================
+class Asset(SyncModel):
+    class Category(models.TextChoices):
+        VEHICLE = "VEHICLE", "Motor vehicle"
+        PLANT = "PLANT", "Plant & earth-moving equipment"
+        EQUIPMENT = "EQUIP", "Tools & equipment"
+        ICT = "ICT", "ICT equipment"
+        FURNITURE = "FURN", "Furniture & fittings"
+        BUILDING = "BUILDING", "Building"
+        LAND = "LAND", "Land"
+        BOREHOLE = "BOREHOLE", "Borehole"
+        WATER_SCHEME = "WATER", "Piped water scheme"
+        ABLUTION = "ABLUTION", "Public ablution block"
+        STREET_LIGHT = "LIGHT", "Street / high-mast light"
+        ROAD = "ROAD", "Road"
+        BRIDGE = "BRIDGE", "Bridge / culvert"
+        OTHER = "OTHER", "Other"
+
+    class Condition(models.TextChoices):
+        GOOD = "GOOD", "Good / working"
+        FAIR = "FAIR", "Fair"
+        POOR = "POOR", "Poor – needs repair"
+        BROKEN = "BROKEN", "Broken down / not working"
+
+    class Status(models.TextChoices):
+        IN_USE = "IN_USE", "In use"
+        UNDER_REPAIR = "REPAIR", "Under repair"
+        IDLE = "IDLE", "Idle / in store"
+        DISPOSED = "DISPOSED", "Disposed"
+
+    asset_number = models.CharField(max_length=30, unique=True, editable=False)
+    name = models.CharField(max_length=200)
+    category = models.CharField(max_length=10, choices=Category.choices)
+    department = models.CharField(max_length=10, choices=Department.choices)
+    serial_number = models.CharField("Serial / registration no.", max_length=80, blank=True)
+    location = models.CharField(max_length=200, blank=True)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    acquisition_date = models.DateField(null=True, blank=True)
+    cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    useful_life_years = models.PositiveSmallIntegerField(default=10)
+    custodian = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="assets")
+    condition = models.CharField(max_length=6, choices=Condition.choices, default=Condition.GOOD)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.IN_USE, db_index=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["category", "name"]
+
+    def __str__(self):
+        return f"{self.asset_number} {self.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.asset_number:
+            self.asset_number = SequenceCounter.next("AST", 5)
+        super().save(*args, **kwargs)
+
+    def book_value(self):
+        """Straight-line depreciation."""
+        from decimal import Decimal
+
+        if not self.acquisition_date or not self.useful_life_years:
+            return self.cost
+        years = (timezone.localdate() - self.acquisition_date).days / 365.25
+        remaining = max(0.0, 1 - years / self.useful_life_years)
+        return (self.cost * Decimal(str(remaining))).quantize(Decimal("0.01"))
+
+
+class AssetMaintenance(SyncModel):
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="maintenance")
+    date = models.DateField(default=timezone.localdate)
+    work_done = models.TextField()
+    cost = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    performed_by = models.CharField(max_length=200, blank=True)
+    condition_after = models.CharField(max_length=6, choices=Asset.Condition.choices, default=Asset.Condition.GOOD)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.asset} {self.date}"
+
+
+# =====================================================================
+# Social Services: Public Safety (disaster risk), Natural Resources
+# (fire, human-wildlife conflict), community programmes & campaigns
+# =====================================================================
+class Incident(SyncModel):
+    class IncidentType(models.TextChoices):
+        FIRE = "FIRE", "Veld / structure fire"
+        FLOOD = "FLOOD", "Flood"
+        STORM = "STORM", "Storm / cyclone"
+        DROUGHT = "DROUGHT", "Drought"
+        HWC = "HWC", "Human-wildlife conflict"
+        DISEASE = "DISEASE", "Disease outbreak"
+        ACCIDENT = "ACCIDENT", "Accident"
+        COLLAPSE = "COLLAPSE", "Structure collapse"
+        OTHER = "OTHER", "Other"
+
+    class Status(models.TextChoices):
+        REPORTED = "REPORTED", "Reported"
+        RESPONDING = "RESPONDING", "Response under way"
+        CONTAINED = "CONTAINED", "Contained – recovery"
+        CLOSED = "CLOSED", "Closed (HOD signed off)"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    incident_type = models.CharField(max_length=10, choices=IncidentType.choices)
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=200)
+    occurred_at = models.DateTimeField(default=timezone.now)
+    households_affected = models.PositiveIntegerField(default=0)
+    people_injured = models.PositiveIntegerField(default=0)
+    deaths = models.PositiveIntegerField(default=0)
+    livestock_lost = models.PositiveIntegerField(default=0)
+    crops_hectares = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    response = models.TextField(blank=True, help_text="Actions taken, relief distributed, agencies involved")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.REPORTED, db_index=True)
+    reported_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    lead_officer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-occurred_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("INC", 5)
+        super().save(*args, **kwargs)
+
+
+class CommunityActivity(SyncModel):
+    """Programmes delivered in the community: hygiene promotion, environmental
+    campaigns, public-safety awareness, emergency drills, community services,
+    stakeholder consultations (WDCs, village assemblies)."""
+
+    class ActivityType(models.TextChoices):
+        HYGIENE = "HYGIENE", "Hygiene promotion (WASH)"
+        HEALTH = "HEALTH", "Public health programme"
+        ENVIRONMENT = "ENV", "Environmental campaign"
+        CONSERVATION = "CONSERVE", "Natural resource conservation"
+        RECLAMATION = "RECLAIM", "Land reclamation"
+        FIRE = "FIRE", "Fire management / fireguards"
+        SAFETY = "SAFETY", "Public safety awareness"
+        PREPAREDNESS = "PREPARE", "Emergency preparedness / drill"
+        SECURITY = "SECURITY", "Community security programme"
+        COMMUNITY = "COMMUNITY", "Community services"
+        CONSULTATION = "CONSULT", "Community consultation / WDC / village assembly"
+        TRAINING = "TRAINING", "Staff / stakeholder training"
+
+    class Status(models.TextChoices):
+        PLANNED = "PLANNED", "Planned"
+        DONE = "DONE", "Held – report submitted"
+        VERIFIED = "VERIFIED", "Verified by Head of Department"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    activity_type = models.CharField(max_length=10, choices=ActivityType.choices)
+    title = models.CharField(max_length=200)
+    department = models.CharField(max_length=10, choices=Department.choices, default=Department.SOCIAL_SERVICES)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    venue = models.CharField(max_length=200, blank=True)
+    date = models.DateField(default=timezone.localdate)
+    participants = models.PositiveIntegerField(default=0)
+    report = models.TextField(blank=True, help_text="Outcome, issues raised, follow-up actions")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PLANNED, db_index=True)
+    officer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="activities")
+    verified_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-date"]
+        verbose_name_plural = "community activities"
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("ACT", 5)
+        super().save(*args, **kwargs)
+
+
+# =====================================================================
+# Technical Services: development control (building plans)
+# =====================================================================
+class BuildingPlan(SyncModel):
+    class DevType(models.TextChoices):
+        RESIDENTIAL = "RES", "Residential house"
+        COMMERCIAL = "COM", "Commercial / shop"
+        INDUSTRIAL = "IND", "Industrial"
+        INSTITUTIONAL = "INST", "Institutional (school, clinic, church)"
+        ALTERATION = "ALT", "Alteration / extension"
+        CHANGE_OF_USE = "COU", "Change of use / subdivision"
+
+    class Status(models.TextChoices):
+        SUBMITTED = "SUBMITTED", "Submitted – awaiting fee & review"
+        UNDER_REVIEW = "REVIEW", "Under technical review"
+        RECOMMENDED = "RECOMMEND", "Recommended – awaiting Engineer"
+        APPROVED = "APPROVED", "Approved"
+        REJECTED = "REJECTED", "Rejected / returned for corrections"
+        CONSTRUCTION = "BUILDING", "Construction – inspections"
+        COMPLETED = "COMPLETED", "Completion certificate issued"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    applicant = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="building_plans")
+    applicant_name = models.CharField(max_length=200)
+    phone = models.CharField(max_length=30, blank=True)
+    stand_number = models.CharField(max_length=40)
+    location = models.CharField(max_length=200)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    development_type = models.CharField(max_length=4, choices=DevType.choices)
+    description = models.TextField()
+    floor_area = models.DecimalField("Floor area (m²)", max_digits=10, decimal_places=2, default=0)
+    fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    bill = models.ForeignKey("finance.Bill", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SUBMITTED, db_index=True)
+    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    review_notes = models.TextField(blank=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    decision_notes = models.TextField(blank=True)
+    inspection_log = models.TextField(blank=True)
+    due_at = models.DateTimeField(null=True, blank=True, help_text="Charter: process applications within 30 working days")
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.applicant_name} – stand {self.stand_number}"
+
+    def save(self, *args, **kwargs):
+        from core.sla import due_from_standard
+
+        if not self.reference:
+            self.reference = SequenceCounter.next("BP", 5)
+        if self._state.adding and not self.due_at:
+            self.due_at = due_from_standard("process-applications")
+        super().save(*args, **kwargs)
+
+
+# =====================================================================
+# Internal Audit: risk management
+# =====================================================================
+class Risk(SyncModel):
+    class Category(models.TextChoices):
+        FINANCIAL = "FIN", "Financial"
+        FRAUD = "FRAUD", "Fraud & corruption"
+        OPERATIONAL = "OPS", "Operational / service delivery"
+        COMPLIANCE = "COMPLY", "Legal & compliance"
+        STRATEGIC = "STRAT", "Strategic"
+        ICT = "ICT", "ICT & data"
+        HEALTH_SAFETY = "OHS", "Health, safety & environment"
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Open"
+        MITIGATING = "MITIGATING", "Mitigation in progress"
+        CLOSED = "CLOSED", "Closed / accepted"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    department = models.CharField(max_length=10, choices=Department.choices)
+    title = models.CharField(max_length=200)
+    description = models.TextField()
+    category = models.CharField(max_length=6, choices=Category.choices)
+    likelihood = models.PositiveSmallIntegerField(default=3, help_text="1 (rare) – 5 (almost certain)")
+    impact = models.PositiveSmallIntegerField(default=3, help_text="1 (minor) – 5 (catastrophic)")
+    existing_controls = models.TextField(blank=True)
+    mitigation = models.TextField(blank=True, help_text="Planned actions")
+    owner = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="risks")
+    review_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+
+    class Meta:
+        ordering = ["status", "-likelihood", "-impact"]
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("RSK", 4)
+        super().save(*args, **kwargs)
+
+    @property
+    def score(self):
+        return self.likelihood * self.impact
+
+    @property
+    def rating(self):
+        s = self.score
+        return "CRITICAL" if s >= 20 else "HIGH" if s >= 12 else "MEDIUM" if s >= 6 else "LOW"
+
+
+# =====================================================================
+# Administration: council secretariat, ICT services, policy development
+# =====================================================================
+class CouncilMeeting(SyncModel):
+    class MeetingType(models.TextChoices):
+        FULL_COUNCIL = "FULL", "Full council"
+        FINANCE = "FIN", "Finance & General Purposes committee"
+        HEALTH = "HEALTH", "Health, Housing & Social Services committee"
+        WORKS = "WORKS", "Roads & Works committee"
+        AUDIT = "AUDIT", "Audit committee"
+        HR = "HR", "Human Resources committee"
+        NATURAL = "NATRES", "Natural Resources committee"
+        MANAGEMENT = "MGMT", "Management meeting"
+        WDC = "WDC", "Ward Development Committee"
+
+    class Status(models.TextChoices):
+        SCHEDULED = "SCHEDULED", "Scheduled"
+        HELD = "HELD", "Held – minutes recorded"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    meeting_type = models.CharField(max_length=6, choices=MeetingType.choices)
+    title = models.CharField(max_length=200)
+    date = models.DateTimeField()
+    venue = models.CharField(max_length=200, default="Council Chamber, Chipinge")
+    agenda = models.TextField(blank=True)
+    minutes = models.TextField(blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SCHEDULED)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("MTG", 4)
+        super().save(*args, **kwargs)
+
+
+class Resolution(SyncModel):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Not started"
+        IN_PROGRESS = "IN_PROGRESS", "Being implemented"
+        IMPLEMENTED = "DONE", "Implemented"
+        RESCINDED = "RESCINDED", "Rescinded"
+
+    number = models.CharField(max_length=30, unique=True, editable=False)
+    meeting = models.ForeignKey(CouncilMeeting, on_delete=models.CASCADE, related_name="resolutions")
+    text = models.TextField()
+    department = models.CharField(max_length=10, choices=Department.choices)
+    responsible = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="resolutions")
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=11, choices=Status.choices, default=Status.PENDING, db_index=True)
+    progress_note = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["status", "due_date"]
+
+    def __str__(self):
+        return f"{self.number} {self.text[:60]}"
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            self.number = SequenceCounter.next("RES", 4)
+        super().save(*args, **kwargs)
+
+
+class ICTTicket(SyncModel):
+    class Category(models.TextChoices):
+        HARDWARE = "HW", "Computer / hardware"
+        SOFTWARE = "SW", "Software / system"
+        NETWORK = "NET", "Network / internet"
+        ACCOUNT = "ACCT", "User account / password"
+        PRINTER = "PRINT", "Printer / scanner"
+        PHONE = "PHONE", "Telephone / mobile app"
+        OTHER = "OTHER", "Other"
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Open"
+        IN_PROGRESS = "IN_PROGRESS", "Being attended"
+        RESOLVED = "RESOLVED", "Resolved"
+        CLOSED = "CLOSED", "Closed"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    raised_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="ict_tickets")
+    department = models.CharField(max_length=10, choices=Department.choices)
+    category = models.CharField(max_length=5, choices=Category.choices)
+    subject = models.CharField(max_length=200)
+    description = models.TextField()
+    priority = models.CharField(max_length=6, choices=[("LOW", "Low"), ("NORMAL", "Normal"), ("HIGH", "High"), ("URGENT", "Urgent")], default="NORMAL")
+    status = models.CharField(max_length=11, choices=Status.choices, default=Status.OPEN, db_index=True)
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    asset = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL, related_name="tickets")
+    resolution = models.TextField(blank=True)
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["status", "-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.subject}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("ICT", 5)
+        super().save(*args, **kwargs)
+
+
+class Policy(SyncModel):
+    class Status(models.TextChoices):
+        DRAFT = "DRAFT", "Draft"
+        CONSULTATION = "CONSULT", "Stakeholder consultation"
+        COUNCIL = "COUNCIL", "Awaiting council adoption"
+        ADOPTED = "ADOPTED", "Adopted / in force"
+        RETIRED = "RETIRED", "Retired"
+
+    title = models.CharField(max_length=200)
+    kind = models.CharField(max_length=10, choices=[("POLICY", "Policy"), ("BYLAW", "By-law"), ("PROCEDURE", "Procedure / manual"),
+                                                    ("STRATEGY", "Strategic plan")], default="POLICY")
+    department = models.CharField(max_length=10, choices=Department.choices)
+    version = models.CharField(max_length=20, default="1.0")
+    summary = models.TextField(blank=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.DRAFT)
+    adopted_on = models.DateField(null=True, blank=True)
+    review_date = models.DateField(null=True, blank=True)
+    document = models.FileField(upload_to="policies/", blank=True)
+
+    class Meta:
+        ordering = ["department", "title"]
+        verbose_name_plural = "policies"
+
+    def __str__(self):
+        return f"{self.title} v{self.version}"

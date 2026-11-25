@@ -49,6 +49,10 @@ ROLE_CHOICES = [(code, label) for code, (label, _d, _l) in ROLES.items()]
 # Capabilities every staff member has.
 STAFF_BASE = {
     "dashboard",
+    "ict.raise",
+    "meetings.view",
+    "policies.view",
+    "assets.view",
     "tasks.view",
     "complaints.department",
     "requests.department",
@@ -57,6 +61,10 @@ STAFF_BASE = {
 }
 
 HEAD_CAPS = {
+    "dept.overview",
+    "risks.view",
+    "resolutions.update",
+    "activities.verify",
     "tasks.assign_department",
     "requisition.hod_approve",
     "leave.approve",
@@ -67,7 +75,7 @@ HEAD_CAPS = {
 FINANCE_READ = {"finance.view", "finance.view_all", "finance.reports"}
 
 ROLE_CAPS = {
-    "SYSADMIN": {"users.manage", "audit.view_trail", "audit.view_all", "system.settings"},
+    "SYSADMIN": {"ict.manage", "assets.manage", "users.manage", "audit.view_trail", "audit.view_all", "system.settings"},
     "CEO": HEAD_CAPS
     | FINANCE_READ
     | {
@@ -86,14 +94,22 @@ ROLE_CAPS = {
         "budget.view",
         "licence.view",
         "hr.view",
+        "incidents.view",
+        "plans.view",
+        "meetings.manage",
+        "policies.manage",
+        "areas.view",
+        "leases.view",
+        "messages.view",
     },
-    "EXEC_ASSISTANT": {"complaints.view_all", "correspondence.manage", "tasks.assign_any"},
+    "EXEC_ASSISTANT": {"meetings.manage", "complaints.view_all", "correspondence.manage", "tasks.assign_any"},
     # Administration
     "ADMIN_OFFICER": HEAD_CAPS
-    | {"complaints.view_all", "correspondence.manage", "hr.manage", "hr.view", "users.view", "procurement.order"},
-    "HR_OFFICER": {"hr.manage", "hr.view"},
+    | {"complaints.view_all", "correspondence.manage", "hr.manage", "hr.view", "users.view", "procurement.order", "meetings.manage",
+       "policies.manage", "activities.manage", "assets.manage"},
+    "HR_OFFICER": {"activities.manage", "hr.manage", "hr.view"},
     "PROCUREMENT_OFFICER": {"procurement.order", "supplier.manage", "finance.view"},
-    "RECORDS_CLERK": {"correspondence.manage"},
+    "RECORDS_CLERK": {"meetings.manage", "correspondence.manage"},
     # Finance
     "TREASURER": HEAD_CAPS
     | FINANCE_READ
@@ -119,6 +135,14 @@ ROLE_CAPS = {
         "cashup.verify",
         "audit.view_trail",
         "payments.online_view",
+        "areas.view",
+        "areas.manage",
+        "leases.view",
+        "leases.manage",
+        "claims.review",
+        "reminders.send",
+        "messages.view",
+        "assets.manage",
     },
     "ACCOUNTANT": FINANCE_READ
     | {
@@ -137,27 +161,39 @@ ROLE_CAPS = {
         "bank.manage",
         "cashup.verify",
         "payments.online_view",
+        "areas.view",
+        "areas.manage",
+        "leases.view",
+        "leases.manage",
+        "claims.review",
+        "reminders.send",
+        "messages.view",
+        "assets.manage",
     },
-    "REVENUE_CLERK": {"finance.view", "receipt.create", "receipt.void_request", "accounts.manage", "licence.view", "licence.manage", "cashup.submit"},
-    "EXPENDITURE_CLERK": {"finance.view", "supplier.manage", "voucher.prepare", "voucher.pay", "procurement.order", "budget.view"},
+    "REVENUE_CLERK": {"claims.review", "reminders.send", "areas.view", "leases.view", "finance.view", "receipt.create", "receipt.void_request", "accounts.manage", "licence.view", "licence.manage", "cashup.submit"},
+    "EXPENDITURE_CLERK": {"assets.manage", "finance.view", "supplier.manage", "voucher.prepare", "voucher.pay", "procurement.order", "budget.view"},
     # Internal audit - read everything, change nothing operational
     "CHIEF_AUDITOR": HEAD_CAPS
     | FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "complaints.view_all",
-       "requests.view_all", "budget.view", "licence.view", "stands.view", "projects.view", "hr.view", "payments.online_view"},
+       "requests.view_all", "budget.view", "licence.view", "stands.view", "projects.view", "hr.view", "payments.online_view", "risks.manage",
+       "incidents.view", "plans.view", "areas.view", "leases.view", "messages.view", "dept.overview_all"},
     "AUDITOR": FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "budget.view", "licence.view",
-       "stands.view", "projects.view", "payments.online_view"},
+       "stands.view", "projects.view", "payments.online_view", "risks.manage", "risks.view", "incidents.view", "plans.view", "areas.view",
+       "leases.view"},
     # Social services
-    "SOCIAL_HEAD": HEAD_CAPS | {"stands.manage", "stands.view", "stands.allocate", "licence.view", "licence.inspect"},
-    "SOCIAL_OFFICER": {"stands.manage", "stands.view"},
-    "HEALTH_OFFICER": {"licence.view", "licence.inspect"},
-    "NATURAL_RESOURCES_OFFICER": set(),
-    "SAFETY_OFFICER": set(),
+    "SOCIAL_HEAD": HEAD_CAPS | {"stands.manage", "stands.view", "stands.allocate", "licence.view", "licence.inspect", "activities.manage",
+                                "incidents.manage", "incidents.view", "assets.condition"},
+    "SOCIAL_OFFICER": {"stands.manage", "stands.view", "activities.manage", "incidents.manage", "incidents.view", "assets.condition"},
+    "HEALTH_OFFICER": {"licence.view", "licence.inspect", "activities.manage", "incidents.view", "assets.condition"},
+    "NATURAL_RESOURCES_OFFICER": {"activities.manage", "incidents.manage", "incidents.view"},
+    "SAFETY_OFFICER": {"activities.manage", "incidents.manage", "incidents.view"},
     # Technical services
-    "ENGINEER": HEAD_CAPS | {"projects.manage", "projects.view", "stands.view"},
-    "TECHNICAL_OFFICER": {"projects.manage", "projects.view"},
-    "BUILDING_INSPECTOR": {"projects.view", "licence.view", "licence.inspect", "stands.view"},
+    "ENGINEER": HEAD_CAPS | {"projects.manage", "projects.view", "stands.view", "plans.view", "plans.review", "plans.approve", "assets.condition",
+                             "incidents.view"},
+    "TECHNICAL_OFFICER": {"projects.manage", "projects.view", "plans.view", "plans.review", "assets.condition"},
+    "BUILDING_INSPECTOR": {"projects.view", "licence.view", "licence.inspect", "stands.view", "plans.view", "plans.review"},
 }
 
 CLIENT_CAPS = {"portal.use"}

@@ -18,7 +18,9 @@ from django.utils import timezone
 from core import audit, sla
 from core.models import AuditLog, Notification
 
-from .models import (
+ZERO_D = Decimal("0.00")
+
+from .models import (  # noqa: E402
     ApprovalRecord,
     Bill,
     CashUp,
@@ -223,7 +225,8 @@ def verify_cashup(user, cashup, ok: bool, notes=""):
 
 # -------------------------------------------------------------------- licences
 @transaction.atomic
-def apply_licence(user, *, account, licence_type, business_name, premises, business_activity="", ward=None, renewal_of=None, licence_id=None):
+def apply_licence(user, *, account, licence_type, business_name, premises, business_activity="", ward=None, renewal_of=None, licence_id=None,
+                  property=None):
     if user.is_client:
         if not user.client_accounts.filter(pk=account.pk).exists():
             raise PermissionDenied("This account is not linked to your profile.")
@@ -234,7 +237,7 @@ def apply_licence(user, *, account, licence_type, business_name, premises, busin
     kwargs = {"id": licence_id} if licence_id else {}
     lic = Licence.objects.create(
         licence_type=licence_type, account=account, business_name=business_name, premises=premises,
-        business_activity=business_activity, ward=ward or account.ward, applicant=user, revenue_head=head,
+        business_activity=business_activity, ward=ward or account.ward, applicant=user, revenue_head=head, property=property,
         fee=head.default_amount if head else 0, renewal_of=renewal_of, created_by=user,
         status=Licence.Status.INSPECTION if needs_inspection else Licence.Status.APPLIED,
         due_at=sla.due_from_standard("process-applications"), **kwargs,
@@ -572,3 +575,293 @@ def confirm_online_payment(payment, provider_reference=""):
     payment.save()
     notify([payment.user], f"Payment received - receipt {receipt.number}", f"{payment.currency} {payment.amount} for {payment.account.account_number}")
     return receipt
+
+
+# ------------------------------------------------------- levies & leases
+def run_levy_billing(user, revenue_head, year: int, *, area=None, land_use=None, amount=None):
+    """Raise an annual levy (development levy, unit tax ...) on every matching property. Idempotent per year."""
+    _require(user, "billing.run")
+    amount = q2(amount or revenue_head.default_amount)
+    if amount <= 0:
+        raise ValidationError("Set an amount for the levy.")
+    period = f"{year:04d}"
+    props = Property.objects.alive().filter(is_active=True, account__status=ClientAccount.Status.ACTIVE).select_related("account")
+    if area is not None:
+        props = props.filter(area=area)
+    if land_use:
+        props = props.filter(land_use=land_use)
+    created = skipped = 0
+    for prop in props:
+        if Bill.objects.alive().filter(account=prop.account, property=prop, revenue_head=revenue_head, period=period).exclude(status=Bill.Status.CANCELLED).exists():
+            skipped += 1
+            continue
+        Bill.objects.create(account=prop.account, property=prop, revenue_head=revenue_head, period=period, amount=amount,
+                            description=f"{revenue_head.name} {year} – {prop}", due_date=date(year, 3, 31) if date(year, 3, 31) > timezone.localdate() else timezone.localdate() + timezone.timedelta(days=30),
+                            created_by=user)
+        prop.account.recalculate()
+        created += 1
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="finance.Bill",
+              message=f"{revenue_head.name} {year} levy run{f' for {area}' if area else ''}: {created} raised, {skipped} already billed")
+    return created, skipped
+
+
+def run_lease_billing(user, year: int, month: int):
+    """Raise the monthly rent bill for every current lease. Idempotent per month."""
+    from .models import Lease
+
+    _require(user, "billing.run")
+    period = f"{year:04d}-{month:02d}"
+    first, last = date(year, month, 1), date(year, month, monthrange(year, month)[1])
+    created = skipped = 0
+    for lease in Lease.objects.alive().filter(status=Lease.Status.ACTIVE, start_date__lte=last, end_date__gte=first).select_related("lessee", "premises"):
+        head = RevenueHead.objects.get(code="RENT")
+        if Bill.objects.alive().filter(account=lease.lessee, property=lease.premises, revenue_head=head, period=period).exclude(status=Bill.Status.CANCELLED).exists():
+            skipped += 1
+            continue
+        Bill.objects.create(account=lease.lessee, property=lease.premises, revenue_head=head, period=period, amount=lease.monthly_rent,
+                            description=f"Rent {period} – {lease.premises} ({lease.number})", due_date=first + timezone.timedelta(days=6), created_by=user)
+        lease.lessee.recalculate()
+        created += 1
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="finance.Lease", message=f"Lease billing {period}: {created} raised, {skipped} already billed")
+    return created, skipped
+
+
+@transaction.atomic
+def create_lease(user, **data):
+    from .models import Lease
+
+    _require(user, "leases.manage")
+    premises = data["premises"]
+    if Lease.objects.alive().filter(premises=premises, status=Lease.Status.ACTIVE, end_date__gte=data.get("start_date") or timezone.localdate()).exists():
+        raise ValidationError("These premises already have an active lease.")
+    lease = Lease(created_by=user, **data)
+    lease.full_clean(exclude=["number"])
+    lease.save()
+    if not premises.is_council_owned:
+        premises.is_council_owned = True
+        premises.save(update_fields=["is_council_owned", "updated_at"])
+    if lease.deposit and lease.deposit > 0:
+        Bill.objects.create(account=lease.lessee, property=premises, revenue_head=RevenueHead.objects.get(code="RENT"), amount=lease.deposit,
+                            description=f"Lease deposit {lease.number}", due_date=lease.start_date, created_by=user)
+        lease.lessee.recalculate()
+    return lease
+
+
+# ------------------------------------------------- shop / stand compliance
+def property_compliance(prop, year=None):
+    """Paid / unpaid position of one stand or shop for the dashboard and reminders."""
+    from .models import Lease
+
+    year = year or timezone.localdate().year
+    today = timezone.localdate()
+    bills = Bill.objects.alive().filter(property=prop).exclude(status__in=[Bill.Status.CANCELLED, Bill.Status.PAID])
+    owing = {"rates": ZERO_D, "levies": ZERO_D, "rent": ZERO_D, "other": ZERO_D}
+    for b in bills.select_related("revenue_head"):
+        cat = b.revenue_head.category
+        key = "rates" if cat == RevenueHead.Category.RATES else "levies" if cat == RevenueHead.Category.LEVY else "rent" if cat == RevenueHead.Category.RENT else "other"
+        owing[key] += b.outstanding
+    total = sum(owing.values(), ZERO_D)
+    lic = prop.licences.alive().order_by("-created_at").first() if hasattr(prop, "licences") else None
+    needs_licence = prop.land_use in (Property.LandUse.COMMERCIAL, Property.LandUse.INDUSTRIAL) or bool(prop.business_name)
+    if lic is None:
+        licence = "NONE" if needs_licence else "N/A"
+    elif lic.status == Licence.Status.ISSUED and lic.expiry_date and lic.expiry_date >= today:
+        licence = "VALID"
+    elif lic.status == Licence.Status.APPROVED:
+        licence = "UNPAID"
+    elif lic.status in (Licence.Status.APPLIED, Licence.Status.INSPECTION, Licence.Status.INSPECTED):
+        licence = "PROCESSING"
+    else:
+        licence = "EXPIRED" if lic.status in (Licence.Status.EXPIRED, Licence.Status.ISSUED) else "NONE"
+    lease = Lease.objects.alive().filter(premises=prop, status=Lease.Status.ACTIVE).first()
+    ok = total <= 0 and licence in ("VALID", "N/A")
+    return {
+        "property": prop, "account": prop.account, "owing": owing, "total": total, "licence": licence, "licence_obj": lic,
+        "lease": lease, "registered": prop.account.portal_users.exists(), "ok": ok,
+    }
+
+
+LICENCE_TEXT = {"NONE": "no shop licence on record", "UNPAID": "licence approved but fee not paid", "EXPIRED": "licence expired",
+                "PROCESSING": "licence application in progress", "VALID": "licence valid", "N/A": ""}
+
+
+def send_compliance_reminders(user, properties, *, campaign="", extra=""):
+    """Send each owner / shop owner their position by app notification and SMS,
+    and invite those not yet registered to create an online account."""
+    from django.conf import settings as dj
+
+    from core.messaging import notify_client
+
+    _require(user, "reminders.send")
+    site = dj.PUBLIC_SITE_URL or "the Chipinge RDC app"
+    sent = 0
+    for prop in properties:
+        c = property_compliance(prop)
+        acc = prop.account
+        if c["ok"]:
+            continue
+        parts = []
+        if c["total"] > 0:
+            parts.append(f"you owe USD {c['total']:.2f}")
+        if c["licence"] in ("NONE", "UNPAID", "EXPIRED"):
+            parts.append(LICENCE_TEXT[c["licence"]])
+        body = (f"Dear {acc.name}, account {acc.account_number}, {prop.business_name or 'stand ' + prop.stand_number} "
+                f"({prop.area.name if prop.area else prop.location}): " + "; ".join(parts) +
+                ". Pay with EcoCash/OneMoney in the Chipinge RDC app or at council offices.")
+        if not c["registered"]:
+            body += f" Register free on {site} with account number {acc.account_number} to receive bills and pay online."
+        if extra:
+            body += " " + extra
+        sent += notify_client(users=list(acc.portal_users.all()), phone=acc.phone, email=acc.email, subject="Chipinge RDC payment reminder",
+                              body=body, account_number=acc.account_number, sent_by=user, campaign=campaign or "Compliance reminder")
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="core.MessageLog", message=f"Reminders sent ({campaign}): {sent} message(s)")
+    return sent
+
+
+def broadcast(user, accounts, subject, body, campaign=""):
+    from core.messaging import notify_client
+
+    _require(user, "reminders.send")
+    sent = 0
+    for acc in accounts:
+        sent += notify_client(users=list(acc.portal_users.all()), phone=acc.phone, subject=subject, body=body,
+                              account_number=acc.account_number, sent_by=user, campaign=campaign or subject)
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="core.MessageLog", message=f"Broadcast '{subject}': {sent} message(s)")
+    return sent
+
+
+# --------------------------------------------------------- register import
+IMPORT_COLUMNS = ["area", "ward", "stand_number", "owner_name", "account_type", "phone", "id_number", "email", "land_use",
+                  "business_name", "monthly_rates", "valuation", "council_owned"]
+
+
+@transaction.atomic
+def import_register(user, rows):
+    """Bulk-load stands / shops and their owners (e.g. every stand in the district).
+
+    ``rows`` are dicts with IMPORT_COLUMNS. Existing stands are updated, new
+    ones created; owners are matched by ID number, then phone + name."""
+    from .models import TradingArea
+
+    _require(user, "accounts.manage")
+    stats = {"areas": 0, "accounts": 0, "properties_new": 0, "properties_updated": 0, "errors": []}
+    for i, row in enumerate(rows, start=2):
+        row = {k: (str(v).strip() if v is not None else "") for k, v in row.items()}
+        try:
+            if not row.get("stand_number") or not row.get("area") or not row.get("owner_name"):
+                raise ValidationError("area, stand_number and owner_name are required")
+            ward = int(row["ward"]) if row.get("ward") else None
+            area, created = TradingArea.objects.get_or_create(name=row["area"], defaults={"ward": ward, "created_by": user})
+            stats["areas"] += int(created)
+            acc = None
+            if row.get("id_number"):
+                acc = ClientAccount.objects.alive().filter(id_number__iexact=row["id_number"]).first()
+            if acc is None and row.get("phone"):
+                acc = ClientAccount.objects.alive().filter(phone=row["phone"], name__iexact=row["owner_name"]).first()
+            if acc is None:
+                acc = ClientAccount.objects.create(name=row["owner_name"], account_type=(row.get("account_type") or "IND").upper()[:5],
+                                                   phone=row.get("phone", ""), id_number=row.get("id_number", ""), email=row.get("email", ""),
+                                                   ward=ward or area.ward, created_by=user)
+                stats["accounts"] += 1
+            land_use = (row.get("land_use") or "COM").upper()[:4]
+            if land_use not in Property.LandUse.values:
+                raise ValidationError(f"land_use must be one of {', '.join(Property.LandUse.values)}")
+            defaults = dict(account=acc, area=area, ward=ward or area.ward, land_use=land_use, business_name=row.get("business_name", ""),
+                            monthly_rates=q2(row.get("monthly_rates") or 0), valuation=q2(row.get("valuation") or 0),
+                            is_council_owned=row.get("council_owned", "").lower() in ("1", "yes", "y", "true"))
+            prop = Property.objects.filter(location=area.name, stand_number=row["stand_number"]).first()
+            if prop is None:
+                Property.objects.create(location=area.name, stand_number=row["stand_number"], created_by=user, **defaults)
+                stats["properties_new"] += 1
+            else:
+                for k, v in defaults.items():
+                    setattr(prop, k, v)
+                prop.save()
+                stats["properties_updated"] += 1
+        except (ValidationError, ValueError, ArithmeticError) as exc:
+            msg = " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)
+            stats["errors"].append(f"Row {i}: {msg}")
+    if stats["errors"] and not (stats["properties_new"] or stats["properties_updated"]):
+        transaction.set_rollback(True)
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="finance.Property",
+              message=f"Register import: {stats['properties_new']} new stands, {stats['properties_updated']} updated, {stats['accounts']} new accounts, {len(stats['errors'])} errors")
+    return stats
+
+
+# ------------------------------------------------------- account claims
+def _digits(s):
+    import re
+
+    return re.sub(r"\D", "", s or "")[-9:]
+
+
+@transaction.atomic
+def submit_claim(user, *, stand_number, area=None, location="", business_name="", id_number="", phone="", claim_type="OWNER", notes="", claim_id=None):
+    from .models import AccountClaim
+
+    if not user.is_client:
+        raise PermissionDenied("Only client accounts can claim a stand.")
+    stand_number = stand_number.strip()
+    if not stand_number:
+        raise ValidationError("Enter the stand number.")
+    qs = Property.objects.alive().filter(stand_number__iexact=stand_number).select_related("account")
+    if area is not None:
+        qs = qs.filter(area=area)
+    elif location:
+        qs = qs.filter(location__icontains=location.strip())
+    prop = qs.first() if qs.count() == 1 else None
+    kwargs = {"id": claim_id} if claim_id else {}
+    claim = AccountClaim.objects.create(user=user, stand_number=stand_number, area=area, location=location, business_name=business_name,
+                                        id_number=id_number or user.national_id, phone=phone or user.phone, claim_type=claim_type, notes=notes,
+                                        matched_property=prop, created_by=user, **kwargs)
+    if prop is not None:
+        acc = prop.account
+        phone_ok = acc.phone and len(_digits(claim.phone)) >= 9 and _digits(acc.phone) == _digits(claim.phone)
+        id_ok = acc.id_number and claim.id_number and acc.id_number.replace("-", "").replace(" ", "").upper() == claim.id_number.replace("-", "").replace(" ", "").upper()
+        if phone_ok or id_ok:
+            acc.portal_users.add(user)
+            claim.status, claim.account, claim.decided_at = AccountClaim.Status.APPROVED, acc, timezone.now()
+            claim.decision_note = "Verified automatically (details match the council register)."
+            claim.save()
+            notify([user], f"Stand {prop.stand_number} linked to your account", f"Account {acc.account_number}. Your bills and licences now appear in the app.")
+            audit.log(AuditLog.Action.APPROVE, claim, user=user, message="Claim auto-approved: details matched register")
+            return claim
+    notify(users_with_cap("claims.review", "FINANCE"), f"Stand claim to verify: {claim.reference}",
+           f"{user.get_full_name()} – stand {stand_number} {area or location}")
+    return claim
+
+
+@transaction.atomic
+def decide_claim(user, claim, approve: bool, *, account=None, note="", create_account=False, monthly_rates=None, land_use="COM"):
+    """Approve by linking to an existing account (or the matched stand's owner),
+    or by registering a new account and stand from the claim's details."""
+    from .models import AccountClaim
+
+    _require(user, "claims.review")
+    if claim.status != AccountClaim.Status.PENDING:
+        raise ValidationError("This claim has already been decided.")
+    claim.decided_by, claim.decided_at, claim.decision_note = user, timezone.now(), note
+    if not approve:
+        claim.status = AccountClaim.Status.REJECTED
+        claim.save()
+        _record(claim, "Stand claim", "REJECTED", user, note)
+        notify([claim.user], f"Stand claim {claim.reference} not approved", note or "Please visit the council offices with proof of ownership.")
+        return claim
+    if account is None and claim.matched_property is not None:
+        account = claim.matched_property.account
+    if account is None:
+        if not create_account:
+            raise ValidationError("Choose the account to link, or register a new account for this stand.")
+        u = claim.user
+        account = ClientAccount.objects.create(name=claim.business_name if claim.claim_type == "SHOP" and claim.business_name else u.get_full_name(),
+                                               account_type="BUS" if claim.claim_type == "SHOP" else "IND", phone=claim.phone, id_number=claim.id_number,
+                                               email=u.email, ward=(claim.area.ward if claim.area else u.ward), created_by=user)
+        Property.objects.create(account=account, area=claim.area, location=claim.area.name if claim.area else claim.location, stand_number=claim.stand_number,
+                                business_name=claim.business_name, ward=account.ward, land_use=land_use, monthly_rates=q2(monthly_rates or 0), created_by=user)
+    account.portal_users.add(claim.user)
+    claim.account = account
+    claim.status = AccountClaim.Status.APPROVED
+    claim.save()
+    _record(claim, "Stand claim", "APPROVED", user, note)
+    notify([claim.user], f"Stand {claim.stand_number} approved and linked", f"Account {account.account_number}. Your bills, payments and licences are now in the app.")
+    return claim

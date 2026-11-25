@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% load static %}
+{% block title %}Log in{% endblock %}
+{% block content %}
+<div class="row justify-content-center mt-4"><div class="col-md-5 col-lg-4">
+<div class="card shadow"><div class="card-body p-4">
+  <div class="text-center mb-3"><img src="{% static 'img/logo.svg' %}" width="72" alt=""><h1 class="h5 mt-2">{{ COUNCIL.NAME }}</h1><p class="text-muted small mb-0">Online services for residents, ratepayers and businesses</p></div>
+  <form method="post">{% csrf_token %}
+    {% include "generic/_form_fields.html" %}
+    <input type="hidden" name="next" value="{{ next }}">
+    <button class="btn btn-primary w-100 mt-3">Log in</button>
+  </form>
+  <hr><p class="small text-center mb-0">No account yet? <a href="{% url 'portal:register' %}">Create one – it's free</a></p>
+</div></div></div></div>
+{% endblock %}

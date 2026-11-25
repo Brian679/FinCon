@@ -98,7 +98,8 @@ def staff_entities(user):
         "requisitions": (_requisition_scope(user), s.RequisitionSerializer),
         "vouchers": (PaymentVoucher.objects.select_related("prepared_by", "budget_line"), s.VoucherSerializer)
         if c("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "finance.view_all") else None,
-        "budget_lines": (BudgetLine.objects.filter(financial_year=timezone.localdate().year), s.BudgetLineSerializer) if c("budget.view") else None,
+        "budget_lines": (BudgetLine.objects.filter(financial_year=timezone.localdate().year) if c("budget.view")
+                         else BudgetLine.objects.filter(financial_year=timezone.localdate().year, department=user.department), s.BudgetLineSerializer),
         "tasks": (_task_scope(user), s.TaskSerializer),
         "task_comments": (TaskComment.objects.filter(task__in=_task_scope(user)).select_related("author"), s.TaskCommentSerializer),
         "complaints": (wf.complaint_scope(user, Complaint.objects.all()), s.ComplaintSerializer),
@@ -108,7 +109,42 @@ def staff_entities(user):
         "audit_findings": (_finding_scope(user), s.AuditFindingSerializer) if _finding_scope(user) is not None else None,
         "leave": (_leave_scope(user).select_related("employee"), s.LeaveRequestSerializer),
         "notifications": (Notification.objects.filter(recipient=user), s.NotificationSerializer),
+        # registers added for every department
+        "staff": (_staff_scope(user), s.StaffSerializer),
+        "trading_areas": (s.TradingArea.objects.all(), s.TradingAreaSerializer) if c("areas.view", "accounts.manage") else None,
+        "leases": (s.Lease.objects.select_related("lessee", "premises"), s.LeaseSerializer) if c("leases.view", "leases.manage") else None,
+        "claims": (s.AccountClaim.objects.select_related("user", "area", "matched_property__account", "account"), s.ClaimSerializer)
+        if c("claims.review") else None,
+        "assets": (_dept(user, s.Asset.objects.prefetch_related("maintenance"), all_caps=("assets.manage", "finance.view_all")), s.AssetSerializer),
+        "incidents": (s.Incident.objects.select_related("lead_officer"), s.IncidentSerializer) if c("incidents.view") else None,
+        "activities": (_dept(user, s.CommunityActivity.objects.select_related("officer")), s.ActivitySerializer)
+        if c("activities.manage", "activities.verify", "dept.overview") else None,
+        "building_plans": (s.BuildingPlan.objects.select_related("bill", "reviewed_by"), s.BuildingPlanSerializer) if c("plans.view") else None,
+        "risks": (s.Risk.objects.select_related("owner") if c("risks.manage") else _dept(user, s.Risk.objects.select_related("owner")), s.RiskSerializer)
+        if c("risks.view", "risks.manage") else None,
+        "meetings": (s.CouncilMeeting.objects.all(), s.MeetingSerializer),
+        "resolutions": (s.Resolution.objects.select_related("responsible", "meeting") if (user.sees_all_departments() or c("meetings.manage"))
+                        else s.Resolution.objects.filter(Q(department=user.department) | Q(responsible=user)).select_related("responsible", "meeting"),
+                        s.ResolutionSerializer),
+        "ict_tickets": (s.ICTTicket.objects.select_related("raised_by") if c("ict.manage") else s.ICTTicket.objects.filter(raised_by=user).select_related("raised_by"),
+                        s.TicketSerializer),
+        "policies": (s.Policy.objects.all(), s.PolicySerializer),
     }
+
+
+def _staff_scope(user):
+    from accounts.models import User
+
+    qs = User.objects.filter(user_type=User.UserType.STAFF)
+    if user.sees_all_departments() or user.has_cap("hr.view", "tasks.assign_any"):
+        return qs
+    return qs.filter(department=user.department)
+
+
+def _dept(user, qs, all_caps=()):
+    if user.sees_all_departments() or (all_caps and user.has_cap(*all_caps)):
+        return qs
+    return qs.filter(department=user.department)
 
 
 def client_entities(user):
@@ -126,6 +162,10 @@ def client_entities(user):
         "stands": (StandApplication.objects.filter(applicant=user), s.StandApplicationSerializer),
         "notifications": (Notification.objects.filter(recipient=user), s.NotificationSerializer),
         "online_payments": (OnlinePayment.objects.filter(user=user).select_related("receipt"), s.OnlinePaymentSerializer),
+        "claims": (s.AccountClaim.objects.filter(user=user).select_related("area", "account"), s.ClaimSerializer),
+        "building_plans": (s.BuildingPlan.objects.filter(applicant=user).select_related("bill"), s.BuildingPlanSerializer),
+        "leases": (s.Lease.objects.filter(lessee__in=accounts).select_related("lessee", "premises"), s.LeaseSerializer),
+        "trading_areas": (s.TradingArea.objects.filter(is_active=True), s.TradingAreaSerializer),
     }
 
 
@@ -144,11 +184,14 @@ def pull(user, cursors: dict, limit=PAGE):
         q = qs
         if cur:
             q = q.filter(updated_at__gte=cur)
-        rows = list(q.order_by("updated_at", "pk")[: limit + 1]) if hasattr(qs.model, "updated_at") else list(q[: limit + 1])
+        has_updated = any(f.name == "updated_at" for f in qs.model._meta.get_fields())
+        if not has_updated:
+            q = qs  # small reference lists (e.g. staff) are always sent in full
+        rows = list(q.order_by("updated_at", "pk")[: limit + 1]) if has_updated else list(q[: limit + 1])
         has_more = len(rows) > limit
         rows = rows[:limit]
         items = serializer(rows, many=True).data
-        new_cursor = rows[-1].updated_at.isoformat() if rows else (cursors or {}).get(name)
+        new_cursor = (rows[-1].updated_at.isoformat() if has_updated else None) if rows else (cursors or {}).get(name)
         out[name] = {"items": items, "cursor": new_cursor, "has_more": has_more}
     return {"server_time": timezone.now().isoformat(), "entities": out}
 
@@ -280,8 +323,13 @@ def op_licence_decide(user, p):
 
 def op_licence_apply(user, p):
     account = _get(ClientAccount, p["account"])
+    prop = None
+    if p.get("property"):
+        from finance.models import Property
+
+        prop = _get(Property, p["property"], Property.objects.filter(account=account))
     lic = fin.apply_licence(user, account=account, licence_type=p["licence_type"], business_name=p["business_name"], premises=p["premises"],
-                            business_activity=p.get("business_activity", ""), ward=p.get("ward"), licence_id=p.get("id"))
+                            business_activity=p.get("business_activity", ""), ward=p.get("ward"), licence_id=p.get("id"), property=prop)
     return "licences", s.LicenceSerializer(lic).data
 
 
@@ -315,7 +363,176 @@ def op_notification_read(user, p):
     return "notifications", s.NotificationSerializer(n).data
 
 
+# ------------------------------------------------- department operations
+from departments import services as dept  # noqa: E402
+
+
+def op_requisition_create(user, p):
+    from finance.models import RequisitionItem
+
+    if not user.is_staff_member:
+        raise PermissionDenied("Staff only.")
+    items = p.get("items") or []
+    if not items:
+        raise ValidationError("Add at least one item.")
+    line = _get(BudgetLine, p["budget_line"]) if p.get("budget_line") else None
+    req = Requisition.objects.create(id=p.get("id"), department=user.department, requested_by=user, purpose=p.get("purpose", ""),
+                                     budget_line=line, created_by=user)
+    for it in items:
+        RequisitionItem.objects.create(requisition=req, description=it["description"], quantity=Decimal(str(it.get("quantity") or 1)),
+                                       unit_cost=Decimal(str(it["unit_cost"])))
+    req.recalc_total()
+    if p.get("submit", True):
+        fin.submit_requisition(user, req)
+    return "requisitions", s.RequisitionSerializer(req).data
+
+
+def op_task_create(user, p):
+    from accounts.models import User
+
+    assignee = User.objects.filter(pk=p["assigned_to"]).first() if p.get("assigned_to") else None
+    data = {"kind": p.get("kind", "TASK"), "title": p["title"], "description": p.get("description", ""), "priority": p.get("priority", "NORMAL"),
+            "department": p.get("department") or (assignee.department if assignee else user.department), "assigned_to": assignee,
+            "due_date": parse_date(p["due_date"]) if p.get("due_date") else None}
+    t = wf.create_task(user, **data)
+    return "tasks", s.TaskSerializer(t).data
+
+
+def op_stand_action(user, p):
+    st = dept.stand_action(user, _get(StandApplication, p["stand"]), p["action"], stand=p.get("allocated_stand", ""), note=p.get("note", ""))
+    return "stands", s.StandApplicationSerializer(st).data
+
+
+def op_project_update(user, p):
+    pr = dept.project_update(user, _get(Project, p["project"]), progress=p.get("progress"), status=p.get("status") or None, note=p.get("note", ""))
+    return "projects", s.ProjectSerializer(pr).data
+
+
+def op_finding_respond(user, p):
+    f = dept.respond_finding(user, _get(AuditFinding, p["finding"]), response=p["response"], date=parse_date(p["date"]) if p.get("date") else None)
+    return "audit_findings", s.AuditFindingSerializer(f).data
+
+
+INCIDENT_FIELDS = {"id", "incident_type", "title", "description", "ward", "location", "households_affected", "people_injured", "deaths",
+                   "livestock_lost", "crops_hectares"}
+
+
+def op_incident_create(user, p):
+    data = _clean(p, INCIDENT_FIELDS)
+    if p.get("captured_at"):
+        data["occurred_at"] = _dt(p["captured_at"])
+    inc = dept.report_incident(user, **data)
+    return "incidents", s.IncidentSerializer(inc).data
+
+
+def op_incident_update(user, p):
+    inc = dept.update_incident(user, _get(s.Incident, p["incident"]), status=p.get("status") or None, response=p.get("response", ""),
+                               households_affected=p.get("households_affected"))
+    return "incidents", s.IncidentSerializer(inc).data
+
+
+def op_activity_create(user, p):
+    data = _clean(p, {"id", "activity_type", "title", "ward", "venue", "department"})
+    if p.get("date"):
+        data["date"] = parse_date(p["date"])
+    act = dept.plan_activity(user, **data)
+    if p.get("report"):
+        act = dept.report_activity(user, act, report=p["report"], participants=p.get("participants") or 0)
+    return "activities", s.ActivitySerializer(act).data
+
+
+def op_activity_report(user, p):
+    act = dept.report_activity(user, _get(s.CommunityActivity, p["activity"]), report=p["report"], participants=p.get("participants") or 0)
+    return "activities", s.ActivitySerializer(act).data
+
+
+def op_activity_verify(user, p):
+    act = dept.verify_activity(user, _get(s.CommunityActivity, p["activity"]), bool(p.get("approve")), p.get("note", ""))
+    return "activities", s.ActivitySerializer(act).data
+
+
+def op_plan_action(user, p):
+    plan = dept.plan_action(user, _get(s.BuildingPlan, p["plan"]), p["action"], p.get("note", ""))
+    return "building_plans", s.BuildingPlanSerializer(plan).data
+
+
+def op_plan_create(user, p):
+    data = _clean(p, {"id", "applicant_name", "phone", "stand_number", "location", "ward", "development_type", "description", "floor_area"})
+    plan = dept.submit_building_plan(user, **data)
+    return "building_plans", s.BuildingPlanSerializer(plan).data
+
+
+def op_asset_condition(user, p):
+    a = _get(s.Asset, p["asset"])
+    dept.report_asset_condition(user, a, condition=p["condition"], note=p.get("note", ""), work_done=p.get("note", ""),
+                                cost=Decimal(str(p.get("cost") or 0)))
+    a.refresh_from_db()
+    return "assets", s.AssetSerializer(a).data
+
+
+def op_ict_create(user, p):
+    t = dept.raise_ticket(user, **_clean(p, {"id", "category", "subject", "description", "priority"}))
+    return "ict_tickets", s.TicketSerializer(t).data
+
+
+def op_ict_action(user, p):
+    t = dept.ticket_action(user, _get(s.ICTTicket, p["ticket"]), p["action"], p.get("note", ""))
+    return "ict_tickets", s.TicketSerializer(t).data
+
+
+def op_resolution_update(user, p):
+    r = dept.update_resolution(user, _get(s.Resolution, p["resolution"]), status=p["status"], note=p.get("note", ""))
+    return "resolutions", s.ResolutionSerializer(r).data
+
+
+def op_claim_decide(user, p):
+    claim = _get(s.AccountClaim, p["claim"])
+    c = fin.decide_claim(user, claim, bool(p.get("approve")), note=p.get("note", ""), create_account=bool(p.get("create_account")),
+                         monthly_rates=p.get("monthly_rates") or None)
+    return "claims", s.ClaimSerializer(c).data
+
+
+def op_claim_create(user, p):
+    area = _get(s.TradingArea, p["area"]) if p.get("area") else None
+    c = fin.submit_claim(user, stand_number=p["stand_number"], area=area, location=p.get("location", ""), business_name=p.get("business_name", ""),
+                         id_number=p.get("id_number", ""), phone=p.get("phone", ""), claim_type=p.get("claim_type", "OWNER"), notes=p.get("notes", ""),
+                         claim_id=p.get("id"))
+    return "claims", s.ClaimSerializer(c).data
+
+
+def op_reminders_send(user, p):
+    from finance.models import Property
+
+    props = Property.objects.alive().filter(is_active=True)
+    if p.get("properties"):
+        props = props.filter(pk__in=p["properties"])
+    elif p.get("area"):
+        props = props.filter(area_id=p["area"])
+    else:
+        raise ValidationError("Choose an area or stands.")
+    n = fin.send_compliance_reminders(user, list(props), campaign=p.get("campaign", "Reminder from mobile app"), extra=p.get("extra", ""))
+    return "", {"sent": n}
+
+
 STAFF_OPS = {
+    "requisition.create": op_requisition_create,
+    "task.create": op_task_create,
+    "stand.action": op_stand_action,
+    "project.update": op_project_update,
+    "finding.respond": op_finding_respond,
+    "incident.create": op_incident_create,
+    "incident.update": op_incident_update,
+    "activity.create": op_activity_create,
+    "activity.report": op_activity_report,
+    "activity.verify": op_activity_verify,
+    "plan.action": op_plan_action,
+    "plan.create": op_plan_create,
+    "asset.condition": op_asset_condition,
+    "ict.create": op_ict_create,
+    "ict.action": op_ict_action,
+    "resolution.update": op_resolution_update,
+    "claim.decide": op_claim_decide,
+    "reminders.send": op_reminders_send,
     "receipt.create": op_receipt_create,
     "receipt.void_request": op_receipt_void_request,
     "receipt.void_decide": op_receipt_void_decide,
@@ -335,6 +552,8 @@ STAFF_OPS = {
 }
 
 CLIENT_OPS = {
+    "claim.create": op_claim_create,
+    "plan.create": op_plan_create,
     "complaint.create": op_complaint_create,
     "service_request.create": op_service_request_create,
     "licence.apply": op_licence_apply,
@@ -364,7 +583,7 @@ def push(user, operations, device_id=""):
             try:
                 with transaction.atomic():
                     entity, record = handler(user, op.get("payload") or {})
-                result = {"entity": entity, "record": record}
+                result = {"entity": entity, "record": record} if entity else {"info": record}
             except PermissionDenied as exc:
                 status, error = "rejected", str(exc) or "Permission denied."
             except ValidationError as exc:

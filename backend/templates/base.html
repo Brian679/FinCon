@@ -13,12 +13,12 @@
 </head>
 <body class="{% block body_class %}{% endblock %}">
 <div id="offline-banner" class="offline-banner d-none">You are offline – showing saved pages. Forms marked “offline ready” will be sent automatically when you reconnect. <span id="queue-count"></span></div>
-<nav class="navbar navbar-expand-lg navbar-dark topbar no-print">
+<nav class="navbar navbar-expand-lg navbar-dark topbar {% if SITE_KIND == 'staff' %}topbar-staff{% endif %} no-print">
   <div class="container-fluid">
     {% if user.is_authenticated %}<button class="btn btn-sm btn-outline-light d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">☰</button>{% endif %}
     <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'accounts:home' %}">
       <img src="{% static 'img/logo.svg' %}" alt="" width="34" height="34">
-      <span><strong>{{ COUNCIL.SHORT_NAME }}</strong> <small class="d-none d-md-inline opacity-75">· {{ COUNCIL.CHARTER }}</small></span>
+      <span><strong>{{ COUNCIL.SHORT_NAME }}</strong> <small class="d-none d-md-inline opacity-75">· {% if SITE_KIND == 'staff' %}Council Staff System{% else %}Online Services{% endif %}</small></span>
     </a>
     <div class="ms-auto d-flex align-items-center gap-3 text-white">
       {% if user.is_authenticated %}
@@ -27,7 +27,7 @@
         <a class="btn btn-sm btn-outline-light" href="{% url 'accounts:password_change' %}">Password</a>
         <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-light">Log out</button></form>
       {% else %}
-        <a class="btn btn-sm btn-light" href="{% url 'accounts:login' %}">Log in</a>
+        {% if SITE_KIND == 'staff' %}<a class="btn btn-sm btn-light" href="{% url 'accounts:login' %}">Staff log in</a>{% else %}<a class="btn btn-sm btn-outline-light" href="{% url 'portal:register' %}">Create account</a> <a class="btn btn-sm btn-light" href="{% url 'portal:login' %}">Log in</a>{% endif %}
       {% endif %}
     </div>
   </div>

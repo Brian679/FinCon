@@ -175,6 +175,31 @@ class BankAccount(SyncModel):
         return q2(self.opening_balance) + self.receipts_total() - self.payments_total()
 
 
+class TradingArea(SyncModel):
+    """A shopping / business centre, growth point, township or market where
+    council stands, shops and stalls are located."""
+
+    class Kind(models.TextChoices):
+        SHOPPING_CENTRE = "SC", "Shopping / business centre"
+        GROWTH_POINT = "GP", "Growth point"
+        TOWNSHIP = "TS", "Township / residential area"
+        MARKET = "MKT", "Market / vending site"
+        SERVICE_CENTRE = "RSC", "Rural service centre"
+        FARMING = "FARM", "Farming / plantation area"
+
+    name = models.CharField(max_length=120, unique=True)
+    kind = models.CharField(max_length=4, choices=Kind.choices, default=Kind.SHOPPING_CENTRE)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_kind_display()}, Ward {self.ward or '-'})"
+
+
 class ClientAccount(SyncModel):
     """A ratepayer / customer account (individual, business or institution)."""
 
@@ -243,13 +268,16 @@ class Property(SyncModel):
         AGRICULTURAL = "AGR", "Agricultural"
 
     account = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="properties")
+    area = models.ForeignKey(TradingArea, null=True, blank=True, on_delete=models.PROTECT, related_name="properties")
     stand_number = models.CharField(max_length=40)
+    business_name = models.CharField(max_length=200, blank=True, help_text="Shop / business trading at this stand")
     location = models.CharField(max_length=200, help_text="Township / business centre / village")
     ward = models.PositiveSmallIntegerField(null=True, blank=True)
     land_use = models.CharField(max_length=4, choices=LandUse.choices, default=LandUse.RESIDENTIAL)
     size_sqm = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     valuation = models.DecimalField(**MONEY, default=ZERO)
     monthly_rates = models.DecimalField(**MONEY, default=ZERO, help_text="Monthly rates charge (USD)")
+    is_council_owned = models.BooleanField(default=False, help_text="Council-owned premises let out on lease")
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -423,6 +451,8 @@ class Licence(SyncModel):
     number = models.CharField(max_length=30, unique=True, editable=False)
     licence_type = models.CharField(max_length=10, choices=LicenceType.choices, default=LicenceType.SHOP)
     account = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="licences")
+    property = models.ForeignKey("Property", null=True, blank=True, on_delete=models.SET_NULL, related_name="licences",
+                                 help_text="The stand / shop the licence is for")
     business_name = models.CharField(max_length=200)
     business_activity = models.CharField(max_length=200, blank=True)
     premises = models.CharField(max_length=255, help_text="Premises / stand / trading site")
@@ -452,7 +482,7 @@ class Licence(SyncModel):
             self.number = SequenceCounter.next("LIC", 5)
         super().save(*args, **kwargs)
 
-    @property
+    @builtins.property
     def is_active(self):
         return self.status == self.Status.ISSUED and self.expiry_date and self.expiry_date >= timezone.localdate()
 
@@ -714,4 +744,86 @@ class OnlinePayment(SyncModel):
     def save(self, *args, **kwargs):
         if not self.reference:
             self.reference = SequenceCounter.next("PAY")
+        super().save(*args, **kwargs)
+
+
+class Lease(SyncModel):
+    """Lease of council-owned premises (shops, market stalls, land, offices)."""
+
+    class Status(models.TextChoices):
+        ACTIVE = "ACTIVE", "Active"
+        EXPIRED = "EXPIRED", "Expired"
+        TERMINATED = "TERMINATED", "Terminated"
+
+    number = models.CharField(max_length=30, unique=True, editable=False)
+    lessee = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="leases")
+    premises = models.ForeignKey(Property, on_delete=models.PROTECT, related_name="leases")
+    purpose = models.CharField(max_length=200, help_text="e.g. Retail shop, market stall, office")
+    monthly_rent = models.DecimalField(**MONEY, validators=POSITIVE)
+    deposit = models.DecimalField(**MONEY, default=ZERO)
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField()
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.ACTIVE, db_index=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["-start_date"]
+
+    def __str__(self):
+        return f"{self.number} {self.premises} – {self.lessee.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.number:
+            self.number = SequenceCounter.next("LSE", 5)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_current(self):
+        today = timezone.localdate()
+        return self.status == self.Status.ACTIVE and self.start_date <= today <= self.end_date
+
+
+class AccountClaim(SyncModel):
+    """A client asks to have a stand / shop linked to their online account.
+
+    If the stand is already in the register and the phone / ID matches, the
+    link is approved automatically; otherwise a revenue officer checks it and
+    approves (linking to an existing account, or registering a new one)."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Waiting for council verification"
+        APPROVED = "APPROVED", "Approved – linked to your account"
+        REJECTED = "REJECTED", "Rejected"
+
+    class ClaimType(models.TextChoices):
+        OWNER = "OWNER", "I own / occupy this stand"
+        SHOP = "SHOP", "I run a shop / business at this stand"
+        TENANT = "TENANT", "I lease these council premises"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="account_claims")
+    claim_type = models.CharField(max_length=6, choices=ClaimType.choices, default=ClaimType.OWNER)
+    stand_number = models.CharField(max_length=40)
+    area = models.ForeignKey(TradingArea, null=True, blank=True, on_delete=models.SET_NULL, related_name="claims")
+    location = models.CharField(max_length=200, blank=True, help_text="Township / business centre if not in the list")
+    business_name = models.CharField(max_length=200, blank=True)
+    id_number = models.CharField("National ID / company reg. no.", max_length=40, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.PENDING, db_index=True)
+    matched_property = models.ForeignKey(Property, null=True, blank=True, on_delete=models.SET_NULL, related_name="claims")
+    account = models.ForeignKey(ClientAccount, null=True, blank=True, on_delete=models.SET_NULL, related_name="claims")
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} stand {self.stand_number} – {self.user}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("CLM", 5)
         super().save(*args, **kwargs)

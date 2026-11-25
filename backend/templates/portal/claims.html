@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<div class="d-flex justify-content-between mb-3"><h1 class="h3">My stands & shops</h1><a class="btn btn-primary" href="{% url 'portal:claim_new' %}">+ Register a stand / shop</a></div>
+<div class="alert alert-info small">Own a house or shop on a council stand, or lease council premises? Register it here. If your details match the council register it is linked immediately; otherwise a revenue officer verifies it (you may be asked to bring your ID and agreement of sale / lease to the office). Once linked, your bills, licences and payments appear here and in the Chipinge RDC app.</div>
+<div class="row g-3">
+<div class="col-lg-6"><div class="card shadow-sm"><div class="card-header">Linked accounts</div><ul class="list-group list-group-flush">
+{% for a in accounts %}<li class="list-group-item"><a href="{% url 'portal:account' a.pk %}">{{ a.account_number }} – {{ a.name }}</a> <span class="float-end">${{ a.balance|floatformat:2|intcomma }}</span>
+<div class="small text-muted">{% for p in a.properties.all %}{{ p }}{% if p.business_name %} ({{ p.business_name }}){% endif %}{% if not forloop.last %} · {% endif %}{% endfor %}</div></li>
+{% empty %}<li class="list-group-item text-muted">None yet.</li>{% endfor %}</ul></div></div>
+<div class="col-lg-6"><div class="card shadow-sm"><div class="card-header">My requests</div><ul class="list-group list-group-flush">
+{% for c in items %}<li class="list-group-item"><strong>{{ c.reference }}</strong> stand {{ c.stand_number }} {{ c.area|default:c.location }} <span class="badge text-bg-{% if c.status == 'APPROVED' %}success{% elif c.status == 'REJECTED' %}danger{% else %}warning{% endif %} float-end">{{ c.get_status_display }}</span>{% if c.decision_note %}<div class="small text-muted">{{ c.decision_note }}</div>{% endif %}</li>
+{% empty %}<li class="list-group-item text-muted">No requests.</li>{% endfor %}</ul></div></div>
+</div>
+{% endblock %}

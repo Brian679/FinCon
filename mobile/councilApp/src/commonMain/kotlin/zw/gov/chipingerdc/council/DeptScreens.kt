@@ -47,14 +47,8 @@ fun ProjectsScreen(ctx: Ctx) {
         ListScreen {
             if (list.isEmpty()) item { Empty("No projects.") }
             items(list, key = { it.id }) { p ->
-                SectionCard(p.name) {
-                    Text("${p.code} · ${p.categoryLabel} · Ward ${p.ward ?: "-"} · ${p.location}", fontSize = 12.sp, color = CrdcColors.Muted)
-                    KeyValue("Budget", "$${money(p.budget)} (${p.funder.ifBlank { "Council" }})")
-                    KeyValue("Dates", "${prettyDate(p.startDate)} – ${prettyDate(p.endDate)}")
-                    KeyValue("Status", p.statusLabel)
-                    Progress(p.progress)
-                    Text("${p.progress}% complete", fontSize = 11.sp)
-                }
+                RowCard(p.name, "${p.code} · ${p.categoryLabel} · Ward ${p.ward ?: "-"}\nBudget $${money(p.budget)} · ${p.funder.ifBlank { "Council" }}",
+                    "${p.progress}%", p.statusLabel, p.status) { ctx.go(Screen.ProjectDetail(p.id)) }
             }
         }
     }
@@ -71,7 +65,7 @@ fun StandsScreen(ctx: Ctx) {
             if (list.isEmpty()) item { Empty("No applications.") }
             items(list, key = { it.id }) { s ->
                 RowCard(s.applicantName, "${s.reference} · ${s.standTypeLabel} · ${s.preferredLocation}" +
-                    if (s.allocatedStand.isNotBlank()) "\nAllocated: ${s.allocatedStand}" else "", null, s.statusLabel, s.status)
+                    if (s.allocatedStand.isNotBlank()) "\nAllocated: ${s.allocatedStand}" else "", null, s.statusLabel, s.status) { ctx.go(Screen.StandDetail(s.id)) }
             }
         }
     }
@@ -117,17 +111,9 @@ fun FindingsScreen(ctx: Ctx) {
         ListScreen {
             if (list.isEmpty()) item { Empty("No findings.") }
             items(list, key = { it.id }) { f ->
-                SectionCard(f.title) {
-                    Text("${f.reference} · ${f.auditTypeLabel} · ${f.departmentLabel}", fontSize = 12.sp, color = CrdcColors.Muted)
-                    KeyValue("Risk", f.riskRatingLabel)
-                    KeyValue("Finding", f.finding)
-                    KeyValue("Recommendation", f.recommendation)
-                    KeyValue("Management response", f.managementResponse)
-                    KeyValue("Target date", prettyDate(f.implementationDate))
-                    KeyValue("Status", f.statusLabel)
-                }
+                RowCard(f.title, "${f.reference} · ${f.auditTypeLabel} · ${f.departmentLabel}\nRisk: ${f.riskRatingLabel}", null, f.statusLabel,
+                    if (f.riskRating in listOf("HIGH", "CRITICAL")) "URGENT" else f.status) { ctx.go(Screen.FindingDetail(f.id)) }
             }
-            item { Text("Management responses are captured on the council website.", fontSize = 11.sp, color = CrdcColors.Muted) }
         }
     }
 }

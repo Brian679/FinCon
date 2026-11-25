@@ -2,13 +2,22 @@
 
 Two apps share one Kotlin codebase and run on **Android and iOS**:
 
-* **councilApp** – for council staff. Role-based home screen (receipting, client accounts, approvals for
-  requisitions / payment vouchers / licences / leave / receipt voids, licence inspections, tasks from the CEO or
-  HOD, complaints, service requests, projects, stand applications, audit findings, leave, notifications,
-  Client Charter, Sync centre).
-* **clientApp** – for residents and businesses: register, link a council account, view balance and bills,
-  **pay rates / levies / licence fees** with EcoCash, OneMoney or InnBucks, payment history and receipts,
-  apply for licences, report problems, complaints/compliments/suggestions, stand applications, notifications.
+* **councilApp** – for council staff; the home screen is grouped by department and shows only what the role allows:
+  * *General*: department overview for heads (staff, tasks, budget, everything waiting for the HOD), approvals, tasks,
+    assign tasks (HODs/CEO), **raise purchase requisitions** (any officer → HOD → Accountant → Treasurer → CEO), notifications.
+  * *Finance*: receipting (works offline), receipts, client accounts, **shops by area with paid/unpaid status and SMS reminders**,
+    stand-registration approvals, leases, licences, budget vs actual.
+  * *Social services*: stand applications (shortlist / allocate), incidents & disasters (report, response updates, Director closes),
+    community programmes (plan, report, HOD verifies).
+  * *Technical services*: projects (site progress updates), building plans (review → Engineer decision → inspections).
+  * *Internal audit*: findings (HOD management responses), risk register.
+  * *Administration*: council meetings & resolutions (progress updates), policies & by-laws, assets & infrastructure
+    (field condition reports – e.g. a broken borehole), ICT helpdesk, leave.
+  * Complaints and service requests for every department, Client Charter, Sync centre.
+* **clientApp** – for residents and businesses: register, **register a stand / shop** (auto-linked or verified by council),
+  link a council account, view balance and bills, **pay rates / levies / rent / licence fees** with EcoCash, OneMoney or InnBucks,
+  payment history and receipts, apply for licences (linked to the shop's stand), **submit building plans**, report problems,
+  complaints/compliments/suggestions, stand applications, notifications.
 
 `shared/` contains the on-phone SQL database (SQLDelight), the API client (Ktor), the offline **sync engine**
 and the common UI components. Business rules live on the server; the apps queue operations and the
@@ -50,4 +59,5 @@ The Xcode project's pre-build step compiles the Kotlin framework (`embedAndSignA
 The shared module and all screens of both apps were compiled for the JVM target, and the real sync engine was
 run end-to-end against the Django server (login, role-scoped pull, offline receipt → queue → reconnect →
 server receipt number, rejected operation handling, client login separation, online payment, offline
-complaint). The Android and iOS targets are built by the GitHub Actions workflow (`.github/workflows/ci.yml`).
+complaint, an officer's requisition raised on the phone and approved by the HOD on another phone, department-scoped
+staff lists, the shop register for an area, reminders sent from the phone, and a client's stand registration). The Android and iOS targets are built by the GitHub Actions workflow (`.github/workflows/ci.yml`).

@@ -4,7 +4,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import override_settings
 
 from finance import services
-from finance.models import Bill, BudgetLine, Licence, PaymentVoucher, Receipt, Requisition, RequisitionItem, Supplier
+from finance.models import Bill, Property, BudgetLine, Licence, PaymentVoucher, Receipt, Requisition, RequisitionItem, Supplier
 
 from .base import CouncilTestCase
 
@@ -52,7 +52,7 @@ class RevenueTests(CouncilTestCase):
         t = timezone.localdate()
         created, skipped = services.run_rates_billing(self.user("treasurer"), t.year, t.month)
         self.assertEqual(created, 0)
-        self.assertEqual(skipped, 5)
+        self.assertEqual(skipped, Property.objects.filter(monthly_rates__gt=0).count())
 
     def test_cashup_variance(self):
         cashier = self.user("cashier")

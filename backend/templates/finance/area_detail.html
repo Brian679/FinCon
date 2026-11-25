@@ -1,0 +1,45 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <div><h1 class="h4 mb-0">{{ area.name }}</h1><div class="text-muted">{{ area.get_kind_display }} · Ward {{ area.ward|default:"–" }}</div></div>
+  <div class="d-flex gap-2 no-print">{% if 'areas.manage' in user.capabilities %}<a class="btn btn-outline-primary" href="{% url 'finance:area_edit' area.pk %}">Edit area</a>{% endif %}<button class="btn btn-outline-secondary" onclick="window.print()">Print list</button></div>
+</div>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-2"><div class="card kpi shadow-sm"><div class="card-body"><div class="small text-muted">Stands / shops</div><div class="value">{{ summary.stands }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi shadow-sm"><div class="card-body"><div class="small text-muted">Fully paid up</div><div class="value text-success">{{ summary.paid }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi bad shadow-sm"><div class="card-body"><div class="small text-muted">Owing</div><div class="value">{{ summary.owing }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi bad shadow-sm"><div class="card-body"><div class="small text-muted">Amount owed</div><div class="value">${{ summary.amount|floatformat:2|intcomma }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="small text-muted">No valid licence</div><div class="value">{{ summary.no_licence }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="small text-muted">Not on the app yet</div><div class="value">{{ summary.unregistered }}</div></div></div></div>
+</div>
+<div class="btn-group mb-3 no-print">
+  <a class="btn btn-sm btn-outline-secondary {% if not show %}active{% endif %}" href="?">All</a>
+  <a class="btn btn-sm btn-outline-danger {% if show == 'owing' %}active{% endif %}" href="?show=owing">Owing</a>
+  <a class="btn btn-sm btn-outline-success {% if show == 'paid' %}active{% endif %}" href="?show=paid">Paid up</a>
+  <a class="btn btn-sm btn-outline-primary {% if show == 'unregistered' %}active{% endif %}" href="?show=unregistered">Not registered on app</a>
+</div>
+<form method="post">{% csrf_token %}
+<div class="card shadow-sm"><div class="table-responsive"><table class="table table-sm align-middle mb-0">
+<thead class="table-light"><tr><th class="no-print"><input type="checkbox" class="form-check-input" onclick="document.querySelectorAll('.sel').forEach(c=>c.checked=this.checked)"></th><th>Stand</th><th>Shop / business</th><th>Owner (account)</th><th>Phone</th><th class="text-end">Rates</th><th class="text-end">Levies</th><th class="text-end">Rent</th><th>Licence {% now "Y" %}</th><th>On app</th><th>Status</th></tr></thead>
+{% for r in rows %}<tr>
+<td class="no-print"><input type="checkbox" class="form-check-input sel" name="selected" value="{{ r.property.pk }}"></td>
+<td>{{ r.property.stand_number }}</td><td>{{ r.property.business_name|default:"—" }}{% if r.lease %}<div class="small text-muted">Lease {{ r.lease.number }}</div>{% endif %}</td>
+<td>{% if 'accounts.manage' in user.capabilities or 'finance.view_all' in user.capabilities %}<a href="{% url 'finance:account' r.account.pk %}">{{ r.account.name }}</a>{% else %}{{ r.account.name }}{% endif %}<div class="small text-muted">{{ r.account.account_number }}</div></td>
+<td class="small">{{ r.account.phone }}</td>
+<td class="text-end">{% if r.owing.rates %}{{ r.owing.rates|floatformat:2 }}{% else %}–{% endif %}</td>
+<td class="text-end">{% if r.owing.levies %}{{ r.owing.levies|floatformat:2 }}{% else %}–{% endif %}</td>
+<td class="text-end">{% if r.owing.rent %}{{ r.owing.rent|floatformat:2 }}{% else %}–{% endif %}</td>
+<td>{% if r.licence == 'VALID' %}<span class="badge text-bg-success">Valid</span>{% elif r.licence == 'UNPAID' %}<span class="badge text-bg-warning">Fee unpaid</span>{% elif r.licence == 'PROCESSING' %}<span class="badge text-bg-info">Processing</span>{% elif r.licence == 'N/A' %}<span class="text-muted small">n/a</span>{% else %}<span class="badge text-bg-danger">{% if r.licence == 'EXPIRED' %}Expired{% else %}None{% endif %}</span>{% endif %}</td>
+<td>{% if r.registered %}✅{% else %}<span class="text-muted">—</span>{% endif %}</td>
+<td>{% if r.ok %}<span class="badge text-bg-success">PAID UP</span>{% else %}<span class="badge text-bg-danger">OWING ${{ r.total|floatformat:2 }}</span>{% endif %}</td>
+</tr>{% empty %}<tr><td colspan="11" class="text-muted p-3">No stands registered in this area yet. Use <a href="{% url 'finance:register_import' %}">Import stands & shops</a> or add properties on client accounts.</td></tr>{% endfor %}
+</table></div></div>
+{% if 'reminders.send' in user.capabilities %}
+<div class="card shadow-sm mt-3 no-print"><div class="card-body">
+<h2 class="h6">Send payment reminders</h2>
+<p class="small text-muted mb-2">Each selected stand (or all, if none selected) that is not fully paid up gets its own statement by app notification and SMS. Owners not yet on the app are invited to register with their account number.</p>
+<input class="form-control mb-2" name="extra" maxlength="160" placeholder="Optional extra line, e.g. 'Licences must be renewed by 31 January.'">
+<button class="btn btn-warning">Send reminders</button>
+</div></div>{% endif %}
+</form>
+{% endblock %}

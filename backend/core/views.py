@@ -35,7 +35,7 @@ def manifest(request):
     return JsonResponse({
         "name": "Chipinge RDC Council System",
         "short_name": "Chipinge RDC",
-        "start_url": "/accounts/home/",
+        "start_url": "/staff/" if getattr(request, "site_kind", "") == "staff" else "/portal/",
         "display": "standalone",
         "background_color": "#ffffff",
         "theme_color": "#1f7a3a",

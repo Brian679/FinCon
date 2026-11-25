@@ -58,7 +58,7 @@ class AccessControlTests(CouncilTestCase):
     def test_treasurer_sees_finance_but_not_user_admin(self):
         c = self.login("treasurer")
         self.assertEqual(c.get("/staff/finance/reports/").status_code, 200)
-        self.assertEqual(c.get("/accounts/users/").status_code, 403)
+        self.assertEqual(c.get("/staff/users/").status_code, 403)
 
     def test_system_admin_site_only_for_ict_admin(self):
         self.assertEqual(self.login("ceo").get("/system-admin/").status_code, 302)
@@ -76,22 +76,22 @@ class AccessControlTests(CouncilTestCase):
     def test_lockout_after_five_failures(self):
         c = Client()
         for _ in range(5):
-            c.post("/accounts/login/", {"username": "cashier", "password": "wrong"})
-        r = c.post("/accounts/login/", {"username": "cashier", "password": "Chipinge@2026"})
+            c.post("/staff/login/", {"username": "cashier", "password": "wrong"})
+        r = c.post("/staff/login/", {"username": "cashier", "password": "Chipinge@2026"})
         self.assertEqual(r.status_code, 200)  # still on login page
         self.assertTrue(self.user("cashier").is_locked)
 
     def test_new_staff_must_change_password(self):
         admin = self.login("ict.admin")
-        r = admin.post("/accounts/users/new/", {"username": "new.clerk", "first_name": "New", "last_name": "Clerk", "role": "REVENUE_CLERK",
+        r = admin.post("/staff/users/new/", {"username": "new.clerk", "first_name": "New", "last_name": "Clerk", "role": "REVENUE_CLERK",
                                                 "temporary_password": "Temp#Pass123", "is_active": "on"})
         self.assertEqual(r.status_code, 302)
         u = self.user("new.clerk")
         self.assertEqual(u.department, "FINANCE")
         self.assertTrue(u.must_change_password)
         c = Client()
-        c.post("/accounts/login/", {"username": "new.clerk", "password": "Temp#Pass123"})
-        self.assertRedirects(c.get("/staff/"), "/accounts/password/")
+        c.post("/staff/login/", {"username": "new.clerk", "password": "Temp#Pass123"})
+        self.assertRedirects(c.get("/staff/"), "/staff/password/")
 
 
 class CharterTests(CouncilTestCase):

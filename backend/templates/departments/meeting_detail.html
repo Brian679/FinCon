@@ -1,0 +1,8 @@
+{% extends "generic/detail.html" %}
+{% block below_details %}
+<div class="card shadow-sm mt-3"><div class="card-header">Resolutions</div><table class="table table-sm mb-0">
+{% for r in resolutions %}<tr><td><a href="{% url 'departments:resolution' r.pk %}">{{ r.number }}</a></td><td>{{ r.text|truncatechars:120 }}</td><td>{{ r.get_department_display }}</td><td>{{ r.responsible|default:"" }}</td><td>{{ r.due_date|default:"" }}</td><td>{{ r.get_status_display }}</td></tr>
+{% empty %}<tr><td class="text-muted p-3">No resolutions recorded.</td></tr>{% endfor %}</table></div>
+{% endblock %}
+{% block actions %}{% if 'meetings.manage' in user.capabilities %}
+<div class="card shadow-sm mb-3"><div class="card-header">Record a resolution</div><div class="card-body"><form method="post" action="{% url 'departments:resolution_add' object.pk %}">{% csrf_token %}{% with form=res_form %}{% include "generic/_form_fields.html" %}{% endwith %}<button class="btn btn-primary mt-2">Add resolution</button></form></div></div>{% endif %}{% endblock %}

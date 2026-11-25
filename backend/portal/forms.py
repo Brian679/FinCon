@@ -45,3 +45,28 @@ class ClientStandForm(BaseModelForm):
     class Meta:
         model = StandApplication
         fields = ["stand_type", "preferred_location", "ward", "national_id", "phone"]
+
+
+class ClaimForm(BaseModelForm):
+    class Meta:
+        from finance.models import AccountClaim
+
+        model = AccountClaim
+        fields = ["claim_type", "stand_number", "area", "location", "business_name", "id_number", "phone", "notes"]
+        labels = {"area": "Shopping centre / township / growth point"}
+        help_texts = {"notes": "Anything that helps us find your stand: previous owner, agreement number, licence number…"}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from finance.models import TradingArea
+
+        self.fields["area"].queryset = TradingArea.objects.alive().filter(is_active=True)
+        self.fields["phone"].required = True
+
+
+class ClientPlanForm(BaseModelForm):
+    class Meta:
+        from departments.models import BuildingPlan
+
+        model = BuildingPlan
+        fields = ["stand_number", "location", "ward", "development_type", "description", "floor_area", "phone"]

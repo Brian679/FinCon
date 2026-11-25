@@ -81,17 +81,30 @@ class ClientAccountSerializer(SyncSerializer):
 
 
 class PropertySerializer(SyncSerializer):
+    area_name = serializers.CharField(source="area.name", read_only=True, default="")
+    account_name = serializers.CharField(source="account.name", read_only=True)
+    account_number = serializers.CharField(source="account.account_number", read_only=True)
+    account_phone = serializers.CharField(source="account.phone", read_only=True)
+    registered = serializers.SerializerMethodField()
+
     class Meta:
         model = Property
-        fields = _sync_fields(Property, ["account", "stand_number", "location", "ward", "land_use", "valuation", "monthly_rates", "is_active"])
+        fields = _sync_fields(Property, ["account", "account_name", "account_number", "account_phone", "registered", "area", "area_name",
+                                         "stand_number", "business_name", "location", "ward", "land_use", "valuation", "monthly_rates",
+                                         "is_council_owned", "is_active"])
+
+    def get_registered(self, obj):
+        return obj.account.portal_users.exists()
 
 
 class BillSerializer(SyncSerializer):
     outstanding = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    revenue_head_category = serializers.CharField(source="revenue_head.category", read_only=True)
 
     class Meta:
         model = Bill
-        fields = _sync_fields(Bill, ["number", "account", "revenue_head", "description", "period", "amount", "amount_paid", "outstanding",
+        fields = _sync_fields(Bill, ["number", "account", "property", "revenue_head", "revenue_head_category", "description", "period", "amount",
+                                     "amount_paid", "outstanding",
                                      "issue_date", "due_date", "status"])
 
 
@@ -112,7 +125,7 @@ class LicenceSerializer(SyncSerializer):
 
     class Meta:
         model = Licence
-        fields = _sync_fields(Licence, ["number", "licence_type", "account", "account_number", "business_name", "business_activity", "premises",
+        fields = _sync_fields(Licence, ["number", "licence_type", "account", "property", "account_number", "business_name", "business_activity", "premises",
                                         "ward", "status", "fee", "bill", "inspection_notes", "rejection_reason", "issue_date", "expiry_date",
                                         "due_at"])
 
@@ -237,3 +250,152 @@ class OnlinePaymentSerializer(SyncSerializer):
         model = OnlinePayment
         fields = _sync_fields(OnlinePayment, ["reference", "account", "bill", "revenue_head", "amount", "currency", "method", "phone", "provider", "status",
                                               "receipt", "receipt_number", "paid_at"])
+
+
+# ------------------------------------------------------------- new registers
+from departments.models import (  # noqa: E402
+    Asset, BuildingPlan, CommunityActivity, CouncilMeeting, ICTTicket, Incident, Policy, Resolution, Risk,
+)
+from finance.models import AccountClaim, Lease, TradingArea  # noqa: E402
+
+
+class StaffSerializer(serializers.ModelSerializer):
+    full_name = serializers.CharField(source="get_full_name")
+    role_label = serializers.CharField()
+    updated_at = serializers.DateTimeField(source="date_joined")
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "full_name", "department", "role", "role_label", "phone", "email", "is_active", "updated_at"]
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["id"] = str(instance.pk)
+        data["user_id"] = instance.pk
+        return data
+
+
+class TradingAreaSerializer(SyncSerializer):
+    class Meta:
+        model = TradingArea
+        fields = _sync_fields(TradingArea, ["name", "kind", "ward", "description", "is_active"])
+
+
+class LeaseSerializer(SyncSerializer):
+    lessee_name = serializers.CharField(source="lessee.name", read_only=True)
+    premises_name = serializers.CharField(source="premises.__str__", read_only=True)
+
+    class Meta:
+        model = Lease
+        fields = _sync_fields(Lease, ["number", "lessee", "lessee_name", "premises", "premises_name", "purpose", "monthly_rent", "deposit",
+                                      "start_date", "end_date", "status"])
+
+
+class ClaimSerializer(SyncSerializer):
+    user_name = serializers.CharField(source="user.get_full_name", read_only=True)
+    area_name = serializers.CharField(source="area.name", read_only=True, default="")
+    matched = serializers.SerializerMethodField()
+    account_number = serializers.CharField(source="account.account_number", read_only=True, default="")
+
+    class Meta:
+        model = AccountClaim
+        fields = _sync_fields(AccountClaim, ["reference", "user_name", "claim_type", "stand_number", "area", "area_name", "location", "business_name",
+                                             "id_number", "phone", "notes", "status", "matched_property", "matched", "account", "account_number",
+                                             "decision_note"])
+
+    def get_matched(self, obj):
+        p = obj.matched_property
+        return f"{p} – {p.account.name} ({p.account.phone})" if p else ""
+
+
+class AssetSerializer(SyncSerializer):
+    book_value = serializers.SerializerMethodField()
+    custodian_name = serializers.CharField(source="custodian.get_full_name", read_only=True, default="")
+    history = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Asset
+        fields = _sync_fields(Asset, ["asset_number", "name", "category", "department", "serial_number", "location", "ward", "acquisition_date",
+                                      "cost", "book_value", "custodian_name", "condition", "status", "notes", "history"])
+
+    def get_book_value(self, obj):
+        return str(obj.book_value())
+
+    def get_history(self, obj):
+        return [{"date": str(m.date), "work_done": m.work_done, "cost": str(m.cost), "condition": m.get_condition_after_display()}
+                for m in obj.maintenance.alive()[:10]]
+
+
+class IncidentSerializer(SyncSerializer):
+    lead_officer_name = serializers.CharField(source="lead_officer.get_full_name", read_only=True, default="")
+
+    class Meta:
+        model = Incident
+        fields = _sync_fields(Incident, ["reference", "incident_type", "title", "description", "ward", "location", "occurred_at",
+                                         "households_affected", "people_injured", "deaths", "livestock_lost", "crops_hectares", "response", "status",
+                                         "lead_officer_name"])
+
+
+class ActivitySerializer(SyncSerializer):
+    officer_id = serializers.IntegerField(source="officer.pk", read_only=True, default=None)
+    officer_name = serializers.CharField(source="officer.get_full_name", read_only=True, default="")
+
+    class Meta:
+        model = CommunityActivity
+        fields = _sync_fields(CommunityActivity, ["reference", "activity_type", "title", "department", "ward", "venue", "date", "participants",
+                                                  "report", "status", "officer_id", "officer_name"])
+
+
+class BuildingPlanSerializer(SyncSerializer):
+    reviewed_by_id = serializers.IntegerField(source="reviewed_by.pk", read_only=True, default=None)
+    bill_status = serializers.CharField(source="bill.status", read_only=True, default="")
+
+    class Meta:
+        model = BuildingPlan
+        fields = _sync_fields(BuildingPlan, ["reference", "applicant_name", "phone", "stand_number", "location", "ward", "development_type",
+                                             "description", "floor_area", "fee", "bill", "bill_status", "status", "reviewed_by_id", "review_notes",
+                                             "decision_notes", "inspection_log", "due_at"])
+
+
+class RiskSerializer(SyncSerializer):
+    score = serializers.IntegerField(read_only=True)
+    rating = serializers.CharField(read_only=True)
+    owner_name = serializers.CharField(source="owner.get_full_name", read_only=True, default="")
+
+    class Meta:
+        model = Risk
+        fields = _sync_fields(Risk, ["reference", "department", "title", "description", "category", "likelihood", "impact", "score", "rating",
+                                     "existing_controls", "mitigation", "owner_name", "review_date", "status"])
+
+
+class MeetingSerializer(SyncSerializer):
+    class Meta:
+        model = CouncilMeeting
+        fields = _sync_fields(CouncilMeeting, ["reference", "meeting_type", "title", "date", "venue", "agenda", "minutes", "status"])
+
+
+class ResolutionSerializer(SyncSerializer):
+    responsible_id = serializers.IntegerField(source="responsible.pk", read_only=True, default=None)
+    responsible_name = serializers.CharField(source="responsible.get_full_name", read_only=True, default="")
+    meeting_title = serializers.CharField(source="meeting.title", read_only=True)
+
+    class Meta:
+        model = Resolution
+        fields = _sync_fields(Resolution, ["number", "meeting", "meeting_title", "text", "department", "responsible_id", "responsible_name",
+                                           "due_date", "status", "progress_note"])
+
+
+class TicketSerializer(SyncSerializer):
+    raised_by_id = serializers.IntegerField(source="raised_by.pk", read_only=True)
+    raised_by_name = serializers.CharField(source="raised_by.get_full_name", read_only=True)
+
+    class Meta:
+        model = ICTTicket
+        fields = _sync_fields(ICTTicket, ["reference", "raised_by_id", "raised_by_name", "department", "category", "subject", "description",
+                                          "priority", "status", "resolution"])
+
+
+class PolicySerializer(SyncSerializer):
+    class Meta:
+        model = Policy
+        fields = _sync_fields(Policy, ["title", "kind", "department", "version", "summary", "status", "adopted_on", "review_date"])

@@ -45,6 +45,38 @@ sealed interface Screen {
     data object Notifications : Screen
     data object SyncCentre : Screen
     data object Charter : Screen
+    // department oversight & charter registers
+    data class Department(val dept: String? = null) : Screen
+    data object NewTask : Screen
+    data object Requisitions : Screen
+    data object NewRequisition : Screen
+    data object Areas : Screen
+    data class AreaBoard(val id: String) : Screen
+    data object Claims : Screen
+    data class ClaimDetail(val id: String) : Screen
+    data object Leases : Screen
+    data class StandDetail(val id: String) : Screen
+    data class ProjectDetail(val id: String) : Screen
+    data class FindingDetail(val id: String) : Screen
+    data object Incidents : Screen
+    data class IncidentDetail(val id: String) : Screen
+    data object NewIncident : Screen
+    data object Activities : Screen
+    data class ActivityDetail(val id: String) : Screen
+    data object NewActivity : Screen
+    data object Plans : Screen
+    data class PlanDetail(val id: String) : Screen
+    data object Assets : Screen
+    data class AssetDetail(val id: String) : Screen
+    data object Risks : Screen
+    data object Meetings : Screen
+    data class MeetingDetail(val id: String) : Screen
+    data object Resolutions : Screen
+    data class ResolutionDetail(val id: String) : Screen
+    data object Tickets : Screen
+    data class TicketDetail(val id: String) : Screen
+    data object NewTicket : Screen
+    data object Policies : Screen
 }
 
 /** Everything a screen needs. */
@@ -101,6 +133,37 @@ fun CouncilApp(sdk: CouncilSdk) {
             Screen.Notifications -> NotificationsScreen(ctx)
             Screen.SyncCentre -> SyncCentreScreen(ctx)
             Screen.Charter -> CharterScreen(ctx)
+            is Screen.Department -> DepartmentScreen(ctx, s.dept)
+            Screen.NewTask -> NewTaskScreen(ctx)
+            Screen.Requisitions -> RequisitionsScreen(ctx)
+            Screen.NewRequisition -> NewRequisitionScreen(ctx)
+            Screen.Areas -> AreasScreen(ctx)
+            is Screen.AreaBoard -> AreaBoardScreen(ctx, s.id)
+            Screen.Claims -> ClaimsScreen(ctx)
+            is Screen.ClaimDetail -> ClaimDetailScreen(ctx, s.id)
+            Screen.Leases -> LeasesScreen(ctx)
+            is Screen.StandDetail -> StandDetailScreen(ctx, s.id)
+            is Screen.ProjectDetail -> ProjectDetailScreen(ctx, s.id)
+            is Screen.FindingDetail -> FindingDetailScreen(ctx, s.id)
+            Screen.Incidents -> IncidentsScreen(ctx)
+            is Screen.IncidentDetail -> IncidentDetailScreen(ctx, s.id)
+            Screen.NewIncident -> NewIncidentScreen(ctx)
+            Screen.Activities -> ActivitiesScreen(ctx)
+            is Screen.ActivityDetail -> ActivityDetailScreen(ctx, s.id)
+            Screen.NewActivity -> NewActivityScreen(ctx)
+            Screen.Plans -> PlansScreen(ctx)
+            is Screen.PlanDetail -> PlanDetailScreen(ctx, s.id)
+            Screen.Assets -> AssetsScreen(ctx)
+            is Screen.AssetDetail -> AssetDetailScreen(ctx, s.id)
+            Screen.Risks -> RisksScreen(ctx)
+            Screen.Meetings -> MeetingsScreen(ctx)
+            is Screen.MeetingDetail -> MeetingDetailScreen(ctx, s.id)
+            Screen.Resolutions -> ResolutionsScreen(ctx)
+            is Screen.ResolutionDetail -> ResolutionDetailScreen(ctx, s.id)
+            Screen.Tickets -> TicketsScreen(ctx)
+            is Screen.TicketDetail -> TicketDetailScreen(ctx, s.id)
+            Screen.NewTicket -> NewTicketScreen(ctx)
+            Screen.Policies -> PoliciesScreen(ctx)
         }
     }
 }

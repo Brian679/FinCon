@@ -5,13 +5,33 @@ An integrated, offline-capable system for **Chipinge Rural District Council**, b
 
 | Part | Technology | Who uses it |
 |------|-----------|-------------|
-| `backend/` – council website, client web portal, REST/sync API | Python 3.12+ · Django 5 · SQL (PostgreSQL in production, SQLite for development) | All council staff, residents, ratepayers, businesses |
+| `backend/` – **two websites** (public client site + staff site) and the REST/sync API | Python 3.12+ · Django 5 · SQL (PostgreSQL in production, SQLite for development) | Residents, ratepayers, shop owners (client site); council staff (staff site) |
 | `mobile/councilApp` – **Council staff app** | Kotlin Multiplatform + Compose Multiplatform (Android & iOS) | Staff, role-based, works offline |
 | `mobile/clientApp` – **Community app** | Kotlin Multiplatform + Compose Multiplatform (Android & iOS) | Residents & businesses: pay rates, licences, report problems |
 | `mobile/shared` | Kotlin: SQLDelight (on-phone SQL database), Ktor (API), sync engine, UI kit | Used by both apps |
 
 The Finance department is the most complete part, as requested. Every other department in the charter
 has its core registers and workflows.
+
+### Two websites
+| Site | Example address | Who | What |
+|---|---|---|---|
+| Client (public) site | `https://www.chipingerdc.gov.zw` | Anyone | Create an account, register a stand/shop, pay rates/levies/rent/licence fees, apply for licences and building plans, report problems, complaints |
+| Staff site | `https://staff.chipingerdc.gov.zw` | Council employees only | Everything the council does, by role |
+
+Set `CLIENT_HOSTS`, `STAFF_HOSTS`, `PUBLIC_SITE_URL` and `STAFF_SITE_URL` in `backend/.env`. Each site only serves its own pages
+(the staff pages return *not found* on the client site and vice-versa) and each login refuses the other kind of user.
+In development (`localhost`) both run together: client site at `/`, staff site at `/staff/`.
+
+### How shop owners and ratepayers get into the system
+1. **Council loads the register** – *Finance → Shops & stands by area → Import stands & shops (CSV)* loads every stand/shop
+   in a shopping centre, growth point, township or market (owner, phone, ID, business name, rates). Areas are created automatically.
+2. **Clients register themselves** on the client site or app and enter their **stand number** (and shop name). If the stand is in the
+   register and their phone/ID matches, it is linked immediately. Otherwise the request goes to *Stand registration requests*, where a
+   revenue officer checks documents and approves – linking to the existing owner's account or registering a new account and stand.
+3. **Council chases those not registered** – the area board shows, shop by shop, who has paid rates, levies, lease rent and the
+   current licence and who is on the app; *Send reminders* sends each defaulter their own statement by SMS + app notification and
+   invites unregistered owners to register with their account number.
 
 ---
 
@@ -23,11 +43,14 @@ has its core registers and workflows.
 | **Finance** – revenue collection | Receipting counter (USD & ZWG with exchange rates, cash/EcoCash/OneMoney/InnBucks/swipe/bank), receipts can never be edited or deleted – only voided through a request + second-person approval, automatic allocation of payments to the oldest bills, client (ratepayer) accounts & properties/stands, monthly rates billing run, bills/levies, statements (print & CSV), end-of-day **cash-ups** with variance reporting, online payments (Paynow / simulated test gateway) with immediate receipt |
 | **Finance** – licences | Shop, hawker, business, liquor, health, transport, advertising licences: application (counter or client app) → health/building inspection → Treasurer approval → fee bill → **issued automatically when paid** → printable certificate → expiry |
 | **Finance** – expenditure & procurement | Purchase requisitions from any department → HOD → Accountant funds check against the budget vote → Treasurer → CEO (≥ threshold) → purchase order → goods received → payment voucher → Accountant check → Treasurer approval → CEO authorisation (≥ threshold) → payment from a bank account. **Segregation of duties** is enforced (nobody approves their own document or two stages of the same document; blacklisted suppliers blocked; overspending a vote blocked; paying more than the bank balance blocked) |
+| **Finance** – shops, stands, levies & leases | Trading areas (shopping centres, growth points, townships, markets) with a **paid / unpaid board per shop** (rates, levies, rent, licence, on-app), CSV import of the district register, client stand-registration requests with verification, **leases** of council shops/stalls with monthly rent billing, **annual levy runs** (development levy, unit tax… by area / land use), SMS + app **reminders and notices** with a full message log |
 | **Finance** – budgeting & reporting | Budget votes per department (income, expenditure, capital) with actual, committed and available; bank accounts & cashbook; exchange rates; revenue heads/tariffs; reports: income by revenue head / method / channel / cashier / ward, expenditure by vote & category, debtors age analysis, CSV exports |
-| **Administration** | Staff user management (only by the ICT administrator), HR leave applications & approvals, staff directory, correspondence register (7-working-day standard), procurement officer role |
-| **Internal Audit** | Read access to all finance data and the audit trail, audit findings (compliance, risk, systems, performance, cash) with risk ratings, management responses and close-out |
-| **Social Services** (incl. WASH, Natural Resources, Public Safety) | Stand applications / allocation, water & borehole faults, refuse, public health, human-wildlife conflict, fires & disasters (service requests with charter deadlines), Environmental Health Officer licence inspections |
-| **Technical Services** | Projects (roads, water, schools & clinics, lighting, housing) with budget and progress, road/lighting/building service requests, building-inspector licence inspections |
+| **Finance** – asset management | Fixed-asset & infrastructure register (vehicles, plant, ICT, buildings, boreholes, ablutions, street lights, roads, bridges) with depreciation / book value, condition reports and maintenance history |
+| **Administration** | Council secretariat (council & committee meetings, agendas, minutes, **resolutions tracker** with responsible officer and due date), policies & by-laws register, ICT helpdesk, staff user management (ICT administrator only), HR leave, staff directory, correspondence register (7 working days), procurement |
+| **Internal Audit** | Read access to all finance data and the audit trail, audit findings with management responses, **risk register** (likelihood × impact, owners, mitigation, review dates) |
+| **Social Services** (incl. WASH, Natural Resources, Public Safety) | Housing & stand allocation (officer shortlists → Director allocates), **incidents & disasters** (fires, floods, human-wildlife conflict…, households/casualties/losses, response log, Director signs off), **community programmes** (hygiene promotion, environmental campaigns, fireguards, land reclamation, safety awareness, drills, WDC / village-assembly consultations – officer reports → HOD verifies), borehole/ablution condition, water faults, health inspections |
+| **Technical Services** | Projects with progress reports, **building plans / development control** (technical review → Engineer decision → site inspections → completion certificate, fee must be paid, 30-working-day clock), road/lighting/building service requests, infrastructure condition |
+| **Every Head of Department** | **Department overview**: all staff with their open/overdue tasks and leave, everything waiting for the HOD (requisitions, leave, activity reports), department budget use, complaints and service requests, audit findings, risks, resolutions and broken assets. Assign tasks to their staff. The CEO and auditors can open any department. |
 | **Clients' rights / Feedback & complaints** | Complaints, compliments, suggestions & enquiries from every channel on the charter (CEO, suggestion box, offices, email, phone, consultations, social media) plus portal & app; 48-hour acknowledgement clock, breach flags and CEO/HOD alerts |
 | **Digital service delivery** | Electronic billing, e-payments, online enquiries, digital records, client web portal and app, notifications |
 
@@ -104,8 +127,9 @@ Open http://localhost:8000. Demo password for every demo user: **`Chipinge@2026`
 | `engineer`, `tech.officer` | Technical Services |
 | `resident` | Client portal / client app (linked to account of Johannes Mhlanga) |
 
-Run the tests: `python manage.py test tests` (37 tests: workflows, segregation of duties, access control, lockout,
-audit-chain tamper detection, charter deadlines, sync idempotency & scoping, online payments).
+Run the tests: `python manage.py test tests` (59 tests: workflows, segregation of duties, access control, lockout,
+audit-chain tamper detection, charter deadlines, sync idempotency & scoping, online payments, the two websites, stand
+registration & verification, CSV import, levies & leases, reminders, building-plan / activity / incident stages, HOD overview).
 
 **Mobile apps** – see [`mobile/README.md`](mobile/README.md). In short: open `mobile/` in Android Studio and run
 `councilApp` or `clientApp`; for iOS run `xcodegen` in `mobile/iosCouncilApp` / `mobile/iosClientApp` and open in Xcode.
@@ -118,6 +142,9 @@ audit-chain tamper detection, charter deadlines, sync idempotency & scoping, onl
 * `python manage.py seed_council --admin-password '<strong password>'` creates the ICT administrator, who then
   registers all staff.
 * Serve with `gunicorn crdc.wsgi` behind Nginx with HTTPS.
+* Point `www.` and `staff.` at the server and set `CLIENT_HOSTS` / `STAFF_HOSTS` (the staff site can also be restricted to the
+  council network at the firewall).
+* Set `SMS_BACKEND=http` with your bulk-SMS provider's URL and token for reminders (default `console` only logs them).
 * Schedule `python manage.py daily_finance_jobs` daily (expires licences, raises monthly rates on the 1st,
   alerts on complaints that breached the 48-hour standard) and back up the database.
 * Set `PAYMENT_GATEWAY=paynow` with the council's Paynow integration ID/key to take real payments.

@@ -226,3 +226,30 @@ class IdempotencyKey(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.CASCADE)
     redirect_to = models.CharField(max_length=255, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+
+class MessageLog(models.Model):
+    """Every SMS / email / in-app reminder or invitation sent to a client."""
+
+    class Channel(models.TextChoices):
+        SMS = "SMS", "SMS"
+        EMAIL = "EMAIL", "Email"
+        APP = "APP", "App / portal notification"
+
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    channel = models.CharField(max_length=5, choices=Channel.choices)
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    to = models.CharField(max_length=200, blank=True)
+    account_number = models.CharField(max_length=30, blank=True, db_index=True)
+    subject = models.CharField(max_length=200, blank=True)
+    body = models.TextField()
+    status = models.CharField(max_length=10, default="SENT")
+    error = models.CharField(max_length=255, blank=True)
+    sent_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    campaign = models.CharField(max_length=60, blank=True, help_text="e.g. 'Licence reminder – Checheche'")
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.channel} to {self.to}: {self.subject or self.body[:40]}"

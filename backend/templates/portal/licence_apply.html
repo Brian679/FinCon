@@ -2,7 +2,8 @@
 {% block content %}
 <h1 class="h3">Apply for a licence</h1>
 <div class="card shadow-sm"><div class="card-body"><form method="post">{% csrf_token %}
-<div class="mb-3"><label class="form-label">Council account</label><select class="form-select" name="account">{% for a in accounts %}<option value="{{ a.pk }}">{{ a.account_number }} – {{ a.name }}</option>{% endfor %}</select></div>
+<div class="row g-3 mb-3"><div class="col-md-6"><label class="form-label">Council account</label><select class="form-select" name="account">{% for a in accounts %}<option value="{{ a.pk }}">{{ a.account_number }} – {{ a.name }}</option>{% endfor %}</select></div>
+<div class="col-md-6"><label class="form-label">Stand / shop</label><select class="form-select" name="property"><option value="">—</option>{% for a in accounts %}{% for p in a.properties.all %}<option value="{{ p.pk }}">{{ p }}{% if p.business_name %} – {{ p.business_name }}{% endif %}</option>{% endfor %}{% endfor %}</select></div></div>
 {% include "generic/_form_fields.html" %}<button class="btn btn-primary mt-3">Submit application</button></form>
 <p class="small text-muted mt-3">Shop and food premises are inspected by the Environmental Health Officer. After approval you pay the fee online and your licence is issued immediately.</p></div></div>
 {% endblock %}

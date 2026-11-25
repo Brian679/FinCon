@@ -34,6 +34,10 @@ sealed interface CScreen {
     data object Notifications : CScreen
     data object Charter : CScreen
     data object SyncCentre : CScreen
+    data object MyStands : CScreen
+    data object RegisterStand : CScreen
+    data object Plans : CScreen
+    data object NewPlan : CScreen
 }
 
 class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long) {
@@ -79,6 +83,10 @@ fun ClientApp(sdk: CouncilSdk) {
             CScreen.Notifications -> NotificationsScreen(ctx)
             CScreen.Charter -> CharterScreen(ctx)
             CScreen.SyncCentre -> SyncCentreScreen(ctx)
+            CScreen.MyStands -> MyStandsScreen(ctx)
+            CScreen.RegisterStand -> RegisterStandScreen(ctx)
+            CScreen.Plans -> PlansScreen(ctx)
+            CScreen.NewPlan -> NewPlanScreen(ctx)
         }
     }
 }

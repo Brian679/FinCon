@@ -181,9 +181,110 @@ class Command(BaseCommand):
             Supplier.objects.create(name="Chipinge Stationers", category="Stationery", phone="0272000001", tax_number="BP200001")
             Supplier.objects.create(name="Eastern Highlands Construction", category="Construction", phone="0272000002", tax_number="BP200002")
             Supplier.objects.create(name="Manica Fuels", category="Fuel", phone="0272000003", tax_number="BP200003")
+        self._demo_registers(User)
         # first month of rates
         from finance.services import run_rates_billing
 
         today = timezone.localdate()
         run_rates_billing(User.objects.get(username="treasurer"), today.year, today.month)
         self.stdout.write(self.style.SUCCESS(f"Demo data created. All demo users have password '{pwd}'. Client login: resident"))
+
+
+    def _demo_registers(self, User):
+        """Shops by area, leases, assets and departmental registers for demonstrations."""
+        from datetime import timedelta
+
+        from departments.models import (Asset, AssetMaintenance, BuildingPlan, CommunityActivity, CouncilMeeting, ICTTicket, Incident,
+                                        Policy, Resolution, Risk)
+        from finance.models import Lease, TradingArea
+
+        if TradingArea.objects.exists():
+            return
+        u = {x.username: x for x in User.objects.all()}
+        today = timezone.localdate()
+        checheche = TradingArea.objects.create(name="Checheche Growth Point", kind="GP", ward=22)
+        selinda = TradingArea.objects.create(name="Mount Selinda Business Centre", kind="SC", ward=6)
+        TradingArea.objects.create(name="Chipinge Township", kind="TS", ward=1)
+        TradingArea.objects.create(name="Chiriga Market", kind="MKT", ward=14)
+        Property.objects.filter(location="Checheche Growth Point").update(area=checheche, business_name="Checheche General Dealers")
+        Property.objects.filter(location="Chipinge Township").update(area=TradingArea.objects.get(name="Chipinge Township"))
+        Property.objects.filter(location="Mount Selinda").update(area=selinda, location="Mount Selinda Business Centre")
+        shops = [("B13", "Tendai Bottle Store", "Tendai Sibanda", "0772111222"), ("B14", "Tafara Hardware", "Tafara Hardware (Pvt) Ltd", "0772000001"),
+                 ("B15", "Mai Rufaro Butchery", "Rufaro Mutasa", "0713444555"), ("B16", "Checheche Pharmacy", "Checheche Pharmacy (Pvt) Ltd", "0774666777"),
+                 ("B17", "Vacant council shop", "Chipinge RDC", "")]
+        for stand, biz, owner, phone in shops:
+            acc = ClientAccount.objects.create(name=owner, account_type="BUS" if "Pvt" in owner or stand == "B17" else "IND", phone=phone, ward=22)
+            Property.objects.create(account=acc, area=checheche, location=checheche.name, stand_number=stand, business_name=biz if stand != "B17" else "",
+                                    land_use="COM", monthly_rates=Decimal("40"), valuation=Decimal("30000"), ward=22, is_council_owned=stand in ("B15", "B17"))
+        for stand, biz, owner, phone in [("S2", "Selinda Grocers", "Selinda Grocers", "0775888999"), ("S3", "Mission Tailors", "Ruth Gwenzi", "0773123123")]:
+            acc = ClientAccount.objects.create(name=owner, account_type="BUS", phone=phone, ward=6)
+            Property.objects.create(account=acc, area=selinda, location=selinda.name, stand_number=stand, business_name=biz, land_use="COM",
+                                    monthly_rates=Decimal("30"), valuation=Decimal("20000"), ward=6)
+        butchery = Property.objects.get(stand_number="B15")
+        Lease.objects.create(lessee=butchery.account, premises=butchery, purpose="Butchery – council shop", monthly_rent=Decimal("120"),
+                             deposit=Decimal("0"), start_date=today.replace(month=1, day=1), end_date=today.replace(month=12, day=31) + timedelta(days=730))
+        # assets & infrastructure
+        a1 = Asset.objects.create(name="Motor grader CAT 140K", category="PLANT", department="TECH", serial_number="CRDC-G01", location="Council yard",
+                                  acquisition_date=today - timedelta(days=4 * 365), cost=Decimal("185000"), useful_life_years=15, custodian=u["engineer"])
+        Asset.objects.create(name="Toyota Hilux GD6 (CEO)", category="VEHICLE", department="EXEC", serial_number="AFX 2231", acquisition_date=today - timedelta(days=700),
+                             cost=Decimal("52000"), useful_life_years=8)
+        b1 = Asset.objects.create(name="Borehole – Village 12", category="BOREHOLE", department="SOCIAL", location="Village 12", ward=22, cost=Decimal("6500"),
+                                  acquisition_date=today - timedelta(days=3000), condition="BROKEN", status="REPAIR")
+        Asset.objects.create(name="Borehole – Checheche clinic", category="BOREHOLE", department="SOCIAL", location="Checheche clinic", ward=22, cost=Decimal("7200"))
+        Asset.objects.create(name="Public ablution block – Checheche bus terminus", category="ABLUTION", department="SOCIAL", location="Checheche", ward=22,
+                             cost=Decimal("18000"), condition="FAIR")
+        Asset.objects.create(name="High-mast light – Checheche market", category="LIGHT", department="TECH", location="Checheche market", ward=22,
+                             cost=Decimal("9000"), condition="POOR")
+        Asset.objects.create(name="Revenue hall computers (6)", category="ICT", department="FINANCE", location="Head office", cost=Decimal("4800"), useful_life_years=4,
+                             acquisition_date=today - timedelta(days=500))
+        AssetMaintenance.objects.create(asset=b1, work_done="Pump rods corroded – borehole not delivering water. Spares requested.", condition_after="BROKEN",
+                                        performed_by="WASH team")
+        AssetMaintenance.objects.create(asset=a1, work_done="250-hour service, blades replaced", cost=Decimal("1350"), performed_by="CAT dealer Mutare")
+        # social services
+        Incident.objects.create(incident_type="HWC", title="Elephants destroy maize fields", description="Herd of 6 elephants raided fields at night.",
+                                ward=22, location="Village 12", households_affected=9, crops_hectares=Decimal("4.5"), status="RESPONDING",
+                                reported_by=u["social.officer"], lead_officer=u["social.officer"], response="Parks (ZimParks) notified; scaring units deployed.")
+        Incident.objects.create(incident_type="STORM", title="Storm damages Mt Selinda school roof", description="Strong winds blew off 2 classroom roofs.",
+                                ward=6, location="Mt Selinda", households_affected=0, people_injured=1, reported_by=u["social.director"])
+        CommunityActivity.objects.create(activity_type="HYGIENE", title="Handwashing campaign – Checheche market", department="SOCIAL", ward=22,
+                                         venue="Checheche market", date=today - timedelta(days=3), participants=140, status="DONE", officer=u["eho"],
+                                         report="Demonstrations at 3 points; 40 tippy-taps installed. Vendors asked for more water points.")
+        CommunityActivity.objects.create(activity_type="CONSULT", title="Ward 22 budget consultation (WDC)", department="FINANCE", ward=22,
+                                         venue="Checheche hall", date=today + timedelta(days=9), officer=u["accountant"])
+        CommunityActivity.objects.create(activity_type="FIRE", title="Fireguard construction – Ward 14", department="SOCIAL", ward=14, date=today - timedelta(days=20),
+                                         participants=55, status="VERIFIED", officer=u["social.officer"], verified_by=u["social.director"], report="12 km of fireguards cleared.")
+        # technical: building plans
+        BuildingPlan.objects.create(applicant_name="Tafara Hardware (Pvt) Ltd", phone="0772000001", stand_number="B14", location="Checheche Growth Point", ward=22,
+                                    development_type="COM", description="Warehouse extension 12m x 20m", floor_area=Decimal("240"), fee=Decimal("50"),
+                                    status="RECOMMEND", reviewed_by=u["tech.officer"], review_notes="Structural drawings compliant; setbacks OK.")
+        BuildingPlan.objects.create(applicant_name="Grace Chiwara", phone="0715000444", stand_number="455", location="Gaza Township", ward=3,
+                                    development_type="RES", description="4-roomed house", floor_area=Decimal("96"), fee=Decimal("50"))
+        # audit: risks
+        Risk.objects.create(department="FINANCE", title="Cash collected not banked daily", description="Cash held overnight at Checheche sub-office.",
+                            category="FRAUD", likelihood=4, impact=4, existing_controls="Daily cash-up", mitigation="Weekly surprise cash counts; safe at sub-office",
+                            owner=u["treasurer"], review_date=today + timedelta(days=60))
+        Risk.objects.create(department="TECH", title="Plant breakdown delays road programme", description="Single grader for district.", category="OPS",
+                            likelihood=3, impact=4, owner=u["engineer"], mitigation="Hire agreement with private contractor")
+        Risk.objects.create(department="ADMIN", title="Server data loss", description="No off-site backups.", category="ICT", likelihood=2, impact=5,
+                            owner=u["ict.admin"], mitigation="Nightly encrypted off-site backup", review_date=today - timedelta(days=2))
+        # administration
+        m = CouncilMeeting.objects.create(meeting_type="FULL", title="Ordinary full council meeting – November", date=timezone.now() - timedelta(days=12),
+                                          agenda="1. Confirmation of minutes\n2. Finance report\n3. Roads programme\n4. Licence fees 2027", status="HELD",
+                                          minutes="Council resolved as recorded below.")
+        Resolution.objects.create(meeting=m, text="Treasurer to enforce shop licence renewals at all growth points by 31 January.", department="FINANCE",
+                                  responsible=u["treasurer"], due_date=today + timedelta(days=60), status="IN_PROGRESS")
+        Resolution.objects.create(meeting=m, text="Engineer to present a costed plan for Ward 7 road before the rainy season.", department="TECH",
+                                  responsible=u["engineer"], due_date=today + timedelta(days=14))
+        Resolution.objects.create(meeting=m, text="Repair Village 12 borehole within 30 days.", department="SOCIAL", responsible=u["social.director"],
+                                  due_date=today + timedelta(days=30))
+        CouncilMeeting.objects.create(meeting_type="FIN", title="Finance & General Purposes committee", date=timezone.now() + timedelta(days=6),
+                                      agenda="Budget 2027 first draft; debtors report")
+        ICTTicket.objects.create(raised_by=u["cashier"], department="FINANCE", category="PRINT", subject="Receipt printer not printing",
+                                 description="Counter 2 thermal printer shows paper jam.", priority="HIGH")
+        ICTTicket.objects.create(raised_by=u["engineer"], department="TECH", category="NET", subject="No internet at council yard", description="Since Monday.",
+                                 status="IN_PROGRESS", assigned_to=u["ict.admin"])
+        Policy.objects.create(title="Shop licensing by-law", kind="BYLAW", department="FINANCE", version="2.1", status="ADOPTED",
+                              adopted_on=today - timedelta(days=400), review_date=today + timedelta(days=330),
+                              summary="Licence categories, fees, inspections and penalties for trading without a licence.")
+        Policy.objects.create(title="ICT acceptable use policy", department="ADMIN", version="1.0", status="CONSULT", review_date=today - timedelta(days=5))
+        Policy.objects.create(title="Strategic plan 2026–2030", kind="STRATEGY", department="EXEC", version="1.0", status="ADOPTED", adopted_on=today - timedelta(days=200))

@@ -2,7 +2,7 @@ import uuid
 
 from rest_framework.test import APIClient
 
-from finance.models import Receipt
+from finance.models import ClientAccount, Receipt
 
 from .base import CouncilTestCase
 
@@ -36,7 +36,7 @@ class SyncTests(CouncilTestCase):
     def test_incremental_pull(self):
         c = self.api("cashier")
         first = c.post("/api/v1/sync/pull/", {"cursors": {"accounts": None}}, format="json").data["entities"]["accounts"]
-        self.assertEqual(len(first["items"]), 5)
+        self.assertEqual(len(first["items"]), ClientAccount.objects.count())
         again = c.post("/api/v1/sync/pull/", {"cursors": {"accounts": first["cursor"]}}, format="json").data["entities"]["accounts"]
         self.assertLessEqual(len(again["items"]), 1)  # only the boundary record
 

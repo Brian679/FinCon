@@ -1,0 +1,6 @@
+{% extends "generic/detail.html" %}
+{% block below_details %}
+<div class="card shadow-sm mt-3"><div class="card-header">Rent bills</div><table class="table table-sm mb-0">{% for b in rent_bills %}<tr><td>{{ b.number }}</td><td>{{ b.description }}</td><td class="text-end">{{ b.amount }}</td><td>{{ b.get_status_display }}</td></tr>{% empty %}<tr><td class="text-muted p-3">No rent billed yet – use the monthly lease billing run.</td></tr>{% endfor %}</table></div>
+{% endblock %}
+{% block actions %}{% if object.status == 'ACTIVE' and 'leases.manage' in user.capabilities %}
+<div class="card shadow-sm mb-3"><div class="card-header">End lease</div><div class="card-body"><form method="post" action="{% url 'finance:lease_status' object.pk %}">{% csrf_token %}<input class="form-control mb-2" name="note" placeholder="Reason"><button class="btn btn-outline-danger" name="status" value="TERMINATED">Terminate</button> <button class="btn btn-outline-secondary" name="status" value="EXPIRED">Mark expired</button></form></div></div>{% endif %}{% endblock %}

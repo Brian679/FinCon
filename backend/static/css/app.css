@@ -22,3 +22,5 @@ tr.clickable { cursor: pointer; }
 .pledge { color: #213a7a; font-weight: 600; font-style: italic; }
 .receipt-paper { max-width: 420px; margin: auto; font-family: ui-monospace, monospace; }
 @media print { .no-print, .topbar, .sidebar, footer { display: none !important; } main { width: 100% !important; } body { background: #fff; } .card { border: 0; box-shadow: none !important; } }
+
+.topbar-staff { background: linear-gradient(90deg, #14532a, #1f7a3a); border-bottom: 3px solid var(--crdc-gold, #f2c230); }
