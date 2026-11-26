@@ -30,6 +30,12 @@ FIN_ALL = ("finance.view_all",)
 
 @cap_required("finance.view")
 def dashboard(request):
+    """Old "Finance dashboard" address: everything is on the one dashboard now."""
+    return redirect("core:dashboard")
+
+
+def finance_dashboard_context(user):
+    """Finance figures shown on the dashboard of Finance staff, the CEO and auditors."""
     today = timezone.localdate()
     receipts = Receipt.objects.alive().filter(status__in=Receipt.COUNTABLE)
     by_head = receipts.filter(created_at__date__gte=today.replace(day=1)).values("revenue_head__name").annotate(
@@ -42,15 +48,15 @@ def dashboard(request):
     peak = max([c["total"] for c in chart] + [Decimal(1)])
     for c in chart:
         c["pct"] = int(c["total"] / peak * 100)
-    mine = receipts.filter(received_by=request.user, cashup__isnull=True)
-    ctx = {
-        "title": "Finance dashboard", "fin": finance_kpis(), "by_head": by_head, "chart": chart,
-        "approvals": pending_approvals(request.user),
+    mine = receipts.filter(received_by=user, cashup__isnull=True)
+    sees_all = user.has_cap(*FIN_ALL)
+    return {
+        "fin": finance_kpis() if sees_all else None, "by_head": by_head if sees_all else [], "chart": chart if sees_all else [],
+        "my_today": receipts.filter(received_by=user, created_at__date=today).aggregate(t=Sum("base_amount"), n=Count("id")),
         "my_uncashed": mine.values("currency").annotate(t=Sum("amount"), n=Count("id")),
-        "banks": BankAccount.objects.alive().filter(is_active=True) if request.user.has_cap("bank.manage", "finance.view_all") else [],
-        "recent": receipts.select_related("revenue_head")[:10] if request.user.has_cap(*FIN_ALL) else mine[:10],
+        "banks": BankAccount.objects.alive().filter(is_active=True) if user.has_cap("bank.manage", "finance.view_all") else [],
+        "recent": receipts.select_related("revenue_head")[:8] if sees_all else mine.select_related("revenue_head")[:8],
     }
-    return render(request, "finance/dashboard.html", ctx)
 
 
 # ----------------------------------------------------------------- receipts

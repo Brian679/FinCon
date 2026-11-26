@@ -104,7 +104,7 @@ def build_nav(user):
 
     # ---- Finance department
     if c("finance.view") and show(D.FINANCE):
-        fin = [_item("Finance dashboard", "finance:dashboard")]
+        fin = []
         if c("receipt.create"):
             fin.append(_item("Receipting counter", "finance:receipt_new"))
         fin.append(_item("Receipts (income)", "finance:receipts"))

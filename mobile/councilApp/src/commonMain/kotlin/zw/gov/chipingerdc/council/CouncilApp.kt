@@ -190,7 +190,7 @@ fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false, menuOpen: Boolean = fa
                 Row(Modifier.fillMaxSize()) {
                     Box(Modifier.width(360.dp).fillMaxHeight()) {
                         CompositionLocalProvider(LocalProfile provides null) {
-                            AppScreen("Menu") { CouncilMenu(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true)) }
+                            AppScreen("Menu – ${ctx.me.departmentLabel}") { CouncilMenu(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true)) }
                         }
                     }
                     Box(Modifier.width(1.dp).fillMaxHeight().background(CrdcColors.Border))
@@ -205,7 +205,7 @@ fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false, menuOpen: Boolean = fa
                 ModalNavigationDrawer(drawerState = drawer, drawerContent = {
                     ModalDrawerSheet(Modifier.width(320.dp), drawerContainerColor = androidx.compose.ui.graphics.Color.White) {
                         CompositionLocalProvider(LocalProfile provides null) {
-                            AppScreen("Menu") {
+                            AppScreen("Menu – ${ctx.me.departmentLabel}") {
                                 CouncilMenu(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true, afterGo = { scope.launch { drawer.close() } }))
                             }
                         }

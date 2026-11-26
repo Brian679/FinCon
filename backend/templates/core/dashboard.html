@@ -1,25 +1,49 @@
-{% extends "base.html" %}
+{% extends "base.html" %}{% load humanize %}
 {% block content %}
 <h1 class="h3 mb-1">Dashboard</h1>
 <p class="text-muted">{{ user.get_department_display }}</p>
-{% if fin %}{% include "core/_fin_kpis.html" %}{% endif %}
+
+{# 1. Key figures – each shown once; lists below carry their own counts #}
 <div class="row g-3 mb-3">
-  {% if complaints_open_count or 'complaints.view_all' in user.capabilities or 'complaints.department' in user.capabilities %}<div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:complaints' %}"><div class="card kpi {% if complaints_unacked %}bad{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Open complaints for me to handle</div><div class="value">{{ complaints_open_count }}</div><div class="small">{{ complaints_unacked }} not yet acknowledged (48h standard)</div></div></div></a></div>{% endif %}
-  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:requests' %}"><div class="card kpi {% if requests_overdue %}warn{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Open service requests</div><div class="value">{{ requests_open_count }}</div><div class="small">{{ requests_overdue }} past charter deadline</div></div></div></a></div>
-  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:tasks' %}"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="text-muted small">My open tasks</div><div class="value">{{ my_tasks|length }}</div><div class="small">assigned to me</div></div></div></a></div>
-  {% if open_findings is not None %}<div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'departments:findings' %}"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="text-muted small">Open audit findings</div><div class="value">{{ open_findings }}</div><div class="small">internal audit</div></div></div></a></div>{% endif %}
+  {% if fin %}
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'finance:receipts' %}"><div class="card kpi shadow-sm"><div class="card-body"><div class="text-muted small">Collected today</div><div class="value">${{ fin.today.t|default:0|floatformat:2|intcomma }}</div><div class="small">{{ fin.today.n }} receipt(s) · month ${{ fin.month.t|default:0|floatformat:2|intcomma }}</div></div></div></a></div>
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'finance:vouchers' %}"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="text-muted small">Paid out this month</div><div class="value">${{ fin.paid_out_month|floatformat:2|intcomma }}</div><div class="small">payment vouchers</div></div></div></a></div>
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'finance:areas' %}"><div class="card kpi bad shadow-sm"><div class="card-body"><div class="text-muted small">Owed to the council</div><div class="value">${{ fin.debtors.t|default:0|floatformat:2|intcomma }}</div><div class="small">{{ fin.debtors.n }} accounts · {{ fin.overdue_bills }} overdue bills</div></div></div></a></div>
+  {% elif my_today %}
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'finance:receipts' %}"><div class="card kpi shadow-sm"><div class="card-body"><div class="text-muted small">My collections today</div><div class="value">${{ my_today.t|default:0|floatformat:2|intcomma }}</div><div class="small">{{ my_today.n }} receipt(s)</div></div></div></a></div>
+  {% endif %}
+  {% if complaints_open_count or 'complaints.view_all' in user.capabilities or 'complaints.department' in user.capabilities %}
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:complaints' %}"><div class="card kpi {% if complaints_unacked %}bad{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Complaints to handle</div><div class="value">{{ complaints_open_count }}</div><div class="small">{{ complaints_unacked }} not acknowledged (48h)</div></div></div></a></div>
+  {% endif %}
+  <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:requests' %}"><div class="card kpi {% if requests_overdue %}warn{% else %}blue{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Faults / service requests</div><div class="value">{{ requests_open_count }}</div><div class="small">{{ requests_overdue }} past charter time</div></div></div></a></div>
+  {% if open_findings %}<div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'departments:findings' %}"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="text-muted small">Open audit findings</div><div class="value">{{ open_findings }}</div></div></div></a></div>{% endif %}
 </div>
+
 <div class="row g-3">
-  <div class="col-xl-7">{% include "core/_approvals.html" %}
-    {% if projects %}<div class="card shadow-sm"><div class="card-header">Projects</div><ul class="list-group list-group-flush">{% for p in projects %}<li class="list-group-item"><a href="{% url 'departments:project' p.pk %}">{{ p.name }}</a> <span class="text-muted small">Ward {{ p.ward|default:"–" }}</span><div class="progress mt-1" style="height:6px"><div class="progress-bar bg-success" style="width: {{ p.progress }}%"></div></div></li>{% endfor %}</ul></div>{% endif %}
+  <div class="col-xl-7">
+    {# 2. What needs me #}
+    {% include "core/_approvals.html" %}
+    {% if chart %}
+    <div class="card shadow-sm mb-3"><div class="card-header">Daily collections – last 14 days (USD equiv.)</div><div class="card-body">
+      <div class="d-flex align-items-end gap-1" style="height:140px">
+      {% for c in chart %}<div class="flex-fill d-flex flex-column justify-content-end text-center h-100" title="{{ c.d }}: ${{ c.total|floatformat:2 }}"><div class="bg-success rounded-top" style="height: {{ c.pct }}%; min-height:2px"></div><div class="small text-muted" style="font-size:.65rem">{{ c.d|date:"d" }}</div></div>{% endfor %}
+      </div></div></div>
+    {% endif %}
+    {% if recent %}<div class="card shadow-sm mb-3"><div class="card-header">{% if fin %}Latest receipts{% else %}My latest receipts{% endif %}</div><div class="table-responsive"><table class="table table-sm mb-0">
+      {% for r in recent %}<tr><td><a href="{% url 'finance:receipt' r.pk %}">{{ r.number }}</a></td><td>{{ r.payer_name }}</td><td class="small">{{ r.revenue_head.name }}</td><td class="text-end">{{ r.currency }} {{ r.amount|floatformat:2 }}</td></tr>{% endfor %}
+    </table></div></div>{% endif %}
+    {% if projects %}<div class="card shadow-sm mb-3"><div class="card-header">Projects</div><ul class="list-group list-group-flush">{% for p in projects %}<li class="list-group-item"><a href="{% url 'departments:project' p.pk %}">{{ p.name }}</a> <span class="text-muted small">Ward {{ p.ward|default:"–" }}</span><div class="progress mt-1" style="height:6px"><div class="progress-bar bg-success" style="width: {{ p.progress }}%"></div></div></li>{% endfor %}</ul></div>{% endif %}
   </div>
   <div class="col-xl-5">
-    <div class="card shadow-sm"><div class="card-header">My tasks</div><ul class="list-group list-group-flush">
+    <div class="card shadow-sm mb-3"><div class="card-header d-flex justify-content-between"><span>My tasks</span><span class="badge text-bg-{% if my_tasks %}primary{% else %}success{% endif %}">{{ my_tasks|length }}</span></div><ul class="list-group list-group-flush">
     {% for t in my_tasks %}<li class="list-group-item"><a href="{% url 'workflow:task' t.pk %}">{{ t.title }}</a> {% if t.is_overdue %}<span class="badge text-bg-danger">overdue</span>{% endif %}<div class="small text-muted">{{ t.reference }} · due {{ t.due_date|default:"–" }} · from {{ t.assigned_by }}</div></li>
     {% empty %}<li class="list-group-item text-muted">No open tasks.</li>{% endfor %}</ul></div>
-    <div class="card shadow-sm mt-3"><div class="card-header">My requests for funds &amp; purchases</div><ul class="list-group list-group-flush">
-    {% for r in my_funds %}<li class="list-group-item"><a href="{% url 'workflow:fund' r.obj.pk %}">{{ r.obj.reference }} – {{ r.obj.title }}</a> <span class="badge text-bg-warning">{{ r.obj.currency }} {{ r.obj.total }}</span><div class="small text-muted">Now with: {{ r.where }}{% if r.obj.days_waiting %} · {{ r.obj.days_waiting }} day(s){% endif %}</div></li>
-    {% empty %}<li class="list-group-item text-muted">No open requests. <a href="{% url 'workflow:fund_new' %}">Make a request</a></li>{% endfor %}</ul></div>
+    {% if my_funds %}<div class="card shadow-sm mb-3"><div class="card-header">My requests for funds &amp; purchases</div><ul class="list-group list-group-flush">
+    {% for r in my_funds %}<li class="list-group-item"><a href="{% url 'workflow:fund' r.obj.pk %}">{{ r.obj.reference }} – {{ r.obj.title }}</a> <span class="badge text-bg-warning">{{ r.obj.currency }} {{ r.obj.total }}</span><div class="small text-muted">Now with: {{ r.where }}{% if r.obj.days_waiting %} · {{ r.obj.days_waiting }} day(s){% endif %}</div></li>{% endfor %}</ul></div>{% endif %}
+    {% if by_head %}<div class="card shadow-sm mb-3"><div class="card-header">This month by revenue head</div><table class="table table-sm mb-0">
+      {% for h in by_head %}<tr><td>{{ h.revenue_head__name }}</td><td class="text-end">{{ h.n }}</td><td class="text-end">${{ h.total|floatformat:2|intcomma }}</td></tr>{% endfor %}</table></div>{% endif %}
+    {% if my_uncashed %}<div class="card shadow-sm mb-3 border-warning"><div class="card-header">My receipts not yet cashed-up</div><ul class="list-group list-group-flush">{% for m in my_uncashed %}<li class="list-group-item d-flex justify-content-between"><span>{{ m.currency }} – {{ m.n }} receipt(s)</span><strong>{{ m.t|floatformat:2 }}</strong></li>{% endfor %}</ul><div class="card-body py-2"><a href="{% url 'finance:cashup_new' %}">Do my cash-up</a></div></div>{% endif %}
+    {% if banks %}<div class="card shadow-sm mb-3"><div class="card-header">Bank balances</div><table class="table table-sm mb-0">{% for b in banks %}<tr><td><a href="{% url 'finance:bank' b.pk %}">{{ b.name }}</a></td><td class="text-end">{{ b.currency }} {{ b.balance|floatformat:2|intcomma }}</td></tr>{% endfor %}</table></div>{% endif %}
   </div>
 </div>
 {% endblock %}

@@ -129,7 +129,9 @@ def dashboard(request):
     ctx["my_funds"] = [{"obj": r, "where": fr.where_now(r)} for r in FundsRequest.objects.alive().filter(
         requested_by=user, status__in=FundsRequest.OPEN + ("RETURNED",))[:8]]
     if user.has_cap("finance.view_all", "finance.view"):
-        ctx["fin"] = finance_kpis()
+        from finance.views import finance_dashboard_context
+
+        ctx.update(finance_dashboard_context(user))
     if user.has_cap("projects.view"):
         ctx["projects"] = Project.objects.alive().exclude(status=Project.Status.COMPLETED)[:6]
     if user.has_cap("audit.findings_view", "audit.respond"):

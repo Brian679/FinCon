@@ -1,6 +1,7 @@
 package zw.gov.chipingerdc.council
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,7 +72,6 @@ fun CouncilMenu(ctx: Ctx) {
         add(Tile("Dashboard", Screen.Home))
         if (me.can("reports.executive")) add(Tile("Executive overview", Screen.Executive))
         if (me.can("dept.overview", "dept.overview_all")) add(Tile("Department overview", Screen.Department()))
-        add(Tile("Waiting for my approval", Screen.Approvals, approvals.size))
         add(Tile("Tasks", Screen.Tasks, myTasks, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
         add(Tile("Memos to / from departments", Screen.Memos, newMemos, Screen.NewMemo))
         add(Tile("Requests for funds & purchases", Screen.Funds, myFunds, Screen.NewFunds))
@@ -140,8 +140,6 @@ fun CouncilMenu(ctx: Ctx) {
     }.filter { it.second.isNotEmpty() }
 
     Column(Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(me.fullName.ifBlank { me.username }, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = CrdcColors.Body)
-        Text("${me.roleLabel} · ${me.departmentLabel}", fontSize = 12.sp, color = CrdcColors.Muted)
         sections.forEach { (title, tiles) ->
             IndexModule(title, tiles.map { t -> IndexRow(t.label, t.badge, { ctx.go(t.screen) }, t.add?.let { a -> { ctx.go(a) } }) })
         }
@@ -166,35 +164,37 @@ fun HomeScreen(ctx: Ctx) {
     val openComplaints = complaints.filter { it.status !in listOf("RESOLVED", "CLOSED") }
     val myFunds = funds.filter { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
 
-    AppScreen(if (LocalSiteName.current.isEmpty()) "Dashboard" else "Dashboard – ${me.departmentLabel}", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Waiting for my approval", approvals.size.toString(), "tap to open", CrdcColors.Warning, Modifier.weight(1f)) { ctx.go(Screen.Approvals) }
-                if (me.can("receipt.create")) {
+            Text(me.departmentLabel, fontSize = 13.sp, color = CrdcColors.Muted)
+            // 1. key figures – only facts that are not listed again below
+            val figures = buildList<@Composable (Modifier) -> Unit> {
+                if (me.can("receipt.create")) add { m ->
                     val usd = myToday.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
-                    Kpi("My collections today", "$${money(usd.toString())}", "${myToday.size} receipt(s)", modifier = Modifier.weight(1f)) { ctx.go(Screen.Receipts) }
-                } else Kpi("My open tasks", myTasks.size.toString(), "assigned to me", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Tasks) }
+                    Kpi("My collections today", "$${money(usd.toString())}", "${myToday.size} receipt(s)", modifier = m) { ctx.go(Screen.Receipts) }
+                }
+                add { m -> Kpi("Faults / service requests", openFaults.size.toString(), "${openFaults.count { isPast(it.dueAt) }} past charter time", CrdcColors.Blue, m) { ctx.go(Screen.Requests) } }
+                if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || openComplaints.isNotEmpty()) add { m ->
+                    Kpi("Complaints to handle", openComplaints.size.toString(), "${openComplaints.count { it.acknowledgedAt == null }} not acknowledged", CrdcColors.Danger, m) { ctx.go(Screen.Complaints) }
+                }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Faults / service requests", openFaults.size.toString(), "${openFaults.count { isPast(it.dueAt) }} past charter time", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Requests) }
-                if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || openComplaints.isNotEmpty())
-                    Kpi("Complaints", openComplaints.size.toString(), "${openComplaints.count { it.acknowledgedAt == null }} not acknowledged", CrdcColors.Danger, Modifier.weight(1f)) { ctx.go(Screen.Complaints) }
-                else Kpi("My requests for funds", myFunds.size.toString(), "in progress", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(Screen.Funds) }
+            figures.chunked(2).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { row.forEach { it(Modifier.weight(1f)) } }
             }
-            SectionCard("Waiting for my approval") {
+            // 2. what needs me – each list shows its own count
+            SectionCard("Waiting for my approval (${approvals.size})") {
                 if (approvals.isEmpty()) Empty("Nothing waiting for you.")
                 approvals.take(5).forEach { a -> RowCard(a.ref, "${a.kind} · ${a.text}", null, a.stage, "PENDING") { a.screen?.let(ctx::go) ?: ctx.go(Screen.Approvals) } }
-                if (approvals.size > 5) Text("See all ${approvals.size} ›", color = CrdcColors.Blue, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
+                if (approvals.size > 5) Text("See all ${approvals.size} ›", color = CrdcColors.Blue, fontSize = 13.sp,
+                    modifier = Modifier.padding(8.dp).clickable { ctx.go(Screen.Approvals) })
             }
-            SectionCard("My tasks") {
+            SectionCard("My tasks (${myTasks.size})") {
                 if (myTasks.isEmpty()) Empty("No open tasks.")
                 myTasks.take(4).forEach { t -> RowCard(t.title, "${t.reference} · due ${t.dueDate ?: "-"} · from ${t.assignedByName}", null, t.statusLabel, t.status) { ctx.go(Screen.TaskDetail(t.id)) } }
             }
-            if (myFunds.isNotEmpty()) SectionCard("My requests for funds & purchases") {
+            if (myFunds.isNotEmpty()) SectionCard("My requests for funds & purchases (${myFunds.size})") {
                 myFunds.forEach { r -> RowCard(r.title, "Now: ${r.whereNow}", "${r.currency} ${money(r.total)}", r.statusLabel, r.status, r.localNote) { ctx.go(Screen.FundsDetail(r.id)) } }
             }
-            Text("Use the menu icon (top left) for everything in ${me.departmentLabel}; your profile, leave and payslips are under your picture (top right).",
-                fontSize = 11.sp, color = CrdcColors.Muted)
         }
     }
 }
