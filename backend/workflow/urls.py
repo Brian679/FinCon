@@ -16,4 +16,12 @@ urlpatterns = [
     path("correspondence/", v.CorrespondenceList.as_view(), name="correspondence"),
     path("correspondence/new/", v.CorrespondenceCreate.as_view(), name="correspondence_new"),
     path("correspondence/<uuid:pk>/", v.CorrespondenceUpdate.as_view(), name="correspondence_edit"),
+    path("funds/", v.FundsList.as_view(), name="funds"),
+    path("funds/new/", v.fund_form, name="fund_new"),
+    path("funds/<uuid:pk>/", v.FundsDetail.as_view(), name="fund"),
+    path("funds/<uuid:pk>/edit/", v.fund_form, name="fund_edit"),
+    path("funds/<uuid:pk>/action/", v.fund_action, name="fund_action"),
+    path("memos/", v.MemoList.as_view(), name="memos"),
+    path("memos/new/", v.memo_new, name="memo_new"),
+    path("memos/<uuid:pk>/", v.memo_detail, name="memo"),
 ]

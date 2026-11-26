@@ -248,7 +248,7 @@ fun AccountDetailScreen(ctx: Ctx, id: String) {
 fun LicencesScreen(ctx: Ctx) {
     var q by remember { mutableStateOf("") }
     val list by ctx.sdk.search(Entities.LICENCES, q, Licence.serializer()).collectAsState(initial = emptyList())
-    AppScreen("Licences", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen(if (ctx.me.can("licence.view")) "Licences" else "Shop health inspections", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         Field("Search business, number, premises", q, { q = it }, Modifier.padding(12.dp))
         ListScreen {
             if (list.isEmpty()) item { Empty("No licences.") }

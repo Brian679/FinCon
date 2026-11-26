@@ -17,6 +17,9 @@
     <div class="card shadow-sm"><div class="card-header">My tasks</div><ul class="list-group list-group-flush">
     {% for t in my_tasks %}<li class="list-group-item"><a href="{% url 'workflow:task' t.pk %}">{{ t.title }}</a> {% if t.is_overdue %}<span class="badge text-bg-danger">overdue</span>{% endif %}<div class="small text-muted">{{ t.reference }} · due {{ t.due_date|default:"–" }} · from {{ t.assigned_by }}</div></li>
     {% empty %}<li class="list-group-item text-muted">No open tasks.</li>{% endfor %}</ul></div>
+    <div class="card shadow-sm mt-3"><div class="card-header">My requests for funds &amp; purchases</div><ul class="list-group list-group-flush">
+    {% for r in my_funds %}<li class="list-group-item"><a href="{% url 'workflow:fund' r.obj.pk %}">{{ r.obj.reference }} – {{ r.obj.title }}</a> <span class="badge text-bg-warning">{{ r.obj.currency }} {{ r.obj.total }}</span><div class="small text-muted">Now with: {{ r.where }}{% if r.obj.days_waiting %} · {{ r.obj.days_waiting }} day(s){% endif %}</div></li>
+    {% empty %}<li class="list-group-item text-muted">No open requests. <a href="{% url 'workflow:fund_new' %}">Make a request</a></li>{% endfor %}</ul></div>
   </div>
 </div>
 {% endblock %}

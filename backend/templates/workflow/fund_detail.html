@@ -1,0 +1,44 @@
+{% extends "generic/detail.html" %}
+{% block header_buttons %}{% if can_edit %}<li><a class="changelink" href="{% url 'workflow:fund_edit' object.pk %}">Edit</a></li>{% endif %}{% endblock %}
+{% block detail_body %}
+<div class="module"><h2>Where is this request now?</h2>
+<p class="fw-bold mb-2">{% if object.is_open %}Currently with: {{ where }}{% if object.days_waiting %} – waiting {{ object.days_waiting }} day{{ object.days_waiting|pluralize }}{% endif %}{% else %}{{ object.get_status_display }}{% endif %}</p>
+<table class="w-100 route"><thead><tr><th>Stage</th><th>Officer</th><th>Status</th><th>Date</th><th>Note</th></tr></thead>
+{% for s in route %}<tr class="route-{{ s.state }}">
+<td>{{ s.label }}</td><td>{{ s.who|default:"" }}</td>
+<td>{% if s.state == "done" %}<span class="badge text-bg-success">Done</span>{% elif s.state == "current" %}<span class="badge text-bg-warning">With them now</span>{% elif s.state == "skipped" %}<span class="badge text-bg-secondary">Not needed</span>{% elif s.state == "rejected" %}<span class="badge text-bg-danger">Rejected</span>{% elif s.state == "returned" %}<span class="badge text-bg-danger">Returned</span>{% else %}<span class="quiet">Waiting</span>{% endif %}</td>
+<td class="small">{{ s.when|default:"" }}</td><td class="small">{{ s.note|default:"" }}</td></tr>{% endfor %}
+</table></div>
+<div class="module"><h2>What is requested</h2><table class="w-100"><thead><tr><th>Description</th><th class="text-end">Qty / days</th><th class="text-end">Rate</th><th class="text-end">Total</th></tr></thead>
+{% for i in object.lines.all %}<tr><td>{{ i.description }}</td><td class="text-end">{{ i.quantity }}</td><td class="text-end">{{ i.unit_cost }}</td><td class="text-end">{{ i.total }}</td></tr>{% endfor %}
+<tr class="fw-bold"><td colspan="3">Total ({{ object.currency }})</td><td class="text-end">{{ object.total }}</td></tr></table>
+{% if object.attachment %}<p class="mt-2"><a href="{{ object.attachment.url }}">Supporting document</a></p>{% endif %}</div>
+{% endblock %}
+{% block actions %}
+{% if can_edit %}
+<div class="module"><h2>{% if object.status == "RETURNED" %}Returned to you{% else %}Draft{% endif %}</h2>
+{% if object.decision_note %}<p class="errornote">{{ object.decision_note }}</p>{% endif %}
+<form method="post" action="{% url 'workflow:fund_action' object.pk %}">{% csrf_token %}<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="submit">Submit for approval</button></div></form>
+<p class="help"><a href="{% url 'workflow:fund_edit' object.pk %}">Edit the request</a> first if changes were asked for.</p></div>
+{% endif %}
+{% if can_decide %}
+<div class="module"><h2>Your decision – {{ stage }}</h2><form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="p-2">{% csrf_token %}
+<textarea class="form-control mb-2" name="comment" rows="3" placeholder="Comment (required to reject or return)"></textarea>
+<div class="submit-row m-0"><button class="btn btn-success" name="action" value="approve">Approve</button> <button class="btn btn-outline-primary" name="action" value="return">Return for changes</button> <button class="btn btn-danger" name="action" value="reject">Reject</button></div></form></div>
+{% endif %}
+{% if can_pay %}
+<div class="module"><h2>Finance – prepare payment</h2><form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="p-2">{% csrf_token %}
+<p class="small">Creates payment voucher for {{ object.currency }} {{ object.total }} to {{ object.payee_name|default:object.requested_by.get_full_name }}. It then needs checking, the Treasurer's payment approval (and the CEO's if large) before it is paid.</p>
+<select name="method" class="form-select mb-2">{% for v, l in methods %}<option value="{{ v }}"{% if v == object.payment_method %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="pay">Prepare payment voucher</button></div></form></div>
+{% endif %}
+{% if object.voucher %}<div class="module"><h2>Payment</h2><p class="p-2 mb-0">Voucher <a href="{% url 'finance:voucher' object.voucher.pk %}">{{ object.voucher.number }}</a> – {{ object.voucher.get_status_display }}{% if object.voucher.payment_reference %} · ref {{ object.voucher.payment_reference }}{% endif %}</p></div>{% endif %}
+{% if can_remind %}
+<div class="module"><h2>Follow up</h2><form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="p-2">{% csrf_token %}
+<p class="small mb-2">Sends a reminder to: {{ where }}.{% if object.last_reminder_at %} Last reminder: {{ object.last_reminder_at }}.{% endif %}</p>
+<input class="form-control mb-2" name="comment" placeholder="Message (optional) e.g. Workshop starts on Monday">
+<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="remind">Send reminder</button></div></form></div>
+{% endif %}
+{% if can_cancel %}<form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="mb-3" onsubmit="return confirm('Cancel this request?')">{% csrf_token %}<button class="btn btn-outline-danger btn-sm" name="action" value="cancel">Cancel request</button></form>{% endif %}
+<div class="module"><h2>History</h2><table class="w-100">{% for a in log %}<tr><td><strong>{{ a.stage }}</strong> – {{ a.decision|lower|capfirst }}<br><span class="quiet">{{ a.user }} · {{ a.timestamp }}</span>{% if a.comment %}<br><em>{{ a.comment }}</em>{% endif %}</td></tr>{% empty %}<tr><td class="quiet">Not submitted yet.</td></tr>{% endfor %}</table></div>
+{% endblock %}

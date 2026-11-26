@@ -1,0 +1,5 @@
+{% extends "generic/list.html" %}
+{% block above_table %}
+{% if route_help %}<p class="help mb-2">Route: Requester → Head of Department → Administration Officer → Treasurer → CEO → payment voucher (Accountant checks, Treasurer approves payment, CEO if large) → paid. You are notified at every step and can remind whoever is holding your request.</p>{% endif %}
+<ul class="nav nav-tabs mb-0">{% for key, label, active in tabs %}<li class="nav-item"><a class="nav-link{% if active %} active{% endif %}" href="?box={{ key }}">{{ label }}</a></li>{% endfor %}</ul>
+{% endblock %}

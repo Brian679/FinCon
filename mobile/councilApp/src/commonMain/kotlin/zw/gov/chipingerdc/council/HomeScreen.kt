@@ -19,6 +19,8 @@ import kotlinx.datetime.toLocalDateTime
 import zw.gov.chipingerdc.shared.model.AppNotification
 import zw.gov.chipingerdc.shared.model.Complaint
 import zw.gov.chipingerdc.shared.model.Entities
+import zw.gov.chipingerdc.shared.model.FundsRequest
+import zw.gov.chipingerdc.shared.model.Memo
 import zw.gov.chipingerdc.shared.model.Receipt
 import zw.gov.chipingerdc.shared.model.ServiceRequest
 import zw.gov.chipingerdc.shared.model.Task
@@ -42,6 +44,8 @@ fun HomeScreen(ctx: Ctx) {
     val complaints by sdk.observe(Entities.COMPLAINTS, Complaint.serializer()).collectAsState(initial = emptyList())
     val requests by sdk.observe(Entities.SERVICE_REQUESTS, ServiceRequest.serializer()).collectAsState(initial = emptyList())
     val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
+    val funds by sdk.observe(Entities.FUNDS_REQUESTS, FundsRequest.serializer()).collectAsState(initial = emptyList())
+    val memos by sdk.observe(Entities.MEMOS, Memo.serializer()).collectAsState(initial = emptyList())
     val approvals = rememberApprovals(ctx)
 
     val today = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).date.toString()
@@ -52,15 +56,29 @@ fun HomeScreen(ctx: Ctx) {
     val openRequests = requests.filter { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") }
     val unread = notes.count { !it.isRead }
 
+    // A department only sees its own registers; the CEO and Internal Audit see every department.
+    val seesAll = me.isCeo || me.can("audit.view_all")
+    fun mine(dept: String) = seesAll || me.department == dept
+    val myFunds = funds.count { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
+    val newMemos = memos.count { it.sender != me.id && it.status == "SENT" }
     val sections = buildList {
-        add("General" to buildList {
+        add("My work" to buildList {
             if (me.can("dept.overview", "dept.overview_all")) add(Tile("My department (overview)", Screen.Department()))
             add(Tile("Approvals", Screen.Approvals, approvals.size))
             add(Tile("Tasks", Screen.Tasks, myTasks.size, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
-                add(Tile("Requisitions", Screen.Requisitions, add = Screen.NewRequisition))
+            add(Tile("Memos to / from departments", Screen.Memos, newMemos, Screen.NewMemo))
+            add(Tile("Requests for funds & purchases", Screen.Funds, myFunds, Screen.NewFunds))
+            add(Tile("Purchase requisitions", Screen.Requisitions, add = Screen.NewRequisition))
+            add(Tile("Leave", Screen.Leave, add = Screen.NewLeave))
+            add(Tile("ICT helpdesk", Screen.Tickets, add = Screen.NewTicket))
+            if (me.can("resolutions.update") && !me.can("meetings.view")) add(Tile("Council resolutions for my department", Screen.Resolutions))
             add(Tile("Notifications", Screen.Notifications, unread))
         })
-        add("Finance" to buildList {
+        add("Client service (Charter)" to listOf(
+            Tile("Complaints", Screen.Complaints, unacked, Screen.NewComplaint),
+            Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }, Screen.NewRequest),
+        ))
+        if (mine("FINANCE")) add("Finance" to buildList {
             if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts, add = if (me.can("receipt.create")) Screen.NewReceipt else null))
             if (me.can("accounts.manage", "finance.view_all", "receipt.create")) add(Tile("Client accounts", Screen.Accounts))
             if (me.can("areas.view", "accounts.manage")) add(Tile("Shops by area (paid/unpaid)", Screen.Areas))
@@ -69,27 +87,28 @@ fun HomeScreen(ctx: Ctx) {
             if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
             if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
         })
-        add("Client service (Charter)" to listOf(
-            Tile("Complaints", Screen.Complaints, unacked, Screen.NewComplaint),
-            Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }, Screen.NewRequest),
-        ))
-        add("Social services" to buildList {
+        if (mine("ADMIN") || (me.department == "EXEC" && me.can("meetings.view"))) add("Administration" to buildList {
+            if (me.can("meetings.view")) { add(Tile("Council meetings", Screen.Meetings)); add(Tile("Resolutions", Screen.Resolutions)) }
+            if (me.can("policies.view")) add(Tile("Policies & by-laws", Screen.Policies))
+        })
+        if (me.can("assets.view")) add("Assets" to listOf(Tile(if (me.can("assets.manage") || seesAll) "Assets & infrastructure" else "My department's assets", Screen.Assets)))
+        if (mine("SOCIAL")) add("Social services" to buildList {
             if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands, add = if (me.can("stands.manage")) Screen.NewStand else null))
             if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
-            if (me.can("activities.manage", "activities.verify", "dept.overview")) add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
+            if (me.department == "SOCIAL" || seesAll) {
+                if (me.can("activities.manage", "activities.verify", "dept.overview_all")) add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
+            }
+            if (me.can("licence.inspect")) add(Tile("Shop health inspections", Screen.Licences))
         })
-        add("Technical services" to buildList {
+        if (me.department == "ADMIN" && me.can("activities.manage")) add("Staff development" to listOf(Tile("Trainings & staff activities", Screen.Activities, add = Screen.NewActivity)))
+        if (mine("TECH")) add("Technical services" to buildList {
             if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
             if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
         })
-        add("Internal audit" to buildList {
+        add((if (me.department == "AUDIT" || seesAll) "Internal audit" else "Audit & risks – my department") to buildList {
             if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
             if (me.can("risks.view", "risks.manage")) add(Tile("Risk register", Screen.Risks))
         })
-        add("Administration" to listOf(
-            Tile("Council meetings", Screen.Meetings), Tile("Resolutions", Screen.Resolutions), Tile("Policies & by-laws", Screen.Policies),
-            Tile("Assets & infrastructure", Screen.Assets), Tile("ICT helpdesk", Screen.Tickets, add = Screen.NewTicket), Tile("Leave", Screen.Leave, add = Screen.NewLeave),
-        ))
         add("This phone" to listOf(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()), Tile("Client Charter", Screen.Charter)))
     }.filter { it.second.isNotEmpty() }
 

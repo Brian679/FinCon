@@ -646,7 +646,7 @@ def resolution_add(request, pk):
 
 class ResolutionList(GenericListView):
     model = Resolution
-    required_caps = ("meetings.view",)
+    required_caps = ("meetings.view", "resolutions.update")
     title = "Council resolutions – implementation tracker"
     columns = [("No.", "number"), ("Meeting", "meeting.title"), ("Resolution", lambda r: r.text[:90]), ("Department", "department"),
                ("Responsible", "responsible"), ("Due", "due_date"), ("Status", "status")]
@@ -662,7 +662,11 @@ class ResolutionList(GenericListView):
 
 class ResolutionDetail(ActionDetail):
     model = Resolution
-    required_caps = ("meetings.view",)
+    required_caps = ("meetings.view", "resolutions.update")
+
+    def scope(self, qs):
+        return ResolutionList.scope(self, qs)
+
     action_url_name = "departments:resolution_action"
     fields = [("Meeting", "meeting"), ("Resolution", "text"), ("Department", "department"), ("Responsible", "responsible"), ("Due", "due_date"),
               ("Progress", "progress_note")]

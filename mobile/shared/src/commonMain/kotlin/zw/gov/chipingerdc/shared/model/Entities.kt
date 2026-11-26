@@ -37,6 +37,8 @@ object Entities {
     const val RESOLUTIONS = "resolutions"
     const val ICT_TICKETS = "ict_tickets"
     const val POLICIES = "policies"
+    const val FUNDS_REQUESTS = "funds_requests"
+    const val MEMOS = "memos"
 }
 
 @Serializable
@@ -268,9 +270,56 @@ data class Policy(val id: String, val title: String = "", val kind: String = "",
                   val departmentLabel: String = "", val version: String = "", val summary: String = "", val status: String = "", val statusLabel: String = "",
                   val adoptedOn: String? = null, val reviewDate: String? = null)
 
+@Serializable
+data class FundsLine(val description: String = "", val quantity: String = "", val unitCost: String = "", val total: String = "")
+
+/** One row of the "where is my request?" tracker. state: done | current | skipped | waiting | rejected | returned */
+@Serializable
+data class RouteStep(val label: String = "", val state: String = "", val who: String = "", val `when`: String = "", val note: String = "")
+
+@Serializable
+data class HistoryEntry(val stage: String = "", val decision: String = "", val user: String = "", val `when`: String = "", val comment: String = "")
+
+/** Request for funds / purchase (travel & subsistence, advance, goods, fuel …). */
+@Serializable
+data class FundsRequest(
+    val id: String, val reference: String = "", val requestType: String = "", val requestTypeLabel: String = "", val title: String = "",
+    val purpose: String = "", val department: String = "", val departmentLabel: String = "", val requestedBy: Long? = null,
+    val requestedByName: String = "", val destination: String = "", val departDate: String? = null, val returnDate: String? = null,
+    val travellers: String = "", val currency: String = "USD", val total: String = "0", val neededBy: String? = null,
+    val requiresPayment: Boolean = true, val payeeName: String = "", val paymentMethod: String = "", val paymentMethodLabel: String = "",
+    val paymentDetails: String = "", val vote: String? = null, val status: String = "", val statusLabel: String = "",
+    val submittedAt: String? = null, val stageSince: String? = null, val lastReminderAt: String? = null, val decisionNote: String = "",
+    val voucherNumber: String? = null, val voucherStatus: String? = null, val completedAt: String? = null,
+    val lines: List<FundsLine> = emptyList(), val route: List<RouteStep> = emptyList(), val history: List<HistoryEntry> = emptyList(),
+    val whereNow: String = "", val daysWaiting: Int = 0, val deciders: List<Long> = emptyList(), val createdAt: String = "",
+    val localNote: String? = null,
+) {
+    val isOpen get() = status in listOf("P_HOD", "P_ADMIN", "P_TREAS", "P_CEO", "P_PAY", "PAYING")
+}
+
+@Serializable
+data class MemoReply(val author: String = "", val department: String = "", val body: String = "", val `when`: String = "")
+
+/** Memo / request for action between departments. */
+@Serializable
+data class Memo(
+    val id: String, val reference: String = "", val kind: String = "", val kindLabel: String = "", val sender: Long? = null,
+    val senderName: String = "", val fromDepartment: String = "", val fromDepartmentLabel: String = "", val toDepartment: String = "",
+    val toDepartmentLabel: String = "", val toUser: Long? = null, val toUserName: String? = null, val subject: String = "", val body: String = "",
+    val priority: String = "", val priorityLabel: String = "", val status: String = "", val statusLabel: String = "", val readAt: String? = null,
+    val taskReference: String? = null, val taskStatus: String? = null, val taskAssignee: String? = null,
+    val replies: List<MemoReply> = emptyList(), val createdAt: String = "", val localNote: String? = null,
+)
+
 /** Choice lists mirrored from the server so forms work offline. */
 object Choices {
     val currencies = listOf("USD" to "US Dollar", "ZWG" to "Zimbabwe Gold")
+    val fundsTypes = listOf("TRAVEL" to "Travel & subsistence allowance (T&S)", "ADVANCE" to "Cash advance / imprest",
+        "PURCHASE" to "Purchase of goods or services", "FUEL" to "Fuel", "TRAINING" to "Training / workshop / conference fees",
+        "REPAIRS" to "Repairs & maintenance", "OTHER" to "Other")
+    val fundsPayment = listOf("EFT" to "Bank transfer", "CASH" to "Cash", "MOBILE" to "Mobile money (EcoCash / OneMoney)", "CHEQUE" to "Cheque")
+    val memoKinds = listOf("MESSAGE" to "Message / memo", "ACTION" to "Request for action", "INFO" to "For information")
     val receiptMethods = listOf("CASH" to "Cash", "ECOCASH" to "EcoCash", "ONEMONEY" to "OneMoney", "INNBUCKS" to "InnBucks",
         "SWIPE" to "Card / swipe (POS)", "BANK" to "Bank transfer / deposit")
     val departments = listOf("EXEC" to "Office of the CEO", "ADMIN" to "Administration", "FINANCE" to "Finance",

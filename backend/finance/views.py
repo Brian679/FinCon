@@ -314,9 +314,17 @@ def cashup_verify(request, pk):
 
 
 # ------------------------------------------------------------------- licences
+def licence_scope(user, qs):
+    """Finance sees every licence; Social Services' health officers only see the
+    shop inspections that are their job (no fees / accounts of other shops)."""
+    if user.has_cap("licence.view"):
+        return qs
+    return qs.filter(Q(status=Licence.Status.INSPECTION) | Q(inspected_by=user))
+
+
 class LicenceList(GenericListView):
     model = Licence
-    required_caps = ("licence.view",)
+    required_caps = ("licence.view", "licence.inspect")
     title = "Licences (shop, hawker, business …)"
     columns = [("Licence no.", "number"), ("Type", "licence_type"), ("Business", "business_name"), ("Account", "account.account_number"),
                ("Premises", "premises"), ("Fee", "fee"), ("Expires", "expiry_date"), ("Status", "status")]
@@ -324,6 +332,15 @@ class LicenceList(GenericListView):
     detail_url_name = "finance:licence"
     create_url_name = "finance:licence_new"
     create_caps = ("licence.manage",)
+
+    def scope(self, qs):
+        return licence_scope(self.request.user, qs.select_related("account"))
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        if not self.request.user.has_cap("licence.view"):
+            ctx["title"] = "Shop health inspections"
+        return ctx
 
 
 @cap_required("licence.manage")
@@ -341,7 +358,11 @@ def licence_new(request):
 
 class LicenceDetail(GenericDetailView):
     model = Licence
-    required_caps = ("licence.view",)
+    required_caps = ("licence.view", "licence.inspect")
+
+    def scope(self, qs):
+        return licence_scope(self.request.user, qs)
+
     template_name = "finance/licence_detail.html"
     fields = [("Type", "licence_type"), ("Business", "business_name"), ("Activity", "business_activity"), ("Account", "account"),
               ("Premises", "premises"), ("Ward", "ward"), ("Applicant", "applicant"), ("Fee (USD)", "fee"), ("Fee bill", "bill"),

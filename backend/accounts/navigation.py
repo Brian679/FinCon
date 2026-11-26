@@ -1,6 +1,8 @@
 """Sidebar navigation built from the user's capabilities."""
 from django.urls import NoReverseMatch, reverse
 
+from core.models import Department
+
 
 # Django-admin style "Add" links next to sidebar entries (list url name -> add url name)
 ADD_LINKS = {
@@ -18,6 +20,7 @@ ADD_LINKS = {
     "departments:risks": ("departments:risk_new", "risks.manage"), "departments:meetings": ("departments:meeting_new", "meetings.manage"),
     "departments:tickets": ("departments:ticket_new", None), "departments:policies": ("departments:policy_new", "policies.manage"),
     "accounts:users": ("accounts:user_new", "users.manage"),
+    "workflow:memos": ("workflow:memo_new", None), "workflow:funds": ("workflow:fund_new", None),
     "portal:complaints": ("portal:complaint_new", None), "portal:requests": ("portal:request_new", None), "portal:licences": ("portal:licence_apply", None),
     "portal:claims": ("portal:claim_new", None), "portal:plans": ("portal:plan_new", None), "portal:stands": ("portal:stand_new", None),
     "portal:accounts": ("portal:link", None),
@@ -61,13 +64,38 @@ def build_nav(user):
             ]},
         ]
     c = user.has_cap
+    D = Department
+    sees_all = user.sees_all_departments()
+    dept = user.department
     sections = []
-    general = [_item("Dashboard", "core:dashboard"), _item("Notifications", "core:notifications"), _item("My tasks", "workflow:tasks")]
-    if user.is_ceo or c("reports.executive"):
-        general.insert(1, _item("Executive overview", "core:executive"))
-    sections.append({"title": "General", "items": general})
 
-    if c("finance.view"):
+    # ---- My work: self-service + links to other departments (every staff member)
+    general = [_item("Dashboard", "core:dashboard")]
+    if user.is_ceo or c("reports.executive"):
+        general.append(_item("Executive overview", "core:executive"))
+    if c("dept.overview", "dept.overview_all"):
+        general.append(_item("My department (overview)", "departments:overview"))
+    general += [
+        _item("Notifications", "core:notifications"),
+        _item("My tasks", "workflow:tasks"),
+        _item("Memos to / from departments", "workflow:memos"),
+        _item("Requests for funds & purchases", "workflow:funds"),
+        _item("Purchase requisitions", "finance:requisitions"),
+        _item("Leave", "departments:leave"),
+        _item("ICT helpdesk", "departments:tickets"),
+    ]
+    if c("resolutions.update") and not c("meetings.view"):
+        general.append(_item("Council resolutions for my department", "departments:resolutions"))
+    sections.append({"title": "My work", "items": general})
+
+    sections.append({"title": "Client service (Charter)", "items": [
+        _item("Complaints & feedback", "workflow:complaints"), _item("Service requests / faults", "workflow:requests")]})
+
+    def show(code):
+        return dept == code or sees_all
+
+    # ---- Finance department
+    if c("finance.view") and show(D.FINANCE):
         fin = [_item("Finance dashboard", "finance:dashboard")]
         if c("receipt.create"):
             fin.append(_item("Receipting counter", "finance:receipt_new"))
@@ -90,10 +118,6 @@ def build_nav(user):
             fin.append(_item("Licences", "finance:licences"))
         if c("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "finance.view_all"):
             fin.append(_item("Payment vouchers (expenditure)", "finance:vouchers"))
-        if c("supplier.manage", "finance.view_all"):
-            fin.append(_item("Suppliers", "finance:suppliers"))
-        if c("procurement.order", "finance.view_all"):
-            fin.append(_item("Purchase orders", "finance:orders"))
         if c("budget.view", "budget.manage"):
             fin.append(_item("Budget vs actual", "finance:budget"))
         if c("bank.manage", "finance.view_all"):
@@ -103,52 +127,70 @@ def build_nav(user):
         if c("finance.reports"):
             fin.append(_item("Financial reports", "finance:reports"))
         sections.append({"title": "Finance", "items": fin})
-    elif c("licence.view"):
-        sections.append({"title": "Finance", "items": [_item("Licences / inspections", "finance:licences")]})
 
-    proc = [_item("Requisitions", "finance:requisitions")]
-    sections.append({"title": "Procurement", "items": proc})
+    # ---- Procurement (Administration's procurement unit + Finance)
+    proc = []
+    if c("procurement.order", "finance.view_all"):
+        proc.append(_item("Purchase orders", "finance:orders"))
+    if c("supplier.manage", "finance.view_all"):
+        proc.append(_item("Suppliers", "finance:suppliers"))
+    if proc:
+        sections.append({"title": "Procurement", "items": proc})
 
-    services = [_item("Complaints & feedback", "workflow:complaints"), _item("Service requests / faults", "workflow:requests")]
-    if c("correspondence.manage") or user.is_head:
-        services.append(_item("Correspondence register", "workflow:correspondence"))
-    sections.append({"title": "Client service (Charter)", "items": services})
+    # ---- Administration department
+    if show(D.ADMINISTRATION) or (dept == D.EXECUTIVE and c("meetings.view")):
+        admin_items = []
+        if c("meetings.view"):
+            admin_items += [_item("Council meetings", "departments:meetings"), _item("Council resolutions", "departments:resolutions")]
+        if c("policies.view"):
+            admin_items.append(_item("Policies & by-laws", "departments:policies"))
+        if c("correspondence.manage"):
+            admin_items.append(_item("Correspondence register", "workflow:correspondence"))
+        if c("hr.view"):
+            admin_items.append(_item("Staff directory", "departments:staff"))
+        if admin_items:
+            sections.append({"title": "Administration", "items": admin_items})
 
-    if c("dept.overview", "dept.overview_all"):
-        general.insert(1, _item("My department (overview)", "departments:overview"))
+    # ---- Assets register (each department sees its own assets)
+    if c("assets.view"):
+        asset_label = "Assets & infrastructure" if (c("assets.manage") or sees_all) else "My department's assets"
+        sections.append({"title": "Assets", "items": [_item(asset_label, "departments:assets")]})
 
-    admin_items = [_item("Council meetings", "departments:meetings"), _item("Council resolutions", "departments:resolutions"),
-                   _item("Policies & by-laws", "departments:policies")]
-    if c("hr.view"):
-        admin_items.append(_item("Staff directory", "departments:staff"))
-    admin_items += [_item("Leave", "departments:leave"), _item("ICT helpdesk", "departments:tickets"), _item("Assets & infrastructure", "departments:assets")]
-    sections.append({"title": "Administration & corporate", "items": admin_items})
+    # ---- Social services
+    if show(D.SOCIAL_SERVICES):
+        social = []
+        if c("stands.view"):
+            social.append(_item("Housing & stand allocation", "departments:stands"))
+        if c("incidents.view"):
+            social.append(_item("Incidents & disasters", "departments:incidents"))
+        if c("activities.manage", "activities.verify", "dept.overview_all") and (dept == D.SOCIAL_SERVICES or sees_all):
+            social.append(_item("Community programmes & campaigns", "departments:activities"))
+        if c("licence.inspect"):
+            social.append(_item("Shop health inspections", "finance:licences"))
+        if social:
+            sections.append({"title": "Social services", "items": social})
+    if dept == D.ADMINISTRATION and c("activities.manage"):
+        sections.append({"title": "Staff development", "items": [_item("Trainings & staff activities", "departments:activities")]})
 
-    social = []
-    if c("stands.view"):
-        social.append(_item("Housing & stand allocation", "departments:stands"))
-    if c("incidents.view"):
-        social.append(_item("Incidents & disasters", "departments:incidents"))
-    if c("activities.manage", "activities.verify", "dept.overview"):
-        social.append(_item("Community programmes & campaigns", "departments:activities"))
-    if social:
-        sections.append({"title": "Social services", "items": social})
+    # ---- Technical services
+    if show(D.TECHNICAL_SERVICES):
+        tech = []
+        if c("projects.view"):
+            tech.append(_item("Projects & infrastructure", "departments:projects"))
+        if c("plans.view"):
+            tech.append(_item("Building plans (development control)", "departments:plans"))
+        if tech:
+            sections.append({"title": "Technical services", "items": tech})
 
-    tech = []
-    if c("projects.view"):
-        tech.append(_item("Projects & infrastructure", "departments:projects"))
-    if c("plans.view"):
-        tech.append(_item("Building plans (development control)", "departments:plans"))
-    if tech:
-        sections.append({"title": "Technical services", "items": tech})
-
+    # ---- Internal audit (audit findings addressed to my department for heads)
     audit_items = []
-    if c("audit.findings_view", "audit.respond"):
-        audit_items.append(_item("Internal audit findings", "departments:findings"))
+    if c("audit.findings_view") or c("audit.respond"):
+        audit_items.append(_item("Internal audit findings" if c("audit.findings_view") else "Audit findings for my department", "departments:findings"))
     if c("risks.view", "risks.manage"):
         audit_items.append(_item("Risk register", "departments:risks"))
     if audit_items:
-        sections.append({"title": "Internal audit", "items": audit_items})
+        own = dept == D.INTERNAL_AUDIT or sees_all
+        sections.append({"title": "Internal audit" if own else "Audit & risks – my department", "items": audit_items})
 
     gov = []
     if c("audit.view_trail"):
@@ -162,4 +204,4 @@ def build_nav(user):
 
     for s in sections:
         s["items"] = [i for i in s["items"] if i]
-    return sections
+    return [s for s in sections if s["items"]]

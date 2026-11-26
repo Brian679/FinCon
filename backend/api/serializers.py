@@ -399,3 +399,78 @@ class PolicySerializer(SyncSerializer):
     class Meta:
         model = Policy
         fields = _sync_fields(Policy, ["title", "kind", "department", "version", "summary", "status", "adopted_on", "review_date"])
+
+
+# ------------------------------------------------- requests for funds & memos
+from workflow import funds as _fr  # noqa: E402
+from workflow import memos as _mm  # noqa: E402
+from workflow.models import FundsRequest, Memo  # noqa: E402
+
+
+def _s(v):
+    if v is None:
+        return ""
+    if hasattr(v, "get_full_name"):
+        return v.get_full_name() or v.username
+    if hasattr(v, "isoformat"):
+        return v.isoformat()
+    return str(v)
+
+
+class FundsRequestSerializer(SyncSerializer):
+    requested_by_name = serializers.CharField(source="requested_by.get_full_name", read_only=True)
+    lines = serializers.SerializerMethodField()
+    route = serializers.SerializerMethodField()
+    history = serializers.SerializerMethodField()
+    where_now = serializers.SerializerMethodField()
+    days_waiting = serializers.IntegerField(read_only=True)
+    deciders = serializers.SerializerMethodField()
+    voucher_number = serializers.CharField(source="voucher.number", read_only=True, default="")
+    voucher_status = serializers.CharField(source="voucher.get_status_display", read_only=True, default="")
+    vote = serializers.CharField(source="budget_line.vote_code", read_only=True, default="")
+
+    class Meta:
+        model = FundsRequest
+        fields = _sync_fields(FundsRequest, ["reference", "request_type", "title", "purpose", "department", "requested_by", "requested_by_name",
+                                             "destination", "depart_date", "return_date", "travellers", "currency", "total", "needed_by",
+                                             "requires_payment", "payee_name", "payment_method", "payment_details", "vote", "status", "submitted_at",
+                                             "stage_since", "last_reminder_at", "decision_note", "voucher_number", "voucher_status", "completed_at",
+                                             "lines", "route", "history", "where_now", "days_waiting", "deciders"])
+
+    def get_lines(self, obj):
+        return [{"description": ln.description, "quantity": str(ln.quantity), "unit_cost": str(ln.unit_cost), "total": str(ln.total)}
+                for ln in obj.lines.all()]
+
+    def get_route(self, obj):
+        return [{"label": r["label"], "state": r["state"], "who": _s(r["who"]), "when": _s(r["when"]), "note": _s(r["note"])} for r in _fr.route(obj)]
+
+    def get_history(self, obj):
+        return [{"stage": a.stage, "decision": a.decision, "user": _s(a.user), "when": _s(a.timestamp), "comment": a.comment} for a in _fr.history(obj)]
+
+    def get_where_now(self, obj):
+        return _fr.where_now(obj)
+
+    def get_deciders(self, obj):
+        """Users who may decide now (the phone shows them the decision panel)."""
+        if obj.status not in _fr.STAGE_LABEL:
+            return []
+        done = _fr._approved_this_round(obj)
+        return [u.pk for u in _fr.eligible(obj) if u.pk != obj.requested_by_id and u.pk not in done]
+
+
+class MemoSerializer(SyncSerializer):
+    sender_name = serializers.CharField(source="sender.get_full_name", read_only=True)
+    to_user_name = serializers.CharField(source="to_user.get_full_name", read_only=True, default="")
+    task_reference = serializers.CharField(source="task.reference", read_only=True, default="")
+    task_status = serializers.CharField(source="task.get_status_display", read_only=True, default="")
+    task_assignee = serializers.CharField(source="task.assigned_to.get_full_name", read_only=True, default="")
+    replies = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Memo
+        fields = _sync_fields(Memo, ["reference", "kind", "sender", "sender_name", "from_department", "to_department", "to_user", "to_user_name",
+                                     "subject", "body", "priority", "status", "read_at", "task_reference", "task_status", "task_assignee", "replies"])
+
+    def get_replies(self, obj):
+        return [{"author": _s(r.author), "department": r.author.get_department_display(), "body": r.body, "when": _s(r.created_at)}
+                for r in obj.replies.all() if not r.is_deleted]

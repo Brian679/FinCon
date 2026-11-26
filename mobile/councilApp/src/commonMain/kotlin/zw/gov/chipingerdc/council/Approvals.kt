@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import zw.gov.chipingerdc.shared.model.Entities
+import zw.gov.chipingerdc.shared.model.FundsRequest
 import zw.gov.chipingerdc.shared.model.LeaveRequest
 import zw.gov.chipingerdc.shared.model.Licence
 import zw.gov.chipingerdc.shared.model.Me
@@ -50,7 +51,9 @@ fun rememberApprovals(ctx: Ctx): List<Approval> {
     val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
     val leave by sdk.observe(Entities.LEAVE, LeaveRequest.serializer()).collectAsState(initial = emptyList())
     val receipts by sdk.observe(Entities.RECEIPTS, Receipt.serializer()).collectAsState(initial = emptyList())
+    val funds by sdk.observe(Entities.FUNDS_REQUESTS, FundsRequest.serializer()).collectAsState(initial = emptyList())
     return buildList {
+        addAll(fundsApprovals(me, funds))
         reqs.forEach { r -> requisitionStage(me, r)?.let { add(Approval("Requisition", r.number, "${r.departmentLabel} · $${r.total}", it, Screen.RequisitionDetail(r.id))) } }
         vouchers.forEach { v -> voucherStage(me, v)?.let { add(Approval("Payment voucher", v.number, "${v.payeeName} · ${v.currency} ${v.amount}", it, Screen.VoucherDetail(v.id))) } }
         licences.forEach { l -> licenceStage(me, l)?.let { add(Approval("Licence", l.number, l.businessName, it, Screen.LicenceDetail(l.id))) } }

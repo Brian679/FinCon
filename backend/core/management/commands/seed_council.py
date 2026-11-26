@@ -288,3 +288,85 @@ class Command(BaseCommand):
                               summary="Licence categories, fees, inspections and penalties for trading without a licence.")
         Policy.objects.create(title="ICT acceptable use policy", department="ADMIN", version="1.0", status="CONSULT", review_date=today - timedelta(days=5))
         Policy.objects.create(title="Strategic plan 2026–2030", kind="STRATEGY", department="EXEC", version="1.0", status="ADOPTED", adopted_on=today - timedelta(days=200))
+        self._demo_requests(u)
+
+    def _demo_requests(self, u):
+        """Requests for funds / purchases at different stages, and memos."""
+        from datetime import timedelta
+
+        from workflow import funds as fr
+        from workflow import memos as mm
+        from workflow.models import FundsRequest, FundsRequestLine
+
+        today = timezone.localdate()
+
+        def make(who, rtype, title, purpose, lines, **kw):
+            req = FundsRequest.objects.create(requested_by=u[who], created_by=u[who], request_type=rtype, title=title, purpose=purpose, **kw)
+            for desc, qty, cost in lines:
+                FundsRequestLine.objects.create(request=req, description=desc, quantity=Decimal(str(qty)), unit_cost=Decimal(str(cost)))
+            req.recalc_total()
+            return req
+
+        # 1. Technical officer's T&S – approved by HOD, now with the Administration Officer (reminder sent)
+        r1 = make("tech.officer", "TRAVEL", "T&S – Musirizwi bridge inspection, Ward 3", "Inspect flood damage on the Musirizwi bridge before the rains.",
+                  [("Subsistence allowance – 3 days", 3, 30), ("Accommodation – 2 nights", 2, 60), ("Fuel – council vehicle ADR 4471 (litres)", 80, 1.6)],
+                  destination="Ward 3, Musirizwi", depart_date=today + timedelta(days=5), return_date=today + timedelta(days=7),
+                  travellers="Prosper Mlambo, Takudzwa Nyathi", needed_by=today + timedelta(days=4), payment_method="MOBILE",
+                  payment_details="EcoCash 0773 555 101")
+        fr.submit(u["tech.officer"], r1)
+        fr.decide(u["engineer"], r1, "approve", "Inspection is urgent – rains are coming.")
+        FundsRequest.objects.filter(pk=r1.pk).update(stage_since=timezone.now() - timedelta(days=3))
+        r1.refresh_from_db()
+        fr.remind(u["tech.officer"], r1, "We travel on Monday – please assist.")
+        # 2. Health officer's purchase – waiting for the Social Services head
+        r2 = make("eho", "PURCHASE", "Water testing kits for borehole programme", "Quarterly testing of 40 community boreholes (WASH).",
+                  [("Water testing kit (50 tests)", 4, 85), ("Chlorine tablets – box", 10, 12)], needed_by=today + timedelta(days=14))
+        fr.submit(u["eho"], r2)
+        # 3. HR officer's workshop fees – with the Treasurer
+        r3 = make("hr.officer", "TRAINING", "LGAZ HR practitioners workshop – Mutare", "Annual HR workshop; new labour law amendments.",
+                  [("Registration fee", 1, 150), ("Subsistence – 2 days", 2, 30), ("Bus fare return", 1, 20)],
+                  destination="Mutare", depart_date=today + timedelta(days=12), return_date=today + timedelta(days=13), travellers="Ruvimbo Mhlanga")
+        fr.submit(u["hr.officer"], r3)
+        fr.decide(u["admin.officer"], r3, "approve", "Approved – within training budget.")
+        # 4. Social officer's advance – fully approved, paid
+        r4 = make("social.officer", "ADVANCE", "Cash advance – drought relief food distribution, Ward 21",
+                  "Transport and casual labour for food distribution to 300 households.",
+                  [("Truck hire – 1 day", 1, 250), ("Casual labourers – 6 × 2 days", 12, 10)], payment_method="CASH", needed_by=today - timedelta(days=2))
+        fr.submit(u["social.officer"], r4)
+        for who in ("social.director", "admin.officer", "treasurer", "ceo"):
+            fr.decide(u[who], r4, "approve")
+        try:
+            from finance import services as fin
+            from finance.models import BankAccount
+
+            v = fr.prepare_payment(u["exp.clerk"], r4)
+            fin.decide_voucher(u["accountant"], v, True)
+            fin.decide_voucher(u["treasurer"], v, True)
+            v.refresh_from_db()
+            bank = BankAccount.objects.filter(currency="USD").first()
+            if v.is_ready_for_payment and bank:
+                fin.pay_voucher(u["exp.clerk"], v, bank_account=bank, payment_reference="CASH-0412")
+        except Exception:  # noqa: BLE001 - demo data only
+            pass
+        # 5. Engineer's fuel – approved, with Finance to prepare payment
+        r5 = make("engineer", "FUEL", "Diesel for grader – Ward 7 road programme", "Grading of 12 km of the Ward 7 feeder road.",
+                  [("Diesel (litres)", 400, 1.55)], payee_name="Zuva Petroleum Chipinge", payment_method="EFT")
+        fr.submit(u["engineer"], r5)
+        for who in ("admin.officer", "treasurer", "ceo"):
+            fr.decide(u[who], r5, "approve")
+        # 6. Cashier's request returned for changes
+        r6 = make("cashier", "PURCHASE", "Receipt book printing", "Manual receipt books for offline collection at Checheche.",
+                  [("Receipt books (100 leaves)", 20, 6.5)])
+        fr.submit(u["cashier"], r6)
+        fr.decide(u["treasurer"], r6, "return", "Attach two quotations from printers.")
+        # memos between departments
+        m1 = mm.send(u["engineer"], kind="ACTION", to_department="SOCIAL", subject="Borehole at Chako school – water quality",
+                     body="The new borehole drilled under the roads programme is ready. Please test the water before it is opened to the community.")
+        mm.to_task(u["social.director"], m1, assigned_to=u["eho"], due_date=today + timedelta(days=7))
+        mm.reply(u["eho"], m1, "Sampling booked for Thursday; results in 48 hours.")
+        mm.send(u["hr.officer"], kind="MESSAGE", to_department="FINANCE", subject="Overtime rates for December payroll",
+                body="Please confirm the approved overtime rates so that the December payroll can be prepared.")
+        mm.send(u["cashier"], kind="ACTION", to_department="ADMIN", to_user=u["ict.admin"], subject="Second receipt printer for Checheche",
+                body="Collections at Checheche have doubled – please arrange a second printer.", priority="HIGH")
+        mm.send(u["treasurer"], kind="INFO", to_department="TECH", subject="Roads budget vote at 82% utilisation",
+                body="For information: vote 0410 (roads maintenance) is 82% spent with four months remaining.")

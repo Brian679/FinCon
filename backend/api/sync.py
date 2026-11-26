@@ -26,7 +26,7 @@ from finance.models import (
     Bill, BudgetLine, ClientAccount, Licence, OnlinePayment, PaymentVoucher, Property, Receipt, Requisition, RevenueHead,
 )
 from workflow import services as wf
-from workflow.models import Complaint, ServiceRequest, Task, TaskComment
+from workflow.models import Complaint, FundsRequest, Memo, ServiceRequest, Task, TaskComment
 
 from . import serializers as s
 from .models import SyncOperation
@@ -94,7 +94,9 @@ def staff_entities(user):
         "properties": (Property.objects.all(), s.PropertySerializer) if fin_accounts else None,
         "bills": (Bill.objects.filter(Q(status__in=["UNPAID", "PART"]) | Q(updated_at__gte=timezone.now() - timedelta(days=120))), s.BillSerializer) if fin_accounts else None,
         "receipts": (_receipt_scope(user), s.ReceiptSerializer) if _receipt_scope(user) is not None else None,
-        "licences": (Licence.objects.select_related("account"), s.LicenceSerializer) if c("licence.view") else None,
+        "licences": (Licence.objects.select_related("account"), s.LicenceSerializer) if c("licence.view")
+        else (Licence.objects.filter(Q(status="INSPECTION") | Q(inspected_by=user)).select_related("account"), s.LicenceSerializer)
+        if c("licence.inspect") else None,
         "requisitions": (_requisition_scope(user), s.RequisitionSerializer),
         "vouchers": (PaymentVoucher.objects.select_related("prepared_by", "budget_line"), s.VoucherSerializer)
         if c("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "finance.view_all") else None,
@@ -115,20 +117,24 @@ def staff_entities(user):
         "leases": (s.Lease.objects.select_related("lessee", "premises"), s.LeaseSerializer) if c("leases.view", "leases.manage") else None,
         "claims": (s.AccountClaim.objects.select_related("user", "area", "matched_property__account", "account"), s.ClaimSerializer)
         if c("claims.review") else None,
-        "assets": (_dept(user, s.Asset.objects.prefetch_related("maintenance"), all_caps=("assets.manage", "finance.view_all")), s.AssetSerializer),
+        "assets": (_dept(user, s.Asset.objects.prefetch_related("maintenance"), all_caps=("assets.manage", "finance.view_all")), s.AssetSerializer)
+        if c("assets.view") else None,
         "incidents": (s.Incident.objects.select_related("lead_officer"), s.IncidentSerializer) if c("incidents.view") else None,
         "activities": (_dept(user, s.CommunityActivity.objects.select_related("officer")), s.ActivitySerializer)
         if c("activities.manage", "activities.verify", "dept.overview") else None,
         "building_plans": (s.BuildingPlan.objects.select_related("bill", "reviewed_by"), s.BuildingPlanSerializer) if c("plans.view") else None,
         "risks": (s.Risk.objects.select_related("owner") if c("risks.manage") else _dept(user, s.Risk.objects.select_related("owner")), s.RiskSerializer)
         if c("risks.view", "risks.manage") else None,
-        "meetings": (s.CouncilMeeting.objects.all(), s.MeetingSerializer),
+        "meetings": (s.CouncilMeeting.objects.all(), s.MeetingSerializer) if c("meetings.view") else None,
         "resolutions": (s.Resolution.objects.select_related("responsible", "meeting") if (user.sees_all_departments() or c("meetings.manage"))
                         else s.Resolution.objects.filter(Q(department=user.department) | Q(responsible=user)).select_related("responsible", "meeting"),
-                        s.ResolutionSerializer),
+                        s.ResolutionSerializer) if c("meetings.view", "resolutions.update") else None,
         "ict_tickets": (s.ICTTicket.objects.select_related("raised_by") if c("ict.manage") else s.ICTTicket.objects.filter(raised_by=user).select_related("raised_by"),
                         s.TicketSerializer),
-        "policies": (s.Policy.objects.all(), s.PolicySerializer),
+        "policies": (s.Policy.objects.all(), s.PolicySerializer) if c("policies.view") else None,
+        "funds_requests": (wf.funds_scope(user, FundsRequest.objects.select_related("requested_by", "voucher").prefetch_related("lines")),
+                           s.FundsRequestSerializer),
+        "memos": (wf.memo_scope(user, Memo.objects.select_related("sender", "to_user").prefetch_related("replies__author")), s.MemoSerializer),
     }
 
 
@@ -514,7 +520,86 @@ def op_reminders_send(user, p):
     return "", {"sent": n}
 
 
+# --------------------------------------------- requests for funds & memos
+def op_funds_create(user, p):
+    from workflow import funds as fr
+    from workflow.models import FundsRequestLine
+
+    if not user.has_cap("funds.request"):
+        raise PermissionDenied("Staff only.")
+    lines = p.get("lines") or []
+    if not lines:
+        raise ValidationError("Add at least one line.")
+    line = _get(BudgetLine, p["budget_line"]) if p.get("budget_line") else None
+    req = FundsRequest.objects.create(
+        id=p.get("id"), requested_by=user, created_by=user, department=user.department, request_type=p.get("request_type", "OTHER"),
+        title=p["title"], purpose=p.get("purpose", ""), destination=p.get("destination", ""),
+        depart_date=parse_date(p["depart_date"]) if p.get("depart_date") else None,
+        return_date=parse_date(p["return_date"]) if p.get("return_date") else None, travellers=p.get("travellers", ""),
+        currency=p.get("currency", "USD"), needed_by=parse_date(p["needed_by"]) if p.get("needed_by") else None,
+        requires_payment=bool(p.get("requires_payment", True)), payee_name=p.get("payee_name", ""), payment_method=p.get("payment_method", "EFT"),
+        payment_details=p.get("payment_details", ""), budget_line=line)
+    for ln in lines:
+        FundsRequestLine.objects.create(request=req, description=ln["description"], quantity=Decimal(str(ln.get("quantity") or 1)),
+                                        unit_cost=Decimal(str(ln["unit_cost"])))
+    req.recalc_total()
+    if p.get("submit", True):
+        fr.submit(user, req)
+    return "funds_requests", s.FundsRequestSerializer(req).data
+
+
+def op_funds_action(user, p):
+    from workflow import funds as fr
+
+    req = _get(FundsRequest, p["id"])
+    if not fr.can_view(user, req):
+        raise PermissionDenied("You cannot see this request.")
+    a, note = p["action"], p.get("comment", "")
+    if a == "submit":
+        fr.submit(user, req)
+    elif a in ("approve", "reject", "return"):
+        fr.decide(user, req, a, note)
+    elif a == "remind":
+        fr.remind(user, req, note)
+    elif a == "cancel":
+        fr.cancel(user, req, note)
+    elif a == "pay":
+        fr.prepare_payment(user, req, method=p.get("method") or None)
+    else:
+        raise ValidationError("Unknown action.")
+    req.refresh_from_db()
+    return "funds_requests", s.FundsRequestSerializer(req).data
+
+
+def op_memo_create(user, p):
+    from accounts.models import User
+    from workflow import memos as mm
+
+    to_user = User.objects.filter(pk=p["to_user"]).first() if p.get("to_user") else None
+    memo = mm.send(user, kind=p.get("kind", "MESSAGE"), to_department=p["to_department"], to_user=to_user, subject=p.get("subject", ""),
+                   body=p.get("body", ""), priority=p.get("priority", "NORMAL"), memo_id=p.get("id"))
+    return "memos", s.MemoSerializer(memo).data
+
+
+def op_memo_reply(user, p):
+    from accounts.models import User
+    from workflow import memos as mm
+
+    memo = _get(Memo, p["id"])
+    if p.get("assigned_to"):
+        mm.to_task(user, memo, assigned_to=User.objects.get(pk=p["assigned_to"]),
+                   due_date=parse_date(p["due_date"]) if p.get("due_date") else None)
+    else:
+        mm.reply(user, memo, p.get("body", ""), close=bool(p.get("close")))
+    memo.refresh_from_db()
+    return "memos", s.MemoSerializer(memo).data
+
+
 STAFF_OPS = {
+    "funds.create": op_funds_create,
+    "funds.action": op_funds_action,
+    "memo.create": op_memo_create,
+    "memo.reply": op_memo_reply,
     "requisition.create": op_requisition_create,
     "task.create": op_task_create,
     "stand.action": op_stand_action,

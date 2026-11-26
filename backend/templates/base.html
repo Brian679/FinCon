@@ -40,6 +40,7 @@
   </header>
   {% block nav_breadcrumbs %}<nav aria-label="Breadcrumbs" class="no-print">
     <div class="breadcrumbs">
+      {% if user.is_authenticated and nav_items %}<button type="button" class="mobile-menu-btn" onclick="document.body.classList.toggle('mobile-nav-open')" aria-controls="nav-sidebar">&#9776; Menu</button>{% endif %}
       <a href="{% if user.is_authenticated %}{% url 'accounts:home' %}{% else %}/{% endif %}">Home</a>{% block breadcrumbs %}{% if title and title != 'Home' %} &rsaquo; {{ title }}{% endif %}{% endblock %}
     </div>
   </nav>{% endblock %}

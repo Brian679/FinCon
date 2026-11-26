@@ -195,3 +195,25 @@ body.login .submit-row { background: none; border: 0; padding: 0; margin-top: 12
 #content .card > .card-body > h2:first-child, #content .card > .card-body > h3:first-child { color: var(--header-link-color) !important; }
 .btn-group .btn-outline-danger:not(.active), .btn-group .btn-outline-success:not(.active), .btn-group .btn-outline-primary:not(.active) {
     background: var(--close-button-bg) !important; }
+
+
+/* ---- phones: the admin sidebar becomes a "Menu" panel, wide tables stack ---- */
+.mobile-menu-btn { display: none; }
+@media (max-width: 767px) {
+    .mobile-menu-btn { display: inline-block; float: right; margin: -2px 0 0 8px; padding: 2px 10px; font-size: 13px; color: #fff;
+        background: transparent; border: 1px solid rgba(255, 255, 255, .6); border-radius: 4px; cursor: pointer; }
+    #main { flex-direction: column; }
+    body.mobile-nav-open #nav-sidebar { display: block !important; position: static; width: auto; max-height: none; flex: none;
+        margin: 0 0 12px; border-right: 0; border-bottom: 1px solid var(--hairline-color); visibility: visible; }
+    body.mobile-nav-open #nav-sidebar .module th { width: 100%; }
+    ul.object-tools { float: none; margin: 4px 0 12px; display: flex; flex-wrap: wrap; gap: 6px; }
+    ul.object-tools li { margin-left: 0; }
+    #content h1 { font-size: 1.35rem; }
+    table.route thead { display: none; }
+    table.route tr { display: block; padding: 6px 0; border-bottom: 1px solid var(--hairline-color); }
+    table.route td { display: inline-block; border: 0 !important; padding: 2px 8px !important; }
+    table.route td:first-child { display: block; font-weight: 600; }
+    #content .module table, #content fieldset { max-width: 100%; }
+    #content td, #content th { overflow-wrap: anywhere; }
+    #content td.text-end, #content th.text-end { white-space: nowrap; overflow-wrap: normal; }
+}

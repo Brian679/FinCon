@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ memo.reference }} – {{ memo.subject }} &nbsp;<span class="badge text-bg-{% if memo.status == 'CLOSED' %}success{% else %}warning{% endif %}">{{ memo.get_status_display }}</span></h1>
+<div class="row g-4"><div class="col-xl-7">
+<fieldset class="module aligned"><h2>{{ memo.get_kind_display }}</h2>
+<div class="form-row"><div class="flex-container"><label>From:</label><div class="readonly">{{ memo.sender.get_full_name }} – {{ memo.sender.role_label }} ({{ memo.get_from_department_display }})</div></div></div>
+<div class="form-row"><div class="flex-container"><label>To:</label><div class="readonly">{% if memo.to_user %}{{ memo.to_user.get_full_name }} – {% else %}Head of {% endif %}{{ memo.get_to_department_display }}</div></div></div>
+<div class="form-row"><div class="flex-container"><label>Sent:</label><div class="readonly">{{ memo.created_at }}{% if memo.read_at %} · read {{ memo.read_at }}{% endif %}</div></div></div>
+<div class="form-row"><div class="flex-container"><label>Priority:</label><div class="readonly">{{ memo.get_priority_display }}</div></div></div>
+{% if memo.task %}<div class="form-row"><div class="flex-container"><label>Task:</label><div class="readonly"><a href="{% url 'workflow:task' memo.task.pk %}">{{ memo.task.reference }}</a> – {{ memo.task.assigned_to }} · {{ memo.task.get_status_display }} ({{ memo.task.progress }}%)</div></div></div>{% endif %}
+<div class="form-row"><div>{{ memo.body|linebreaksbr }}</div></div>
+</fieldset>
+<div class="module"><h2>Replies</h2><table class="w-100">{% for r in replies %}<tr><td><strong>{{ r.author.get_full_name }}</strong> <span class="quiet">({{ r.author.get_department_display }}) · {{ r.created_at }}</span><br>{{ r.body|linebreaksbr }}</td></tr>{% empty %}<tr><td class="quiet">No replies yet.</td></tr>{% endfor %}</table></div>
+</div><div class="col-xl-5">
+{% if memo.status != "CLOSED" %}
+<div class="module"><h2>Reply</h2><form method="post" class="p-2">{% csrf_token %}<textarea class="form-control mb-2" name="body" rows="3"></textarea>
+<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="reply">Send reply</button>{% if can_close %} <button class="btn btn-outline-primary" name="action" value="close">Reply &amp; close</button>{% endif %}</div></form></div>
+{% endif %}
+{% if officers %}
+<div class="module"><h2>Assign as a task to my officer</h2><form method="post" class="p-2">{% csrf_token %}
+<select name="assigned_to" class="form-select mb-2">{% for o in officers %}<option value="{{ o.pk }}">{{ o.get_full_name }} – {{ o.role_label }}</option>{% endfor %}</select>
+<input type="date" name="due_date" class="form-control mb-2">
+<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="task">Create task</button></div></form></div>
+{% endif %}
+</div></div>
+{% endblock %}

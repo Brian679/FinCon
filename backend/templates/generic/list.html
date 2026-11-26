@@ -15,7 +15,7 @@
       <div>
         <label for="searchbar"><img src="/static/admin/img/search.svg" alt="Search"></label>
         <input type="text" size="40" name="q" value="{{ q }}" id="searchbar">
-        {% if current_filter %}<input type="hidden" name="{{ filter_field }}" value="{{ current_filter }}">{% endif %}
+        {% if current_filter %}<input type="hidden" name="{{ filter_field }}" value="{{ current_filter }}">{% endif %}{% if box %}<input type="hidden" name="box" value="{{ box }}">{% endif %}
         <input type="submit" value="Search">
         {% if q %}<span class="small quiet">{{ page_obj.paginator.count|default:rows|length }} result(s) (<a href="?{% if current_filter %}{{ filter_field }}={{ current_filter }}{% endif %}">clear search</a>)</span>{% endif %}
       </div>
@@ -37,9 +37,9 @@
     </div>
     <p class="paginator">
       {% if is_paginated %}
-        {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}">&lsaquo; previous</a>{% endif %}
+        {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}{{ extra_qs }}">&lsaquo; previous</a>{% endif %}
         <span class="this-page">{{ page_obj.number }}</span> of {{ page_obj.paginator.num_pages }}
-        {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}">next &rsaquo;</a>{% endif %}
+        {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}{{ extra_qs }}">next &rsaquo;</a>{% endif %}
         &nbsp;·&nbsp; {{ page_obj.paginator.count }} records
       {% else %}{{ rows|length }} record{{ rows|length|pluralize }}{% endif %}
     </p>
@@ -47,12 +47,12 @@
   {% if filter_choices %}
   <nav id="changelist-filter" aria-labelledby="changelist-filter-header">
     <h2 id="changelist-filter-header">Filter</h2>
-    {% if current_filter %}<div id="changelist-filter-extra-actions"><h3><a href="?q={{ q }}">&#10006; Clear all filters</a></h3></div>{% endif %}
+    {% if current_filter %}<div id="changelist-filter-extra-actions"><h3><a href="?q={{ q }}{{ extra_qs }}">&#10006; Clear all filters</a></h3></div>{% endif %}
     <details open>
       <summary>By {{ filter_field|default:"status" }}</summary>
       <ul>
-        <li{% if not current_filter %} class="selected"{% endif %}><a href="?q={{ q }}">All</a></li>
-        {% for val, label in filter_choices %}<li{% if val == current_filter %} class="selected"{% endif %}><a href="?{{ filter_field }}={{ val }}&q={{ q }}">{{ label }}</a></li>{% endfor %}
+        <li{% if not current_filter %} class="selected"{% endif %}><a href="?q={{ q }}{{ extra_qs }}">All</a></li>
+        {% for val, label in filter_choices %}<li{% if val == current_filter %} class="selected"{% endif %}><a href="?{{ filter_field }}={{ val }}&q={{ q }}{{ extra_qs }}">{{ label }}</a></li>{% endfor %}
       </ul>
     </details>
   </nav>

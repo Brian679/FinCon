@@ -12,8 +12,14 @@ from .models import Complaint, ServiceRequest, Task, TaskComment
 User = get_user_model()
 
 
+from .funds import funds_scope  # noqa: E402,F401  (re-exported for the sync API)
+from .memos import memo_scope  # noqa: E402,F401
+
+
 def can_assign_to(user, target_department):
-    return user.has_cap("tasks.assign_any") or (user.has_cap("tasks.assign_department") and user.department == target_department)
+    # Heads may also send a task to ANOTHER department - it goes to that
+    # department's head, who passes it on (see create_task).
+    return user.has_cap("tasks.assign_any", "tasks.assign_department")
 
 
 @transaction.atomic
@@ -21,9 +27,11 @@ def create_task(user, **data):
     assignee = data.get("assigned_to")
     department = data.get("department") or (assignee.department if assignee else user.department)
     if not can_assign_to(user, department):
-        raise PermissionDenied("You can only assign tasks within your own department.")
-    if assignee and assignee.department != department and not user.has_cap("tasks.assign_any"):
+        raise PermissionDenied("Only heads of department can assign tasks.")
+    if assignee and assignee.department != department:
         raise PermissionDenied("The assignee is not in that department.")
+    if (department != user.department and not user.has_cap("tasks.assign_any") and assignee is not None and not assignee.is_head):
+        raise PermissionDenied("A task for another department goes to its Head of Department - leave 'Assigned to' blank.")
     data["department"] = department
     task = Task.objects.create(assigned_by=user, created_by=user, **data)
     targets = [assignee] if assignee else [u for u in User.objects.filter(department=department, is_active=True) if u.is_head]
@@ -49,6 +57,8 @@ def update_task(user, task, *, status=None, progress=None, comment=""):
             task.completed_at = timezone.now()
             task.progress = 100
             notify([task.assigned_by], f"Task completed: {task.title}", comment, f"/staff/tasks/{task.pk}/")
+            for memo in task.memos.all():
+                notify([memo.sender], f"{memo.reference} done: {memo.subject}", comment, f"/staff/memos/{memo.pk}/")
     if progress is not None:
         task.progress = max(0, min(100, int(progress)))
         if task.status == Task.Status.OPEN and task.progress > 0:

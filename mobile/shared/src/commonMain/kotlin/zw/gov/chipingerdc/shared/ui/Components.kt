@@ -190,8 +190,8 @@ private enum class Tone { GOOD, BAD, ATTENTION, NEUTRAL }
 private fun tone(code: String): Tone = when (code.uppercase()) {
     "VALID", "PAID", "ISSUED", "APPROVED", "AUTHORISED", "VERIFIED", "RESOLVED", "CLOSED", "COMPLETED", "DONE", "ALLOCATED", "ACTIVE",
     "ORDERED", "INSPECTED", "RESPONDED", "GOOD" -> Tone.GOOD
-    "VOIDED", "REJECTED", "FAILED", "CANCELLED", "EXPIRED", "URGENT", "CRITICAL", "QUERIED", "BROKEN" -> Tone.BAD
-    "LOCAL", "SECONDARY" -> Tone.NEUTRAL
+    "VOIDED", "REJECTED", "FAILED", "CANCELLED", "EXPIRED", "URGENT", "CRITICAL", "QUERIED", "BROKEN", "RETURNED" -> Tone.BAD
+    "LOCAL", "SECONDARY", "SKIPPED", "WAITING" -> Tone.NEUTRAL
     else -> Tone.ATTENTION
 }
 

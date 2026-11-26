@@ -59,6 +59,17 @@ def pending_approvals(user):
         stage = services.voucher_next_action(user, v)
         if stage and v.prepared_by_id != user.pk:
             items.append({"kind": "Payment voucher", "ref": v.number, "text": f"{v.payee_name} – {v.currency} {v.amount}", "stage": stage, "url": f"/staff/finance/vouchers/{v.pk}/"})
+    from workflow import funds as fr
+
+    for r in fr.awaiting(user):
+        items.append({"kind": "Request for funds", "ref": r.reference, "text": f"{r.get_department_display()} – {r.title} – {r.currency} {r.total:,.2f}",
+                      "stage": fr.STAGE_LABEL.get(r.status, ""), "url": f"/staff/funds/{r.pk}/"})
+    if user.has_cap("voucher.prepare"):
+        from workflow.models import FundsRequest
+
+        for r in FundsRequest.objects.alive().filter(status=FundsRequest.Status.PENDING_PAYMENT)[:50]:
+            items.append({"kind": "Request for funds", "ref": r.reference, "text": f"{r.title} – {r.currency} {r.total:,.2f}",
+                          "stage": "Prepare payment voucher", "url": f"/staff/funds/{r.pk}/"})
     if user.has_cap("receipt.void_approve"):
         for r in Receipt.objects.alive().filter(status=Receipt.Status.VOID_REQUESTED).exclude(void_requested_by=user)[:50]:
             items.append({"kind": "Receipt void", "ref": r.number, "text": r.void_reason, "stage": "Approve void", "url": f"/staff/finance/receipts/{r.pk}/"})
@@ -110,6 +121,11 @@ def dashboard(request):
     ctx["requests_overdue"] = ctx["requests_open"].filter(due_at__lt=timezone.now()).count()
     ctx["complaints_open_count"] = ctx["complaints_open"].count()
     ctx["requests_open_count"] = ctx["requests_open"].count()
+    from workflow import funds as fr
+    from workflow.models import FundsRequest
+
+    ctx["my_funds"] = [{"obj": r, "where": fr.where_now(r)} for r in FundsRequest.objects.alive().filter(
+        requested_by=user, status__in=FundsRequest.OPEN + ("RETURNED",))[:8]]
     if user.has_cap("finance.view_all", "finance.view"):
         ctx["fin"] = finance_kpis()
     if user.has_cap("projects.view"):

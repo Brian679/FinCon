@@ -77,6 +77,13 @@ sealed interface Screen {
     data class TicketDetail(val id: String) : Screen
     data object NewTicket : Screen
     data object Policies : Screen
+    // requests for funds & memos between departments
+    data object Funds : Screen
+    data class FundsDetail(val id: String) : Screen
+    data object NewFunds : Screen
+    data object Memos : Screen
+    data class MemoDetail(val id: String) : Screen
+    data object NewMemo : Screen
 }
 
 /** Everything a screen needs. */
@@ -172,5 +179,11 @@ fun CouncilRouter(ctx: Ctx) {
         is Screen.TicketDetail -> TicketDetailScreen(ctx, s.id)
         Screen.NewTicket -> NewTicketScreen(ctx)
         Screen.Policies -> PoliciesScreen(ctx)
+        Screen.Funds -> FundsScreen(ctx)
+        is Screen.FundsDetail -> FundsDetailScreen(ctx, s.id)
+        Screen.NewFunds -> NewFundsScreen(ctx)
+        Screen.Memos -> MemosScreen(ctx)
+        is Screen.MemoDetail -> MemoDetailScreen(ctx, s.id)
+        Screen.NewMemo -> NewMemoScreen(ctx)
     }
 }

@@ -494,6 +494,7 @@ def decide_voucher(user, voucher, approve: bool, comment=""):
         voucher.save()
         _record(voucher, label, "REJECTED", user, comment)
         notify([voucher.prepared_by], f"Voucher {voucher.number} rejected", comment)
+        _funds_follow(voucher, user)
         return voucher
     if voucher.status == PaymentVoucher.Status.PREPARED and voucher.budget_line_id:
         # Funds check excludes this voucher's own commitment.
@@ -509,7 +510,14 @@ def decide_voucher(user, voucher, approve: bool, comment=""):
         notify(users_with_cap("voucher.authorise"), f"Voucher {voucher.number} (${voucher.base_amount}) needs CEO authorisation")
     if voucher.is_ready_for_payment:
         notify([voucher.prepared_by] + users_with_cap("voucher.pay", "FINANCE"), f"Voucher {voucher.number} ready for payment")
+    _funds_follow(voucher, user)
     return voucher
+
+
+def _funds_follow(voucher, user):
+    from workflow.funds import voucher_changed
+
+    voucher_changed(voucher, user)
 
 
 @transaction.atomic
@@ -534,6 +542,7 @@ def pay_voucher(user, voucher, *, bank_account, payment_reference):
         po = voucher.purchase_order
         po.status = PurchaseOrder.Status.PAID
         po.save()
+    _funds_follow(voucher, user)
     return voucher
 
 

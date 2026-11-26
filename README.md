@@ -71,6 +71,35 @@ What a user sees and can do is decided by their **role**, which belongs to a dep
 Roles map to *capabilities* in one file (`backend/accounts/roles.py`), so changing who may do what is a one-line change.
 The same rules are enforced on the website, the API and the mobile sync.
 
+**Each department only sees its own work.** A Technical Services officer sees Technical Services registers (projects,
+building plans, their department's assets) and nothing from Finance, Social Services or Administration – the menus hide
+them, the pages return *403 Access denied* and the phone never downloads them. The CEO sees every department; Internal
+Audit has read-only oversight of every department (that is its job). Everyone shares a **My work** area for links
+*between* departments:
+
+* **Memos to / from departments** – send a message, a request for action or an item for information to another
+  department (its Head, or a named officer). The receiving Head can reply or turn it into a task for one of their
+  officers; the sender is told when the task is done.
+* **Tasks** – Heads can send a task to another department; it goes to that department's Head.
+* **Requests for funds & purchases** and **purchase requisitions** (below), leave and the ICT helpdesk.
+
+### Requests for funds & purchases
+Any officer can ask for money or a purchase – travel & subsistence (T&S), a cash advance / imprest, goods or
+services, fuel, training / workshop fees, repairs – with all the details (purpose, travel dates and destination,
+officers travelling, line items with quantities and rates, how to be paid, supporting document). The request then goes:
+
+1. **Head of Department** → 2. **Administration Officer** → 3. **Treasurer** → 4. **CEO** →
+5. **payment voucher**: Finance prepares it, the Accountant checks it, the **Treasurer approves the payment again**
+   (and the CEO authorises it when it is above the threshold) and the cashier pays →
+6. the requester is told it is **paid / complete**.
+
+At every step the next approvers get a notification (in the app and by e-mail) and the requester is told where the
+request has gone. Approvers can **approve, return for changes or reject** (with a reason). The request page shows a
+**"Where is this request now?"** tracker – each stage, who holds it and for how many days – and the requester (or their
+Head) can **send a reminder** to whoever is holding it (once a day). No one can approve their own request or approve
+twice; a stage is recorded as "not needed" when the approver for it already approved as Head of Department (e.g. the
+Treasurer's own officers). Everything works from the phone too, offline included.
+
 ### Restricted administration page
 `/system-admin/` is the low-level administration site. Only the ICT / System Administrator (superuser) can open it –
 even the CEO is refused. Financial transactions are **read-only** there; they can only be created through the

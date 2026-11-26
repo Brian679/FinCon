@@ -104,10 +104,11 @@ class ExpenditureTests(CouncilTestCase):
         services.decide_voucher(self.user("treasurer"), v, True)
         v.refresh_from_db()
         self.assertTrue(v.is_ready_for_payment)
+        before = self.usd_bank.balance()
         services.pay_voucher(self.user("exp.clerk"), v, bank_account=self.usd_bank, payment_reference="RTGS001")
         v.refresh_from_db()
         self.assertEqual(v.status, PaymentVoucher.Status.PAID)
-        self.assertEqual(self.usd_bank.balance(), Decimal("99500.00"))
+        self.assertEqual(before - self.usd_bank.balance(), Decimal("500.00"))
         self.assertEqual(BudgetLine.objects.get(vote_code="E-210").actual(), Decimal("500.00"))
 
     @override_settings(CEO_APPROVAL_THRESHOLD=1000)

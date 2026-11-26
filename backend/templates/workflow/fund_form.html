@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p class="help">Department: <strong>{{ user.get_department_display }}</strong>. It goes to your Head of Department, then the Administration Officer, the Treasurer and the CEO; Finance then pays it. You can follow it and send reminders.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+{% if form.non_field_errors %}<p class="errornote">{% for e in form.non_field_errors %}{{ e }} {% endfor %}</p>{% endif %}
+{% for gtitle, fields in form.groups %}
+<fieldset class="module aligned"><h2>{{ gtitle }}</h2>
+{% for field in fields %}
+  <div class="form-row field-{{ field.name }}{% if field.errors %} errors{% endif %}">
+    {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    <div>{% if field.field.widget.input_type == 'checkbox' %}<div class="flex-container checkbox-row">{{ field }}<label class="vCheckboxLabel" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+    {% else %}<div class="flex-container"><label{% if field.field.required %} class="required"{% endif %} for="{{ field.id_for_label }}">{{ field.label }}:</label>{{ field }}</div>{% endif %}
+    {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}</div>
+  </div>
+{% endfor %}
+</fieldset>
+{% endfor %}
+<div class="module"><h2>What you need – lines (e.g. "Subsistence – 3 days × $30", "Accommodation – 2 nights × $60", "Toner × 3")</h2>
+{{ formset.management_form }}
+{% for e in formset.non_form_errors %}<p class="errornote">{{ e }}</p>{% endfor %}
+<table class="w-100"><thead><tr><th>Description</th><th style="width:110px">Qty / days</th><th style="width:150px">Rate / unit cost</th><th style="width:70px">Remove</th></tr></thead>
+{% for f in formset %}<tr>{% for h in f.hidden_fields %}{{ h }}{% endfor %}<td>{{ f.description }}{{ f.description.errors }}</td><td>{{ f.quantity }}{{ f.quantity.errors }}</td><td>{{ f.unit_cost }}{{ f.unit_cost.errors }}</td><td>{% if f.DELETE %}{{ f.DELETE }}{% endif %}</td></tr>{% endfor %}
+</table></div>
+<div class="submit-row">
+  <input type="submit" class="default" name="submit" value="Save & submit for approval">
+  <input type="submit" name="save" value="Save draft">
+  <a href="{% url 'workflow:funds' %}" class="closelink">Cancel</a>
+</div>
+</form>
+{% endblock %}
