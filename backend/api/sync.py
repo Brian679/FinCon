@@ -702,6 +702,7 @@ def op_payslip_pay(user, p):
 
 
 STAFF_OPS = {
+    "licence.apply": op_licence_apply,      # Finance captures applications at the counter / in the field
     "salary.update": op_salary_update,
     "payroll.run": op_payroll_run,
     "payroll.approve": op_payroll_approve,

@@ -236,7 +236,7 @@ fun Kpi(label: String, value: String, sub: String? = null, color: Color = CrdcCo
         Box(Modifier.fillMaxWidth().height(3.dp).background(rule))
         Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
             Text(label.uppercase(), fontSize = 10.sp, letterSpacing = 0.3.sp, color = CrdcColors.Muted, maxLines = 2, lineHeight = 13.sp)
-            Text(value, fontSize = 21.sp, color = if (color == CrdcColors.Danger) CrdcColors.Danger else CrdcColors.Body)
+            Text(value, fontSize = if (value.length > 7) 16.sp else 21.sp, maxLines = 1, softWrap = false, color = if (color == CrdcColors.Danger) CrdcColors.Danger else CrdcColors.Body)
             if (sub != null) Text(sub, fontSize = 11.sp, color = CrdcColors.Muted, maxLines = 1)
         }
     }

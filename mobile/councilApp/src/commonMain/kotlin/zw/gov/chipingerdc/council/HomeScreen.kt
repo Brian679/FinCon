@@ -88,7 +88,7 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("areas.view", "accounts.manage")) add(Tile("Areas overview – shops paid / owing", Screen.Areas))
         if (me.can("claims.review")) add(Tile("Stand registrations", Screen.Claims))
         if (me.can("leases.view", "leases.manage")) add(Tile("Leases", Screen.Leases))
-        if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
+        if (me.can("licence.view")) add(Tile("Licences", Screen.Licences, add = if (me.can("licence.manage")) Screen.NewLicence else null))
         if (me.can("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "voucher.pay", "finance.view_all"))
             add(Tile("Payment vouchers", Screen.Vouchers, add = if (me.can("voucher.prepare")) Screen.NewVoucher(null) else null))
         if (me.can("payroll.view", "payroll.manage")) {
@@ -170,11 +170,15 @@ fun HomeScreen(ctx: Ctx) {
             Text(me.departmentLabel, fontSize = 13.sp, color = CrdcColors.Muted)
             // 1. key figures – only facts that are not listed again below
             val figures = buildList<@Composable (Modifier) -> Unit> {
-                if (me.can("receipt.create")) add { m ->
+                if (me.can("finance.view_all")) add { m ->
+                    val all = receipts.filter { it.createdAt.startsWith(today) && it.status != "VOIDED" }
+                    val usd = all.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+                    Kpi("Council collected today", "$${money(usd.toString())}", "${all.size} receipt(s)", CrdcColors.Success, m) { ctx.go(Screen.Receipts) }
+                } else if (me.can("receipt.create")) add { m ->
                     val usd = myToday.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
                     Kpi("My collections today", "$${money(usd.toString())}", "${myToday.size} receipt(s)", modifier = m) { ctx.go(Screen.Receipts) }
                 }
-                add { m -> Kpi("Faults / service requests", openFaults.size.toString(), "${openFaults.count { isPast(it.dueAt) }} past charter time", CrdcColors.Blue, m) { ctx.go(Screen.Requests) } }
+                add { m -> Kpi("Faults / service requests", openFaults.size.toString(), "${openFaults.count { isPast(it.dueAt) }} overdue", CrdcColors.Blue, m) { ctx.go(Screen.Requests) } }
                 if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || openComplaints.isNotEmpty()) add { m ->
                     Kpi("Complaints to handle", openComplaints.size.toString(), "${openComplaints.count { it.acknowledgedAt == null }} not acknowledged", CrdcColors.Danger, m) { ctx.go(Screen.Complaints) }
                 }

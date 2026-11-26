@@ -262,7 +262,7 @@ class ExecutiveView(AuditActorMixin, APIView):
             "collected_today": str(fin_k["today"]["t"] or 0), "collected_month": str(fin_k["month"]["t"] or 0),
             "paid_out_month": str(fin_k["paid_out_month"]), "debtors": str(fin_k["debtors"]["t"] or 0), "overdue_bills": fin_k["overdue_bills"],
             "charter": [{"label": "Complaints acknowledged within 48 hours", "pct": pct(len(acked), comp.count()), "count": comp.count()},
-                        {"label": "Service requests resolved within charter time", "pct": pct(len(in_time), reqs.count()), "count": reqs.count()}],
+                        {"label": "Service requests resolved on time", "pct": pct(len(in_time), reqs.count()), "count": reqs.count()}],
             "departments": rows,
         })
 

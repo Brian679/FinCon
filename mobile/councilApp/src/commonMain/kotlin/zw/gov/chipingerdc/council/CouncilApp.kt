@@ -130,6 +130,7 @@ sealed interface Screen {
     data class SalaryEdit(val employeeId: Long) : Screen
     data object Arrears : Screen
     data object TaxTables : Screen
+    data object NewLicence : Screen
 }
 
 /** Everything a screen needs. */
@@ -150,7 +151,7 @@ fun CouncilApp(sdk: CouncilSdk) {
         val me by sdk.user.collectAsState()
         val user = me
         if (user == null) {
-            LoginScreen(sdk, "Council staff app – Client Charter 2026-2030",
+            LoginScreen(sdk, "Council staff app",
                 "Staff accounts are issued by the ICT administrator. Work done offline syncs automatically.")
             return@CouncilTheme
         }
@@ -309,5 +310,6 @@ private fun CouncilScreens(ctx: Ctx) {
         is Screen.SalaryEdit -> SalaryEditScreen(ctx, s.employeeId)
         Screen.Arrears -> ArrearsScreen(ctx)
         Screen.TaxTables -> TaxTablesScreen(ctx)
+        Screen.NewLicence -> NewLicenceScreen(ctx)
     }
 }

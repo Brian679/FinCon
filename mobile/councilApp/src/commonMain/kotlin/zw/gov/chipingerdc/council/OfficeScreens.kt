@@ -281,7 +281,7 @@ fun CorrespondenceScreen(ctx: Ctx) {
     AppScreen("Correspondence register", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         PrimaryButton("+ Record incoming letter", onClick = { ctx.go(Screen.NewCorrespondence) })
         ListScreen {
-            item { InfoBox("Client Charter: letters are answered within 7 working days.") }
+            item { InfoBox("Letters are answered within 7 working days.") }
             if (list.isEmpty()) item { Empty("No letters.") }
             items(list, key = { it.id }) { c ->
                 val late = c.status in listOf("RECEIVED", "ASSIGNED") && zw.gov.chipingerdc.shared.ui.isPast(c.responseDue)
@@ -442,7 +442,7 @@ fun ExecutiveScreen(ctx: Ctx) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Kpi("Debtors", "$${money(d.str("debtors"))}", "${d.str("overdue_bills")} overdue bills", CrdcColors.Danger, Modifier.weight(1f))
         }
-        SectionCard("Client Charter – last 90 days") {
+        SectionCard("Service standards – last 90 days") {
             d.rows("charter").forEach { r ->
                 val pct = r["pct"]?.jsonPrimitive?.intOrNull
                 KeyValue(r.str("label"), (pct?.let { "$it%" } ?: "—") + " of ${r.str("count")}")

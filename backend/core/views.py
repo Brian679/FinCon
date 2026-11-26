@@ -179,7 +179,7 @@ def executive(request):
         "approvals": pending_approvals(request.user),
         "charter": [
             ("Complaints acknowledged within 48 hours", pct(acked_in_time, complaints.count()), complaints.count()),
-            ("Service requests resolved within charter time", pct(resolved_in_time, resolved.count()), resolved.count()),
+            ("Service requests resolved on time", pct(resolved_in_time, resolved.count()), resolved.count()),
             ("Correspondence answered within 7 working days", pct(corr_in_time, corr.count()), corr.count()),
         ],
         "departments": departments,
