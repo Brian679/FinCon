@@ -4,7 +4,9 @@
 <ul class="object-tools">
   <li><a href="{% url 'payroll:salaries' %}">Salaries</a></li>
   <li><a href="{% url 'payroll:arrears' %}">Salaries owed</a></li>
+  <li><a href="{% url 'payroll:tax' %}">PAYE tax tables</a></li>
 </ul>
+{% if tax_unconfirmed %}<p class="errornote">&#9888; The PAYE table has not yet been checked against ZIMRA's published table – <a href="{% url 'payroll:tax' %}">check it before paying salaries</a>.</p>{% endif %}
 <form method="get" class="mb-2"><label>Month: <input type="month" name="period" value="{{ period }}" class="form-control d-inline-block" style="width:auto"></label> <button class="btn btn-sm btn-outline-primary">Show</button></form>
 <div class="row g-3 mb-3">
   <div class="col-6 col-lg-2"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="small text-muted">Payslips</div><div class="value">{{ sum.count }}</div><div class="small">{{ sum.drafts }} draft</div></div></div></div>

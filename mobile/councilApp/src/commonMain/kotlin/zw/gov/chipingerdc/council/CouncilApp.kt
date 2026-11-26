@@ -129,6 +129,7 @@ sealed interface Screen {
     data object Salaries : Screen
     data class SalaryEdit(val employeeId: Long) : Screen
     data object Arrears : Screen
+    data object TaxTables : Screen
 }
 
 /** Everything a screen needs. */
@@ -307,5 +308,6 @@ private fun CouncilScreens(ctx: Ctx) {
         Screen.Salaries -> SalariesScreen(ctx)
         is Screen.SalaryEdit -> SalaryEditScreen(ctx, s.employeeId)
         Screen.Arrears -> ArrearsScreen(ctx)
+        Screen.TaxTables -> TaxTablesScreen(ctx)
     }
 }

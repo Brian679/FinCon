@@ -136,6 +136,7 @@ def staff_entities(user):
         "funds_requests": (wf.funds_scope(user, FundsRequest.objects.select_related("requested_by", "voucher").prefetch_related("lines")),
                            s.FundsRequestSerializer),
         "memos": (wf.memo_scope(user, Memo.objects.select_related("sender", "to_user").prefetch_related("replies__author")), s.MemoSerializer),
+        "tax_tables": (s.TaxTable.objects.prefetch_related("bands"), s.TaxTableSerializer) if c("payroll.view", "payroll.manage") else None,
         "salary_profiles": (pr.salary_scope(user, s.SalaryProfile.objects.select_related("employee")), s.SalaryProfileSerializer),
         "payslips": (pr.payslip_scope(user, s.Payslip.objects.exclude(status="DRAFT") if not pr.can_view_payroll(user) else s.Payslip.objects.all())
                      .select_related("employee").prefetch_related("payments"), s.PayslipSerializer),

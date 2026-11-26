@@ -15,9 +15,25 @@ from .models import Payslip, SalaryPayment, SalaryProfile
 
 User = get_user_model()
 FIELDS = ["grade", "currency", "basic_salary", "housing_allowance", "transport_allowance", "other_allowances", "paye", "nssa", "pension",
-          "medical_aid", "other_deductions", "payment_method", "bank_name", "bank_account", "is_active", "notes"]
+          "medical_aid", "other_deductions", "payment_method", "bank_name", "bank_account", "is_active", "notes", "auto_tax", "tax_credits"]
 MONEY_FIELDS = {"basic_salary", "housing_allowance", "transport_allowance", "other_allowances", "paye", "nssa", "pension", "medical_aid",
-                "other_deductions"}
+                "other_deductions", "tax_credits"}
+
+
+def apply_tax(profile, on=None):
+    """Work out PAYE and NSSA from the ZIMRA table in force (when the profile is on automatic tax)."""
+    from .tax import calculate
+
+    if not profile.auto_tax:
+        profile.taxable_income = profile.income_tax = profile.aids_levy = Decimal("0.00")
+        return None
+    try:
+        r = calculate(profile.gross, pension=profile.pension, credits=profile.tax_credits, currency=profile.currency, on=on)
+    except ValueError as exc:
+        raise ValidationError(str(exc))
+    profile.paye, profile.nssa = r.paye, r.nssa
+    profile.taxable_income, profile.income_tax, profile.aids_levy = r.taxable, r.income_tax, r.aids_levy
+    return r
 
 
 def can_view_payroll(user):
@@ -47,7 +63,10 @@ def update_salary(user, employee, **data):
             v = Decimal(str(v or 0)).quantize(Decimal("0.01"))
             if v < 0:
                 raise ValidationError(f"{k.replace('_', ' ').capitalize()} cannot be negative.")
+        if k in ("auto_tax", "is_active") and isinstance(v, str):
+            v = v.lower() in ("1", "true", "on", "yes")
         setattr(profile, k, v)
+    apply_tax(profile)
     if profile.net < 0:
         raise ValidationError("Deductions are larger than the gross salary.")
     profile.save()
@@ -60,12 +79,17 @@ def run_payroll(user, year: int, month: int):
     _require(user, "payroll.manage")
     if not (1 <= int(month) <= 12):
         raise ValidationError("Choose a month.")
+    from datetime import date
+
     made = 0
+    first_day = date(int(year), int(month), 1)
     for p in SalaryProfile.objects.alive().filter(is_active=True, employee__is_active=True).select_related("employee"):
         if Payslip.objects.filter(employee=p.employee, year=year, month=month).exists():
             continue
+        r = apply_tax(p, on=first_day)      # the ZIMRA table in force for that month
         Payslip.objects.create(employee=p.employee, year=year, month=month, currency=p.currency, grade=p.grade, basic_salary=p.basic_salary,
                                allowances=p.allowances, gross=p.gross, paye=p.paye, nssa=p.nssa, pension=p.pension,
+                               taxable_income=p.taxable_income, income_tax=p.income_tax, aids_levy=p.aids_levy, tax_table=r.table if r else "entered by Finance",
                                other_deductions=p.medical_aid + p.other_deductions, net=p.net, created_by=user)
         made += 1
     if made:

@@ -93,6 +93,7 @@ fun CouncilMenu(ctx: Ctx) {
             add(Tile("Payment vouchers", Screen.Vouchers, add = if (me.can("voucher.prepare")) Screen.NewVoucher(null) else null))
         if (me.can("payroll.view", "payroll.manage")) {
             add(Tile("Payroll", Screen.Payroll)); add(Tile("Salaries", Screen.Salaries)); add(Tile("Salaries owed to staff", Screen.Arrears))
+            add(Tile("PAYE tax tables", Screen.TaxTables))
         }
         if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
         if (me.can("finance.reports", "reports.executive")) add(Tile("Financial reports", Screen.FinanceReport))

@@ -125,7 +125,17 @@ Finance keeps each employee's salary (grade, basic, allowances, PAYE, NSSA, pens
 bank details) – nobody can change their own salary and every change is in the audit trail. Each month Finance prepares the
 payslips, the Treasurer approves them (never the person who prepared them; the Treasurer's own payslip is approved by the
 CEO), and payments are recorded in full or in part. *Salaries owed to staff* shows how much the council still owes each
-person. Employees see their own payslips and are notified when paid. Annual leave cannot exceed the days left, and leave
+person. Employees see their own payslips and are notified when paid.
+
+**PAYE is worked out automatically** from the ZIMRA PAYE table in force for the month (*Finance → PAYE tax tables*):
+taxable income = gross − pension (up to the allowed maximum) − NSSA; each slice of taxable income is taxed at its band's
+rate; tax credits are subtracted; the 3 % AIDS levy is added. NSSA is 4.5 % of pay up to the insurable earnings ceiling.
+The bands, rates and limits are **data, not code**: the Treasurer enters ZIMRA's table (and a new one when ZIMRA changes it,
+with its effective date) and ticks "Checked against ZIMRA's published table". The system starts with the commonly
+published USD monthly table (0 % to $100, 20 % to $300, 25 % to $1 000, 30 % to $2 000, 35 % to $3 000, 40 % above;
+AIDS levy 3 %; NSSA 4.5 % to $700; pension up to $450) **marked as not yet checked** – confirm it against zimra.co.zw
+before the first live payroll. Each payslip shows taxable income, income tax, AIDS levy and which table was used; PAYE can
+be switched to manual for an individual where needed. Annual leave cannot exceed the days left, and leave
 applications cannot overlap.
 
 ### Complaints are confidential

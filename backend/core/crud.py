@@ -79,6 +79,7 @@ class BootstrapFormMixin:
                 w.attrs.setdefault("class", "form-control")
             if isinstance(w, forms.DateInput):
                 w.input_type = "date"
+                w.format = "%Y-%m-%d"      # browsers' date pickers only accept ISO dates when editing
             if isinstance(w, forms.Textarea):
                 w.attrs.setdefault("rows", 3)
 
@@ -88,7 +89,7 @@ class BaseModelForm(BootstrapFormMixin, forms.ModelForm):
 
 
 def date_widgets(*names):
-    return {n: forms.DateInput(attrs={"type": "date"}) for n in names}
+    return {n: forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d") for n in names}
 
 
 class GenericListView(CapRequiredMixin, ListView):

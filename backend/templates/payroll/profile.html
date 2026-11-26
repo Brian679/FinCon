@@ -31,6 +31,7 @@
       <tr><td>Basic salary</td><td class="text-end">{{ salary.currency }} {{ salary.basic_salary|floatformat:2|intcomma }}</td></tr>
       <tr><td>Allowances</td><td class="text-end">{{ salary.allowances|floatformat:2|intcomma }}</td></tr>
       <tr><td><strong>Gross</strong></td><td class="text-end"><strong>{{ salary.gross|floatformat:2|intcomma }}</strong></td></tr>
+      {% if salary.auto_tax %}<tr><td class="small quiet" colspan="2">PAYE worked out from the ZIMRA table: taxable income {{ salary.taxable_income|floatformat:2 }}, income tax {{ salary.income_tax|floatformat:2 }} + AIDS levy {{ salary.aids_levy|floatformat:2 }}</td></tr>{% endif %}
       <tr><td>Deductions (PAYE {{ salary.paye|floatformat:2 }}, NSSA {{ salary.nssa|floatformat:2 }}, pension {{ salary.pension|floatformat:2 }}, other {{ salary.medical_aid|add:salary.other_deductions|floatformat:2 }})</td><td class="text-end">− {{ salary.deductions|floatformat:2|intcomma }}</td></tr>
       <tr><td><strong>Net pay a month</strong></td><td class="text-end"><strong>{{ salary.currency }} {{ salary.net|floatformat:2|intcomma }}</strong></td></tr>
       <tr><td>Paid into</td><td class="text-end">{{ salary.get_payment_method_display }} {{ salary.bank_name }} {{ salary.bank_account }}</td></tr>

@@ -46,6 +46,7 @@ object Entities {
     const val CORRESPONDENCE = "correspondence"
     const val SALARY_PROFILES = "salary_profiles"
     const val PAYSLIPS = "payslips"
+    const val TAX_TABLES = "tax_tables"
 }
 
 @Serializable
@@ -352,7 +353,9 @@ data class SalaryProfile(val id: String, val employeeId: Long = 0, val employeeN
                          val transportAllowance: String = "0", val otherAllowances: String = "0", val paye: String = "0", val nssa: String = "0",
                          val pension: String = "0", val medicalAid: String = "0", val otherDeductions: String = "0", val paymentMethod: String = "EFT",
                          val bankName: String = "", val bankAccount: String = "", val isActive: Boolean = true, val allowances: String = "0",
-                         val gross: String = "0", val deductions: String = "0", val net: String = "0", val localNote: String? = null)
+                         val gross: String = "0", val deductions: String = "0", val net: String = "0", val autoTax: Boolean = true,
+                         val taxCredits: String = "0", val taxableIncome: String = "0", val incomeTax: String = "0", val aidsLevy: String = "0",
+                         val localNote: String? = null)
 
 @Serializable
 data class SalaryPaymentLine(val amount: String = "0", val method: String = "", val reference: String = "", val paidOn: String = "", val paidBy: String = "")
@@ -361,6 +364,7 @@ data class SalaryPaymentLine(val amount: String = "0", val method: String = "", 
 data class Payslip(val id: String, val reference: String = "", val employeeId: Long = 0, val employeeName: String = "", val department: String = "",
                    val year: Int = 0, val month: Int = 0, val period: String = "", val currency: String = "USD", val grade: String = "",
                    val basicSalary: String = "0", val allowances: String = "0", val gross: String = "0", val paye: String = "0", val nssa: String = "0",
+                   val taxableIncome: String = "0", val incomeTax: String = "0", val aidsLevy: String = "0", val taxTable: String = "",
                    val pension: String = "0", val otherDeductions: String = "0", val net: String = "0", val amountPaid: String = "0",
                    val balance: String = "0", val status: String = "", val statusLabel: String = "", val approvedAt: String? = null,
                    val payments: List<SalaryPaymentLine> = emptyList(), val localNote: String? = null)

@@ -703,3 +703,52 @@ class PayrollProfileComplaintTests(CouncilTestCase):
         self.assertFalse(scope("cashier"))
         with self.assertRaises(PermissionDenied):
             wf.act_on_complaint(self.user("accountant"), c, "transfer", department="ADMIN")
+
+
+class PayeTests(CouncilTestCase):
+    def test_paye_from_the_tax_table(self):
+        from payroll.tax import calculate
+
+        r = calculate(Decimal("1230"), pension=Decimal("73.80"))
+        # taxable = 1230 − 73.80 pension − 31.50 NSSA (4.5% of the 700 ceiling)
+        self.assertEqual(r.nssa, Decimal("31.50"))
+        self.assertEqual(r.taxable, Decimal("1124.70"))
+        # same as ZIMRA's "rate × income − deduct" method: 30% × 1124.70 − 85
+        self.assertEqual(r.income_tax, Decimal("252.41"))
+        self.assertEqual(r.aids_levy, Decimal("7.57"))
+        self.assertEqual(r.paye, Decimal("259.98"))
+        self.assertEqual(calculate(Decimal("100")).paye, Decimal("0.00"))
+        self.assertEqual(calculate(Decimal("5000"), pension=Decimal("900")).pension_allowed, Decimal("450.00"))
+        self.assertEqual(calculate(Decimal("1000"), credits=Decimal("50")).income_tax, calculate(Decimal("1000")).income_tax - 50)
+
+    def test_salary_and_payslip_use_automatic_paye(self):
+        from payroll import services as pr
+        from payroll.models import Payslip, TaxBand
+        from payroll.tax import table_for
+
+        p = pr.update_salary(self.user("treasurer"), self.user("eho"), basic_salary="1000", housing_allowance="150", transport_allowance="80",
+                             pension="60", paye="1", nssa="1")
+        # taxable 1230 − 60 − 31.50 = 1138.50 → 30% × 1138.50 − 85 = 256.55 + AIDS levy 7.70; typed-in PAYE is ignored
+        self.assertEqual(p.paye, Decimal("264.25"))
+        self.assertEqual(p.nssa, Decimal("31.50"))
+        manual = pr.update_salary(self.user("treasurer"), self.user("eho"), auto_tax=False, paye="200", nssa="20")
+        self.assertEqual(manual.paye, Decimal("200.00"))
+        pr.update_salary(self.user("treasurer"), self.user("eho"), auto_tax=True)
+        # a band change by the Treasurer is used by the next payroll
+        TaxBand.objects.filter(table=table_for("USD"), rate=Decimal("30")).update(rate=Decimal("31"))
+        pr.run_payroll(self.user("accountant"), 2032, 1)
+        slip = Payslip.objects.get(employee=self.user("eho"), year=2032, month=1)
+        self.assertGreater(slip.paye, Decimal("264.25"))
+        self.assertEqual(slip.paye, slip.income_tax + slip.aids_levy)
+        self.assertIn("ZIMRA", slip.tax_table)
+
+    def test_tax_table_page(self):
+        c = Client()
+        c.login(username="treasurer", password=PW)
+        page = c.get("/staff/finance/payroll/tax/?gross=1230&pension=73.80")
+        self.assertContains(page, "259.98")
+        self.assertContains(page, "not yet been checked")
+        c.login(username="accountant", password=PW)
+        self.assertEqual(c.get("/staff/finance/payroll/tax/").status_code, 200)
+        r = c.post("/staff/finance/payroll/tax/", {"action": "save"})
+        self.assertEqual(r.status_code, 403)

@@ -34,6 +34,12 @@ class SalaryProfile(SyncModel):
     pension = models.DecimalField("Pension (LAPF)", **MONEY, default=ZERO)
     medical_aid = models.DecimalField(**MONEY, default=ZERO)
     other_deductions = models.DecimalField(**MONEY, default=ZERO, help_text="Loans, union dues …")
+    auto_tax = models.BooleanField("Work out PAYE and NSSA from the ZIMRA tables", default=True)
+    tax_credits = models.DecimalField("Tax credits a month", **MONEY, default=ZERO,
+                                      help_text="Elderly / blind / disabled person credits allowed by ZIMRA")
+    taxable_income = models.DecimalField(**MONEY, default=ZERO, editable=False)
+    income_tax = models.DecimalField(**MONEY, default=ZERO, editable=False)
+    aids_levy = models.DecimalField(**MONEY, default=ZERO, editable=False)
     payment_method = models.CharField(max_length=6, choices=Method.choices, default=Method.EFT)
     bank_name = models.CharField(max_length=120, blank=True)
     bank_account = models.CharField("Account / mobile number", max_length=60, blank=True)
@@ -81,6 +87,10 @@ class Payslip(SyncModel):
     allowances = models.DecimalField(**MONEY, default=ZERO)
     gross = models.DecimalField(**MONEY, default=ZERO)
     paye = models.DecimalField(**MONEY, default=ZERO)
+    taxable_income = models.DecimalField(**MONEY, default=ZERO)
+    income_tax = models.DecimalField(**MONEY, default=ZERO)
+    aids_levy = models.DecimalField(**MONEY, default=ZERO)
+    tax_table = models.CharField(max_length=160, blank=True)
     nssa = models.DecimalField(**MONEY, default=ZERO)
     pension = models.DecimalField(**MONEY, default=ZERO)
     other_deductions = models.DecimalField(**MONEY, default=ZERO, help_text="Medical aid, loans, union dues …")
@@ -134,3 +144,40 @@ class SalaryPayment(SyncModel):
 
     def __str__(self):
         return f"{self.payslip.reference}: {self.amount}"
+
+
+class TaxTable(SyncModel):
+    """ZIMRA PAYE table for one currency from a date (monthly amounts), plus the AIDS levy,
+    NSSA and pension rules used to work out each employee's tax. The Treasurer keeps it up to date
+    from the tables ZIMRA publishes; payroll always uses the table in force for the month."""
+
+    name = models.CharField(max_length=120)
+    currency = models.CharField(max_length=3, default="USD", choices=[("USD", "USD"), ("ZWG", "ZWG")])
+    effective_from = models.DateField()
+    aids_levy_rate = models.DecimalField("AIDS levy (% of tax)", max_digits=5, decimal_places=2, default=Decimal("3.00"))
+    nssa_rate = models.DecimalField("NSSA employee rate (%)", max_digits=5, decimal_places=2, default=Decimal("4.50"))
+    nssa_ceiling = models.DecimalField("NSSA insurable earnings ceiling (a month)", **MONEY, default=Decimal("700.00"))
+    pension_cap = models.DecimalField("Pension deductible for tax (max a month)", **MONEY, default=Decimal("450.00"))
+    confirmed = models.BooleanField("Checked against ZIMRA's published table", default=False)
+    source = models.CharField(max_length=255, blank=True, help_text="e.g. ZIMRA USD PAYE tables Jan–Dec 2026")
+
+    class Meta:
+        ordering = ["currency", "-effective_from"]
+
+    def __str__(self):
+        return f"{self.name} ({self.currency}, from {self.effective_from:%d %b %Y})"
+
+
+class TaxBand(models.Model):
+    """One band of the monthly table: income from `lower` up to `upper` is taxed at `rate` %."""
+
+    table = models.ForeignKey(TaxTable, on_delete=models.CASCADE, related_name="bands")
+    lower = models.DecimalField("From (a month)", **MONEY)
+    upper = models.DecimalField("To (a month)", **MONEY, null=True, blank=True, help_text="Blank for the top band")
+    rate = models.DecimalField("Rate %", max_digits=5, decimal_places=2)
+
+    class Meta:
+        ordering = ["lower"]
+
+    def __str__(self):
+        return f"{self.lower}–{self.upper or '∞'} @ {self.rate}%"

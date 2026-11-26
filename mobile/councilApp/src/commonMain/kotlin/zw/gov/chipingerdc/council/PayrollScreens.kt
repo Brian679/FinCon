@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -28,6 +30,9 @@ import zw.gov.chipingerdc.shared.model.LeaveRequest
 import zw.gov.chipingerdc.shared.model.Payslip
 import zw.gov.chipingerdc.shared.model.SalaryProfile
 import zw.gov.chipingerdc.shared.model.StaffMember
+import zw.gov.chipingerdc.shared.model.TaxTable
+import zw.gov.chipingerdc.shared.model.calculatePaye
+import zw.gov.chipingerdc.shared.model.inForce
 import zw.gov.chipingerdc.shared.ui.ActionPanel
 import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.ChoicePicker
@@ -173,7 +178,8 @@ fun PayslipDetailScreen(ctx: Ctx, id: String) {
                 KeyValue("Basic salary", money(s.basicSalary))
                 KeyValue("Allowances", money(s.allowances))
                 KeyValue("Gross pay", "${s.currency} ${money(s.gross)}")
-                KeyValue("PAYE", "− ${money(s.paye)}")
+                if (d(s.incomeTax) > 0) KeyValue("Taxable income", money(s.taxableIncome))
+                KeyValue("PAYE", "− ${money(s.paye)}" + if (d(s.incomeTax) > 0) " (tax ${money(s.incomeTax)} + AIDS levy ${money(s.aidsLevy)})" else "")
                 KeyValue("NSSA", "− ${money(s.nssa)}")
                 KeyValue("Pension (LAPF)", "− ${money(s.pension)}")
                 KeyValue("Medical aid, loans, other", "− ${money(s.otherDeductions)}")
@@ -232,34 +238,100 @@ fun SalariesScreen(ctx: Ctx) {
 fun SalaryEditScreen(ctx: Ctx, employeeId: Long) {
     val salaries by ctx.sdk.observe(Entities.SALARY_PROFILES, SalaryProfile.serializer()).collectAsState(initial = emptyList())
     val staff by ctx.sdk.observe(Entities.STAFF, StaffMember.serializer()).collectAsState(initial = emptyList())
+    val tables by ctx.sdk.observe(Entities.TAX_TABLES, TaxTable.serializer()).collectAsState(initial = emptyList())
     val p = salaries.firstOrNull { it.employeeId == employeeId }
     val name = p?.employeeName ?: staff.firstOrNull { it.userId == employeeId }?.fullName ?: "Employee"
-    val keys = listOf("grade" to "Grade / notch", "basic_salary" to "Basic salary", "housing_allowance" to "Housing allowance",
-        "transport_allowance" to "Transport allowance", "other_allowances" to "Other allowances", "paye" to "PAYE (from ZIMRA tables)", "nssa" to "NSSA",
-        "pension" to "Pension (LAPF)", "medical_aid" to "Medical aid", "other_deductions" to "Loans / union dues / other", "bank_name" to "Bank",
-        "bank_account" to "Account / mobile number")
+    val earnings = listOf("grade" to "Grade / notch", "basic_salary" to "Basic salary", "housing_allowance" to "Housing allowance",
+        "transport_allowance" to "Transport allowance", "other_allowances" to "Other allowances", "pension" to "Pension (LAPF)", "medical_aid" to "Medical aid",
+        "other_deductions" to "Loans / union dues / other", "bank_name" to "Bank", "bank_account" to "Account / mobile number")
     val values = remember(p?.id) {
         mutableStateMapOf<String, String>().apply {
             put("grade", p?.grade ?: ""); put("basic_salary", p?.basicSalary ?: ""); put("housing_allowance", p?.housingAllowance ?: "")
             put("transport_allowance", p?.transportAllowance ?: ""); put("other_allowances", p?.otherAllowances ?: ""); put("paye", p?.paye ?: "")
             put("nssa", p?.nssa ?: ""); put("pension", p?.pension ?: ""); put("medical_aid", p?.medicalAid ?: "")
             put("other_deductions", p?.otherDeductions ?: ""); put("bank_name", p?.bankName ?: ""); put("bank_account", p?.bankAccount ?: "")
+            put("tax_credits", p?.taxCredits ?: "0")
         }
     }
+    var auto by remember(p?.id) { mutableStateOf(p?.autoTax ?: true) }
     var saved by remember { mutableStateOf(false) }
+    val today = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).date.toString()
+    val table = tables.inForce(p?.currency ?: "USD", today)
     val gross = listOf("basic_salary", "housing_allowance", "transport_allowance", "other_allowances").sumOf { d(values[it]) }
-    val ded = listOf("paye", "nssa", "pension", "medical_aid", "other_deductions").sumOf { d(values[it]) }
+    val calc = if (auto && table != null) calculatePaye(table, gross, d(values["pension"]), d(values["tax_credits"])) else null
+    val paye = calc?.paye ?: d(values["paye"])
+    val nssa = calc?.nssa ?: d(values["nssa"])
+    val ded = paye + nssa + listOf("pension", "medical_aid", "other_deductions").sumOf { d(values[it]) }
     AppScreen("Salary – $name", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            keys.forEach { (k, label) -> Field(label, values[k] ?: "", { values[k] = it }, number = k !in listOf("grade", "bank_name", "bank_account")) }
+            earnings.forEach { (k, label) -> Field(label, values[k] ?: "", { values[k] = it }, number = k !in listOf("grade", "bank_name", "bank_account")) }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(auto, { auto = it })
+                Text("Work out PAYE and NSSA from the ZIMRA table", fontSize = 14.sp)
+            }
+            if (auto) {
+                Field("Tax credits a month (elderly / blind / disabled)", values["tax_credits"] ?: "", { values["tax_credits"] = it }, number = true)
+                if (table == null) Message("No PAYE table on this device yet – sync, or ask the Treasurer to enter ZIMRA's table.", MessageKind.WARNING)
+                calc?.let { c ->
+                    SectionCard("PAYE worked out (${table!!.name})") {
+                        KeyValue("Gross pay", money(gross.toString()))
+                        KeyValue("− Pension allowed", money(c.pensionAllowed.toString()))
+                        KeyValue("− NSSA", money(c.nssa.toString()))
+                        KeyValue("Taxable income", money(c.taxable.toString()))
+                        KeyValue("Income tax", money(c.incomeTax.toString()))
+                        KeyValue("+ AIDS levy", money(c.aidsLevy.toString()))
+                        KeyValue("PAYE", money(c.paye.toString()))
+                        if (!table.confirmed) Text("⚠ Table not yet checked against ZIMRA's published table.", fontSize = 11.sp, color = CrdcColors.Warning)
+                    }
+                }
+            } else {
+                Field("PAYE (from ZIMRA tables)", values["paye"] ?: "", { values["paye"] = it }, number = true)
+                Field("NSSA", values["nssa"] ?: "", { values["nssa"] = it }, number = true)
+            }
             Text("Gross ${money(gross.toString())} − deductions ${money(ded.toString())} = net ${money((gross - ded).toString())}", fontWeight = FontWeight.SemiBold)
-            if (saved) Message("Saved – sent to the server on sync.", MessageKind.SUCCESS)
+            if (saved) Message("Saved – the server works out the final PAYE from the same table on sync.", MessageKind.SUCCESS)
             PrimaryButton("Save salary", enabled = gross > 0 && gross >= ded, onClick = {
                 ctx.sdk.enqueue("salary.update", "Salary $name") {
-                    put("employee", employeeId); keys.forEach { (k, _) -> put(k, values[k] ?: "") }
+                    put("employee", employeeId); put("auto_tax", auto)
+                    (earnings.map { it.first } + listOf("paye", "nssa", "tax_credits")).forEach { k -> put(k, values[k] ?: "") }
                 }
                 saved = true
             })
+        }
+    }
+}
+
+/** The ZIMRA PAYE table in use and a calculator (read-only; the Treasurer edits it on the admin website). */
+@Composable
+fun TaxTablesScreen(ctx: Ctx) {
+    val tables by ctx.sdk.observe(Entities.TAX_TABLES, TaxTable.serializer()).collectAsState(initial = emptyList())
+    val today = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).date.toString()
+    val t = tables.inForce("USD", today)
+    var gross by remember { mutableStateOf("1230") }
+    var pension by remember { mutableStateOf("73.80") }
+    AppScreen("PAYE tax tables", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+        ScrollColumn {
+            if (t == null) { Empty("No tax table synced."); return@ScrollColumn }
+            if (!t.confirmed) Message("Not yet checked against ZIMRA's published table – the Treasurer should confirm it on the admin website before salaries are paid.", MessageKind.WARNING)
+            SectionCard("${t.name} · from ${t.effectiveFrom}") {
+                t.bands.sortedBy { it.lower.toDouble() }.forEach { b -> KeyValue("${money(b.lower)} – ${b.upper?.let { money(it) } ?: "and above"}", "${b.rate}%") }
+                KeyValue("AIDS levy", "${t.aidsLevyRate}% of tax")
+                KeyValue("NSSA", "${t.nssaRate}% up to ${money(t.nssaCeiling)} a month")
+                KeyValue("Pension allowed", "up to ${money(t.pensionCap)} a month")
+                if (t.source.isNotBlank()) Text(t.source, fontSize = 11.sp, color = CrdcColors.Muted)
+            }
+            SectionCard("PAYE calculator") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Field("Gross pay", gross, { gross = it }, Modifier.weight(1f), number = true)
+                    Field("Pension", pension, { pension = it }, Modifier.weight(1f), number = true)
+                }
+                val c = calculatePaye(t, d(gross), d(pension))
+                KeyValue("Taxable income", money(c.taxable.toString()))
+                KeyValue("Income tax", money(c.incomeTax.toString()))
+                KeyValue("AIDS levy", money(c.aidsLevy.toString()))
+                KeyValue("PAYE", money(c.paye.toString()))
+                KeyValue("NSSA", money(c.nssa.toString()))
+            }
         }
     }
 }

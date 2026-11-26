@@ -1,0 +1,38 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1>PAYE tax tables</h1>
+<ul class="object-tools">{% for t in tables %}<li><a href="?table={{ t.pk }}">{{ t.currency }} from {{ t.effective_from|date:"d M Y" }}</a></li>{% endfor %}
+{% if can_edit %}<li><a class="addlink" href="?new=1">New table</a></li>{% endif %}</ul>
+{% if table and not table.confirmed %}<p class="errornote">&#9888; This table has not yet been checked against the table ZIMRA publishes. The Treasurer should compare every band with
+<a href="https://www.zimra.co.zw/domestic-taxes/tax-tables" target="_blank" rel="noopener">zimra.co.zw</a>, correct it if needed and tick "Checked against ZIMRA's published table".</p>{% endif %}
+<p class="help">PAYE = tax on (gross − pension up to the allowed maximum − NSSA) using the bands below, less tax credits, plus the AIDS levy on that tax.
+NSSA = rate × pay up to the insurable earnings ceiling. Payroll uses the table in force on the first day of the month.</p>
+<div class="row g-4"><div class="col-xl-7">
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="save">
+{% with form=form %}{% include "generic/_form_fields.html" %}{% endwith %}
+<div class="module"><h2>Monthly bands</h2>{{ bands.management_form }}
+{% for e in bands.non_form_errors %}<p class="errornote">{{ e }}</p>{% endfor %}
+<table class="w-100"><thead><tr><th>From</th><th>To (blank = no limit)</th><th>Rate %</th>{% if can_edit %}<th>Remove</th>{% endif %}</tr></thead>
+{% for f in bands %}<tr>{% for h in f.hidden_fields %}{{ h }}{% endfor %}<td>{{ f.lower }}</td><td>{{ f.upper }}</td><td>{{ f.rate }}</td>{% if can_edit %}<td>{{ f.DELETE }}</td>{% endif %}</tr>{% endfor %}
+</table></div>
+{% if can_edit %}<div class="submit-row"><input type="submit" class="default" value="Save tax table"></div>{% else %}<p class="help">Only the Treasurer can change the tables.</p>{% endif %}
+</form>
+</div><div class="col-xl-5">
+<div class="module"><h2>PAYE calculator</h2><form method="get" class="p-2">{% if table %}<input type="hidden" name="table" value="{{ table.pk }}">{% endif %}
+<label class="form-label">Gross pay a month</label><input class="form-control mb-2" name="gross" value="{{ calc.gross }}" inputmode="decimal">
+<label class="form-label">Pension contribution</label><input class="form-control mb-2" name="pension" value="{{ calc.pension }}" inputmode="decimal">
+<label class="form-label">Tax credits</label><input class="form-control mb-2" name="credits" value="{{ calc.credits }}" inputmode="decimal">
+<div class="submit-row m-0"><button class="btn btn-primary">Work out PAYE</button></div></form>
+{% if result %}<table class="w-100">
+<tr><td>Gross pay</td><td class="text-end">{{ result.gross|floatformat:2|intcomma }}</td></tr>
+<tr><td>− Pension allowed</td><td class="text-end">{{ result.pension_allowed|floatformat:2 }}</td></tr>
+<tr><td>− NSSA</td><td class="text-end">{{ result.nssa|floatformat:2 }}</td></tr>
+<tr class="fw-bold"><td>Taxable income</td><td class="text-end">{{ result.taxable|floatformat:2|intcomma }}</td></tr>
+<tr><td>Tax from the bands</td><td class="text-end">{{ result.tax_before_credits|floatformat:2 }}</td></tr>
+<tr><td>− Tax credits</td><td class="text-end">{{ result.credits|floatformat:2 }}</td></tr>
+<tr><td>Income tax</td><td class="text-end">{{ result.income_tax|floatformat:2 }}</td></tr>
+<tr><td>+ AIDS levy</td><td class="text-end">{{ result.aids_levy|floatformat:2 }}</td></tr>
+<tr class="fw-bold"><td>PAYE</td><td class="text-end">{{ result.paye|floatformat:2|intcomma }}</td></tr>
+</table>{% endif %}</div>
+</div></div>
+{% endblock %}

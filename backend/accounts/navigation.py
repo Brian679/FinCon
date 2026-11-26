@@ -135,7 +135,8 @@ def build_nav(user):
         if c("finance.reports"):
             fin.append(_item("Financial reports", "finance:reports"))
         if c("payroll.view", "payroll.manage"):
-            fin += [_item("Payroll", "payroll:payroll"), _item("Salaries", "payroll:salaries"), _item("Salaries owed to staff", "payroll:arrears")]
+            fin += [_item("Payroll", "payroll:payroll"), _item("Salaries", "payroll:salaries"), _item("Salaries owed to staff", "payroll:arrears"),
+                    _item("PAYE tax tables", "payroll:tax")]
         sections.append({"title": "Finance", "items": fin})
 
     # ---- Procurement (Administration's procurement unit + Finance)

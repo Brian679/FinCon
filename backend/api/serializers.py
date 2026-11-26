@@ -553,7 +553,7 @@ class SalaryProfileSerializer(SyncSerializer):
         fields = _sync_fields(SalaryProfile, ["employee_id", "employee_name", "department", "role_label", "grade", "currency", "basic_salary",
                                               "housing_allowance", "transport_allowance", "other_allowances", "paye", "nssa", "pension", "medical_aid",
                                               "other_deductions", "payment_method", "bank_name", "bank_account", "is_active", "allowances", "gross",
-                                              "deductions", "net"])
+                                              "deductions", "net", "auto_tax", "tax_credits", "taxable_income", "income_tax", "aids_levy"])
 
 
 class PayslipSerializer(SyncSerializer):
@@ -567,9 +567,26 @@ class PayslipSerializer(SyncSerializer):
     class Meta:
         model = Payslip
         fields = _sync_fields(Payslip, ["reference", "employee_id", "employee_name", "department", "year", "month", "period", "currency", "grade",
-                                        "basic_salary", "allowances", "gross", "paye", "nssa", "pension", "other_deductions", "net", "amount_paid",
+                                        "basic_salary", "allowances", "gross", "paye", "taxable_income", "income_tax", "aids_levy", "tax_table", "nssa",
+                                        "pension", "other_deductions", "net", "amount_paid",
                                         "balance", "status", "approved_at", "payments"])
 
     def get_payments(self, obj):
         return [{"amount": str(p.amount), "method": p.get_method_display(), "reference": p.reference, "paid_on": p.paid_on.isoformat(),
                  "paid_by": p.paid_by.get_full_name()} for p in obj.payments.all() if not p.is_deleted]
+
+
+
+from payroll.models import TaxTable  # noqa: E402
+
+
+class TaxTableSerializer(SyncSerializer):
+    bands = serializers.SerializerMethodField()
+
+    class Meta:
+        model = TaxTable
+        fields = _sync_fields(TaxTable, ["name", "currency", "effective_from", "aids_levy_rate", "nssa_rate", "nssa_ceiling", "pension_cap", "confirmed",
+                                         "source", "bands"])
+
+    def get_bands(self, obj):
+        return [{"lower": str(b.lower), "upper": str(b.upper) if b.upper is not None else None, "rate": str(b.rate)} for b in obj.bands.all()]

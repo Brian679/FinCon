@@ -8,6 +8,7 @@
 <tr><td>Basic salary</td><td class="text-end">{{ s.basic_salary|floatformat:2|intcomma }}</td></tr>
 <tr><td>Allowances</td><td class="text-end">{{ s.allowances|floatformat:2|intcomma }}</td></tr>
 <tr class="fw-bold"><td>Gross pay</td><td class="text-end">{{ s.currency }} {{ s.gross|floatformat:2|intcomma }}</td></tr>
+{% if s.income_tax %}<tr><td class="small quiet">Taxable income {{ s.taxable_income|floatformat:2 }} → income tax {{ s.income_tax|floatformat:2 }} + AIDS levy {{ s.aids_levy|floatformat:2 }}<br>{{ s.tax_table }}</td><td></td></tr>{% endif %}
 <tr><td>PAYE</td><td class="text-end">− {{ s.paye|floatformat:2 }}</td></tr><tr><td>NSSA</td><td class="text-end">− {{ s.nssa|floatformat:2 }}</td></tr>
 <tr><td>Pension (LAPF)</td><td class="text-end">− {{ s.pension|floatformat:2 }}</td></tr><tr><td>Medical aid, loans, other</td><td class="text-end">− {{ s.other_deductions|floatformat:2 }}</td></tr>
 <tr class="fw-bold"><td>Net pay</td><td class="text-end">{{ s.currency }} {{ s.net|floatformat:2|intcomma }}</td></tr>
