@@ -28,6 +28,7 @@ class User(AbstractUser):
     national_id = models.CharField(max_length=30, blank=True)
     ward = models.PositiveSmallIntegerField(null=True, blank=True)
     must_change_password = models.BooleanField(default=False)
+    annual_leave_days = models.PositiveSmallIntegerField("Annual leave days a year", default=22)
     tokens_valid_after = models.DateTimeField(null=True, blank=True, editable=False,
                                               help_text="App logins issued before this time no longer work (password changed, user deactivated …)")
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)

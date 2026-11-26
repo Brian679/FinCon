@@ -72,11 +72,25 @@ def update_task(user, task, *, status=None, progress=None, comment=""):
 
 
 def complaint_scope(user, qs):
+    """Complaints are confidential: the front desk / customer care and the CEO see all of them,
+    a head of department sees those about their department, and an officer only those assigned to them."""
     if user.is_client:
         return qs.filter(client=user)
     if user.has_cap("complaints.view_all") or user.sees_all_departments():
         return qs
-    return qs.filter(department=user.department)
+    if user.has_cap("complaints.department"):
+        from django.db.models import Q
+
+        return qs.filter(Q(department=user.department) | Q(assigned_to=user))
+    return qs.filter(assigned_to=user)
+
+
+def complaint_handlers(department=None):
+    """Who is told about a new complaint: customer care plus the head of the department concerned."""
+    people = [u for u in User.objects.filter(is_active=True, user_type=User.UserType.STAFF) if u.has_cap("complaints.manage")]
+    if department:
+        people += [u for u in User.objects.filter(department=department, is_active=True) if u.is_head]
+    return people
 
 
 @transaction.atomic
@@ -88,16 +102,17 @@ def log_complaint(user, **data):
         data.setdefault("email", user.email)
     c = Complaint(created_by=user if user and user.is_authenticated else None, **data)
     c.save()
-    heads = [u for u in User.objects.filter(department=c.department, is_active=True) if u.is_head]
-    notify(heads, f"New {c.get_kind_display().lower()} {c.reference}: {c.subject}", "Acknowledge within 48 hours (Client Charter).",
-           f"/staff/complaints/{c.pk}/")
+    notify(complaint_handlers(c.department), f"New {c.get_kind_display().lower()} {c.reference}: {c.subject}",
+           "Acknowledge within 48 hours (Client Charter).", f"/staff/complaints/{c.pk}/")
     return c
 
 
 @transaction.atomic
 def act_on_complaint(user, c, action, *, note="", assignee=None, department=None):
     if not complaint_scope(user, Complaint.objects.filter(pk=c.pk)).exists() or user.is_client:
-        raise PermissionDenied("This complaint is not in your department.")
+        raise PermissionDenied("This complaint has not been given to you.")
+    if action in ("assign", "transfer") and not (user.has_cap("complaints.manage", "complaints.department") or user.sees_all_departments()):
+        raise PermissionDenied("Only customer care or the head of department can assign or transfer a complaint.")
     now = timezone.now()
     if action == "acknowledge":
         if c.acknowledged_at:

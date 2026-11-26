@@ -44,6 +44,8 @@ object Entities {
     const val PURCHASE_ORDERS = "purchase_orders"
     const val BANK_ACCOUNTS = "bank_accounts"
     const val CORRESPONDENCE = "correspondence"
+    const val SALARY_PROFILES = "salary_profiles"
+    const val PAYSLIPS = "payslips"
 }
 
 @Serializable
@@ -181,7 +183,7 @@ data class AuditFinding(
 
 @Serializable
 data class LeaveRequest(
-    val id: String, val employee: Long? = null, val employeeName: String = "", val employeeDepartment: String = "", val leaveType: String = "", val leaveTypeLabel: String = "", val startDate: String = "",
+    val id: String, val employee: Long? = null, val employeeName: String = "", val employeeDepartment: String = "", val leaveType: String = "", val leaveTypeLabel: String = "", val startDate: String = "", val days: Int = 0,
     val endDate: String = "", val reason: String = "", val status: String = "", val statusLabel: String = "", val decisionComment: String = "",
     val localNote: String? = null,
 )
@@ -343,6 +345,25 @@ data class Correspondence(val id: String, val reference: String = "", val sender
                           val dateReceived: String = "", val department: String = "", val departmentLabel: String = "", val assignedTo: Long? = null,
                           val assignedToName: String? = null, val status: String = "", val statusLabel: String = "", val responseDue: String? = null,
                           val respondedAt: String? = null, val responseSummary: String = "", val fileReference: String = "", val localNote: String? = null)
+
+@Serializable
+data class SalaryProfile(val id: String, val employeeId: Long = 0, val employeeName: String = "", val department: String = "", val roleLabel: String = "",
+                         val grade: String = "", val currency: String = "USD", val basicSalary: String = "0", val housingAllowance: String = "0",
+                         val transportAllowance: String = "0", val otherAllowances: String = "0", val paye: String = "0", val nssa: String = "0",
+                         val pension: String = "0", val medicalAid: String = "0", val otherDeductions: String = "0", val paymentMethod: String = "EFT",
+                         val bankName: String = "", val bankAccount: String = "", val isActive: Boolean = true, val allowances: String = "0",
+                         val gross: String = "0", val deductions: String = "0", val net: String = "0", val localNote: String? = null)
+
+@Serializable
+data class SalaryPaymentLine(val amount: String = "0", val method: String = "", val reference: String = "", val paidOn: String = "", val paidBy: String = "")
+
+@Serializable
+data class Payslip(val id: String, val reference: String = "", val employeeId: Long = 0, val employeeName: String = "", val department: String = "",
+                   val year: Int = 0, val month: Int = 0, val period: String = "", val currency: String = "USD", val grade: String = "",
+                   val basicSalary: String = "0", val allowances: String = "0", val gross: String = "0", val paye: String = "0", val nssa: String = "0",
+                   val pension: String = "0", val otherDeductions: String = "0", val net: String = "0", val amountPaid: String = "0",
+                   val balance: String = "0", val status: String = "", val statusLabel: String = "", val approvedAt: String? = null,
+                   val payments: List<SalaryPaymentLine> = emptyList(), val localNote: String? = null)
 
 /** Choice lists mirrored from the server so forms work offline. */
 object Choices {

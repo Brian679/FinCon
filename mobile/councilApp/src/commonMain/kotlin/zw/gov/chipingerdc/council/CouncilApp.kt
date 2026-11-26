@@ -13,6 +13,14 @@ import androidx.compose.runtime.CompositionLocalProvider
 import zw.gov.chipingerdc.shared.ui.ChangePasswordScreen
 import zw.gov.chipingerdc.shared.ui.CouncilTheme
 import zw.gov.chipingerdc.shared.ui.LocalProfile
+import zw.gov.chipingerdc.shared.ui.LocalMenuOpener
+import zw.gov.chipingerdc.shared.ui.AppScreen
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import zw.gov.chipingerdc.shared.ui.LocalSiteName
 import zw.gov.chipingerdc.shared.ui.CrdcColors
 import androidx.compose.foundation.background
@@ -114,12 +122,23 @@ sealed interface Screen {
     data object FinanceReport : Screen
     data object Executive : Screen
     data object AuditTrail : Screen
+    // profile & payroll
+    data object MyProfile : Screen
+    data object Payroll : Screen
+    data class PayslipDetail(val id: String) : Screen
+    data object Salaries : Screen
+    data class SalaryEdit(val employeeId: Long) : Screen
+    data object Arrears : Screen
 }
 
 /** Everything a screen needs. */
-class Ctx(val sdk: CouncilSdk, val nav: Navigator<Screen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false) {
-    /** From the desktop side menu a new register replaces what is open; elsewhere it opens on top (Back returns). */
-    fun go(s: Screen) = if (fromMenu) { nav.replaceAll(Screen.Home); nav.push(s) } else nav.push(s)
+class Ctx(val sdk: CouncilSdk, val nav: Navigator<Screen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false,
+          val afterGo: (() -> Unit)? = null) {
+    /** From the menu a new register replaces what is open; elsewhere it opens on top (Back returns). */
+    fun go(s: Screen) {
+        if (fromMenu) { nav.replaceAll(Screen.Home); if (s != Screen.Home) nav.push(s) } else nav.push(s)
+        afterGo?.invoke()
+    }
     fun back() = nav.pop()
     fun syncNow() { sdk.syncNow() }
 }
@@ -147,7 +166,7 @@ fun CouncilApp(sdk: CouncilSdk) {
 
 /** Shows the screen on top of the back stack (also used to render screens for documentation). */
 @Composable
-fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false) {
+fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false, menuOpen: Boolean = false) {
     val unread by ctx.sdk.observe(zw.gov.chipingerdc.shared.model.Entities.NOTIFICATIONS, zw.gov.chipingerdc.shared.model.AppNotification.serializer())
         .collectAsState(initial = emptyList())
     val n = unread.count { !it.isRead }
@@ -156,6 +175,8 @@ fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false) {
         name = me.fullName.ifBlank { me.username }, lines = listOf(me.roleLabel, me.departmentLabel, me.email).filter { it.isNotBlank() },
         badge = n, startOpen = profileOpen,
         items = listOf(
+            ProfileItem("My profile, leave & payslips") { ctx.go(Screen.MyProfile) },
+            ProfileItem("Apply for leave") { ctx.go(Screen.NewLeave) },
             ProfileItem("Notifications", n) { ctx.go(Screen.Notifications) },
             ProfileItem("Change password") { ctx.go(Screen.ChangePassword) },
             ProfileItem("Sync centre", ctx.pending.toInt()) { ctx.go(Screen.SyncCentre) },
@@ -167,19 +188,32 @@ fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false) {
             if (maxWidth >= 900.dp) {
                 // Desktop / tablet: menu on the left, the open register on the right.
                 Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.width(380.dp).fillMaxHeight()) {
+                    Box(Modifier.width(360.dp).fillMaxHeight()) {
                         CompositionLocalProvider(LocalProfile provides null) {
-                            HomeScreen(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true))
+                            AppScreen("Menu") { CouncilMenu(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true)) }
                         }
                     }
                     Box(Modifier.width(1.dp).fillMaxHeight().background(CrdcColors.Border))
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        CompositionLocalProvider(LocalSiteName provides "") {
-                            if (ctx.nav.current == Screen.Home) ApprovalsScreen(ctx) else CouncilScreens(ctx)
-                        }
+                        CompositionLocalProvider(LocalSiteName provides "") { CouncilScreens(ctx) }
                     }
                 }
-            } else CouncilScreens(ctx)
+            } else {
+                // Phone: the dashboard first; the menu slides in from the menu icon (top left).
+                val drawer = rememberDrawerState(if (menuOpen) DrawerValue.Open else DrawerValue.Closed)
+                val scope = rememberCoroutineScope()
+                ModalNavigationDrawer(drawerState = drawer, drawerContent = {
+                    ModalDrawerSheet(Modifier.width(320.dp), drawerContainerColor = androidx.compose.ui.graphics.Color.White) {
+                        CompositionLocalProvider(LocalProfile provides null) {
+                            AppScreen("Menu") {
+                                CouncilMenu(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true, afterGo = { scope.launch { drawer.close() } }))
+                            }
+                        }
+                    }
+                }) {
+                    CompositionLocalProvider(LocalMenuOpener provides { scope.launch { drawer.open() } }) { CouncilScreens(ctx) }
+                }
+            }
         }
     }
 }
@@ -267,5 +301,11 @@ private fun CouncilScreens(ctx: Ctx) {
         Screen.FinanceReport -> FinanceReportScreen(ctx)
         Screen.Executive -> ExecutiveScreen(ctx)
         Screen.AuditTrail -> AuditTrailScreen(ctx)
+        Screen.MyProfile -> MyProfileScreen(ctx)
+        Screen.Payroll -> PayrollScreen(ctx)
+        is Screen.PayslipDetail -> PayslipDetailScreen(ctx, s.id)
+        Screen.Salaries -> SalariesScreen(ctx)
+        is Screen.SalaryEdit -> SalaryEditScreen(ctx, s.employeeId)
+        Screen.Arrears -> ArrearsScreen(ctx)
     }
 }

@@ -1,10 +1,15 @@
 package zw.gov.chipingerdc.council
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -16,7 +21,6 @@ import androidx.compose.ui.unit.sp
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import zw.gov.chipingerdc.shared.model.AppNotification
 import zw.gov.chipingerdc.shared.model.Complaint
 import zw.gov.chipingerdc.shared.model.Entities
 import zw.gov.chipingerdc.shared.model.FundsRequest
@@ -26,15 +30,125 @@ import zw.gov.chipingerdc.shared.model.ServiceRequest
 import zw.gov.chipingerdc.shared.model.Task
 import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.CrdcColors
-import zw.gov.chipingerdc.shared.ui.Kpi
-import zw.gov.chipingerdc.shared.ui.ScrollColumn
+import zw.gov.chipingerdc.shared.ui.Empty
 import zw.gov.chipingerdc.shared.ui.IndexModule
 import zw.gov.chipingerdc.shared.ui.IndexRow
+import zw.gov.chipingerdc.shared.ui.Kpi
+import zw.gov.chipingerdc.shared.ui.LocalSiteName
+import zw.gov.chipingerdc.shared.ui.RowCard
+import zw.gov.chipingerdc.shared.ui.ScrollColumn
+import zw.gov.chipingerdc.shared.ui.SectionCard
 import zw.gov.chipingerdc.shared.ui.isPast
 import zw.gov.chipingerdc.shared.ui.money
 
 private data class Tile(val label: String, val screen: Screen, val badge: Int = 0, val add: Screen? = null)
 
+/**
+ * The menu: the person's own department (its daily work and its registers in one list),
+ * customer care when the person handles complaints, and governance. Personal things –
+ * profile, leave, payslips, notifications – are under the profile icon, not here.
+ * The CEO and Internal Audit get one section per department.
+ */
+@Composable
+fun CouncilMenu(ctx: Ctx) {
+    val me = ctx.me
+    val sdk = ctx.sdk
+    val tasks by sdk.observe(Entities.TASKS, Task.serializer()).collectAsState(initial = emptyList())
+    val complaints by sdk.observe(Entities.COMPLAINTS, Complaint.serializer()).collectAsState(initial = emptyList())
+    val requests by sdk.observe(Entities.SERVICE_REQUESTS, ServiceRequest.serializer()).collectAsState(initial = emptyList())
+    val funds by sdk.observe(Entities.FUNDS_REQUESTS, FundsRequest.serializer()).collectAsState(initial = emptyList())
+    val memos by sdk.observe(Entities.MEMOS, Memo.serializer()).collectAsState(initial = emptyList())
+    val approvals = rememberApprovals(ctx)
+    val seesAll = me.isCeo || me.can("audit.view_all")
+
+    val myTasks = tasks.count { it.assignedToName == me.fullName && it.status in listOf("OPEN", "IN_PROGRESS") }
+    val unacked = complaints.count { it.status !in listOf("RESOLVED", "CLOSED") && it.acknowledgedAt == null }
+    val overdueFaults = requests.count { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") && isPast(it.dueAt) }
+    val myFunds = funds.count { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
+    val newMemos = memos.count { it.sender != me.id && it.status == "SENT" }
+
+    val work = buildList {
+        add(Tile("Dashboard", Screen.Home))
+        if (me.can("reports.executive")) add(Tile("Executive overview", Screen.Executive))
+        if (me.can("dept.overview", "dept.overview_all")) add(Tile("Department overview", Screen.Department()))
+        add(Tile("Waiting for my approval", Screen.Approvals, approvals.size))
+        add(Tile("Tasks", Screen.Tasks, myTasks, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
+        add(Tile("Memos to / from departments", Screen.Memos, newMemos, Screen.NewMemo))
+        add(Tile("Requests for funds & purchases", Screen.Funds, myFunds, Screen.NewFunds))
+        add(Tile("Purchase requisitions", Screen.Requisitions, add = Screen.NewRequisition))
+        add(Tile("Service requests / faults", Screen.Requests, overdueFaults, Screen.NewRequest))
+        add(Tile("ICT support", Screen.Tickets, add = Screen.NewTicket))
+        if (me.can("leave.approve")) add(Tile("Leave applications to approve", Screen.Leave))
+        if (me.can("resolutions.update") && !me.can("meetings.view")) add(Tile("Council resolutions for the department", Screen.Resolutions))
+    }
+    val finance = buildList {
+        if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts, add = if (me.can("receipt.create")) Screen.NewReceipt else null))
+        if (me.can("cashup.submit", "cashup.verify")) add(Tile("Cash-ups", Screen.CashUps))
+        if (me.can("accounts.manage", "finance.view_all", "receipt.create")) add(Tile("Client accounts", Screen.Accounts))
+        if (me.can("areas.view", "accounts.manage")) add(Tile("Areas overview – shops paid / owing", Screen.Areas))
+        if (me.can("claims.review")) add(Tile("Stand registrations", Screen.Claims))
+        if (me.can("leases.view", "leases.manage")) add(Tile("Leases", Screen.Leases))
+        if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
+        if (me.can("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "voucher.pay", "finance.view_all"))
+            add(Tile("Payment vouchers", Screen.Vouchers, add = if (me.can("voucher.prepare")) Screen.NewVoucher(null) else null))
+        if (me.can("payroll.view", "payroll.manage")) {
+            add(Tile("Payroll", Screen.Payroll)); add(Tile("Salaries", Screen.Salaries)); add(Tile("Salaries owed to staff", Screen.Arrears))
+        }
+        if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
+        if (me.can("finance.reports", "reports.executive")) add(Tile("Financial reports", Screen.FinanceReport))
+        if (me.can("procurement.order", "finance.view_all")) add(Tile("Purchase orders", Screen.Orders))
+    }
+    val admin = buildList {
+        if (me.can("meetings.view")) { add(Tile("Council meetings", Screen.Meetings)); add(Tile("Resolutions", Screen.Resolutions)) }
+        if (me.can("policies.view")) add(Tile("Policies & by-laws", Screen.Policies))
+        if (me.can("correspondence.manage") || me.isHead) add(Tile("Correspondence", Screen.Correspondence, add = Screen.NewCorrespondence))
+        if (me.can("hr.view")) add(Tile("Staff directory", Screen.Staff))
+        if (me.department == "ADMIN" && me.can("activities.manage")) add(Tile("Trainings & staff activities", Screen.Activities, add = Screen.NewActivity))
+        if (!me.can("finance.view") && me.can("procurement.order")) add(Tile("Purchase orders", Screen.Orders))
+    }
+    val social = buildList {
+        if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands, add = if (me.can("stands.manage")) Screen.NewStand else null))
+        if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
+        if ((me.department == "SOCIAL" || seesAll) && me.can("activities.manage", "activities.verify", "dept.overview_all"))
+            add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
+        if (me.can("licence.inspect")) add(Tile("Shop health inspections", Screen.Licences))
+    }
+    val tech = buildList {
+        if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
+        if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
+    }
+    val audit = buildList {
+        if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
+        if (me.can("risks.view", "risks.manage")) add(Tile("Risk register", Screen.Risks))
+    }
+    val assets = if (me.can("assets.view")) listOf(Tile(if (me.can("assets.manage") || seesAll) "Assets & infrastructure" else "Department assets", Screen.Assets)) else emptyList()
+
+    val byDept = mapOf("FINANCE" to finance, "ADMIN" to admin, "SOCIAL" to social, "TECH" to tech, "AUDIT" to audit)
+    val sections = buildList {
+        if (seesAll) {
+            add(me.departmentLabel to work)
+            listOf("FINANCE" to "Finance", "ADMIN" to "Administration", "SOCIAL" to "Social Services", "TECH" to "Technical Services", "AUDIT" to "Internal Audit")
+                .forEach { (code, label) -> add(label to (byDept[code] ?: emptyList()) + if (code == "ADMIN") assets else emptyList()) }
+        } else {
+            // own department: day-to-day work + its registers in one list
+            add(me.departmentLabel to work + (byDept[me.department] ?: emptyList()) + assets + audit.takeIf { me.department != "AUDIT" }.orEmpty())
+        }
+        if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || complaints.isNotEmpty())
+            add("Customer care" to listOf(Tile(if (me.can("complaints.view_all", "complaints.manage", "complaints.department")) "Complaints, compliments & suggestions"
+                else "Complaints given to me", Screen.Complaints, unacked, if (me.can("complaints.manage", "complaints.department", "complaints.view_all")) Screen.NewComplaint else null)))
+        if (me.can("audit.view_trail")) add("Governance" to listOf(Tile("Audit trail", Screen.AuditTrail)))
+    }.filter { it.second.isNotEmpty() }
+
+    Column(Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(me.fullName.ifBlank { me.username }, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = CrdcColors.Body)
+        Text("${me.roleLabel} · ${me.departmentLabel}", fontSize = 12.sp, color = CrdcColors.Muted)
+        sections.forEach { (title, tiles) ->
+            IndexModule(title, tiles.map { t -> IndexRow(t.label, t.badge, { ctx.go(t.screen) }, t.add?.let { a -> { ctx.go(a) } }) })
+        }
+    }
+}
+
+/** What a person sees after logging in: their dashboard. The menu opens from the menu icon. */
 @Composable
 fun HomeScreen(ctx: Ctx) {
     val me = ctx.me
@@ -43,101 +157,44 @@ fun HomeScreen(ctx: Ctx) {
     val tasks by sdk.observe(Entities.TASKS, Task.serializer()).collectAsState(initial = emptyList())
     val complaints by sdk.observe(Entities.COMPLAINTS, Complaint.serializer()).collectAsState(initial = emptyList())
     val requests by sdk.observe(Entities.SERVICE_REQUESTS, ServiceRequest.serializer()).collectAsState(initial = emptyList())
-    val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
     val funds by sdk.observe(Entities.FUNDS_REQUESTS, FundsRequest.serializer()).collectAsState(initial = emptyList())
-    val memos by sdk.observe(Entities.MEMOS, Memo.serializer()).collectAsState(initial = emptyList())
     val approvals = rememberApprovals(ctx)
-
     val today = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).date.toString()
     val myToday = receipts.filter { it.createdAt.startsWith(today) && it.status != "VOIDED" && (it.receivedBy == me.id || it.localNote != null) }
     val myTasks = tasks.filter { it.assignedToName == me.fullName && it.status in listOf("OPEN", "IN_PROGRESS") }
+    val openFaults = requests.filter { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") }
     val openComplaints = complaints.filter { it.status !in listOf("RESOLVED", "CLOSED") }
-    val unacked = openComplaints.count { it.acknowledgedAt == null }
-    val openRequests = requests.filter { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") }
-    val unread = notes.count { !it.isRead }
+    val myFunds = funds.filter { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
 
-    // A department only sees its own registers; the CEO and Internal Audit see every department.
-    val seesAll = me.isCeo || me.can("audit.view_all")
-    fun mine(dept: String) = seesAll || me.department == dept
-    val myFunds = funds.count { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
-    val newMemos = memos.count { it.sender != me.id && it.status == "SENT" }
-    val sections = buildList {
-        add("My work" to buildList {
-            if (me.can("reports.executive")) add(Tile("Executive overview", Screen.Executive))
-            if (me.can("dept.overview", "dept.overview_all")) add(Tile("My department (overview)", Screen.Department()))
-            add(Tile("Approvals", Screen.Approvals, approvals.size))
-            add(Tile("Tasks", Screen.Tasks, myTasks.size, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
-            add(Tile("Memos to / from departments", Screen.Memos, newMemos, Screen.NewMemo))
-            add(Tile("Requests for funds & purchases", Screen.Funds, myFunds, Screen.NewFunds))
-            add(Tile("Purchase requisitions", Screen.Requisitions, add = Screen.NewRequisition))
-            add(Tile("Leave", Screen.Leave, add = Screen.NewLeave))
-            add(Tile("ICT helpdesk", Screen.Tickets, add = Screen.NewTicket))
-            if (me.can("resolutions.update") && !me.can("meetings.view")) add(Tile("Council resolutions for my department", Screen.Resolutions))
-            add(Tile("Notifications", Screen.Notifications, unread))
-        })
-        add("Client service (Charter)" to listOf(
-            Tile("Complaints", Screen.Complaints, unacked, Screen.NewComplaint),
-            Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }, Screen.NewRequest),
-        ))
-        if (mine("FINANCE")) add("Finance" to buildList {
-            if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts, add = if (me.can("receipt.create")) Screen.NewReceipt else null))
-            if (me.can("accounts.manage", "finance.view_all", "receipt.create")) add(Tile("Client accounts", Screen.Accounts))
-            if (me.can("areas.view", "accounts.manage")) add(Tile("Shops by area (paid/unpaid)", Screen.Areas))
-            if (me.can("claims.review")) add(Tile("Stand registrations", Screen.Claims))
-            if (me.can("leases.view", "leases.manage")) add(Tile("Leases", Screen.Leases))
-            if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
-            if (me.can("cashup.submit", "cashup.verify")) add(Tile("Cash-ups", Screen.CashUps))
-            if (me.can("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "voucher.pay", "finance.view_all"))
-                add(Tile("Payment vouchers (expenditure)", Screen.Vouchers, add = if (me.can("voucher.prepare")) Screen.NewVoucher(null) else null))
-            if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
-            if (me.can("finance.reports", "reports.executive")) add(Tile("Financial reports", Screen.FinanceReport))
-        })
-        if (me.can("procurement.order", "finance.view_all")) add("Procurement" to listOf(Tile("Purchase orders", Screen.Orders)))
-        if (mine("ADMIN") || (me.department == "EXEC" && me.can("meetings.view"))) add("Administration" to buildList {
-            if (me.can("meetings.view")) { add(Tile("Council meetings", Screen.Meetings)); add(Tile("Resolutions", Screen.Resolutions)) }
-            if (me.can("policies.view")) add(Tile("Policies & by-laws", Screen.Policies))
-            if (me.can("correspondence.manage")) add(Tile("Correspondence register", Screen.Correspondence, add = Screen.NewCorrespondence))
-            if (me.can("hr.view")) add(Tile("Staff directory", Screen.Staff))
-        })
-        if (me.can("assets.view")) add("Assets" to listOf(Tile(if (me.can("assets.manage") || seesAll) "Assets & infrastructure" else "My department's assets", Screen.Assets)))
-        if (mine("SOCIAL")) add("Social services" to buildList {
-            if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands, add = if (me.can("stands.manage")) Screen.NewStand else null))
-            if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
-            if (me.department == "SOCIAL" || seesAll) {
-                if (me.can("activities.manage", "activities.verify", "dept.overview_all")) add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
-            }
-            if (me.can("licence.inspect")) add(Tile("Shop health inspections", Screen.Licences))
-        })
-        if (me.department == "ADMIN" && me.can("activities.manage")) add("Staff development" to listOf(Tile("Trainings & staff activities", Screen.Activities, add = Screen.NewActivity)))
-        if (mine("TECH")) add("Technical services" to buildList {
-            if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
-            if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
-        })
-        add((if (me.department == "AUDIT" || seesAll) "Internal audit" else "Audit & risks – my department") to buildList {
-            if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
-            if (me.can("risks.view", "risks.manage")) add(Tile("Risk register", Screen.Risks))
-        })
-        if (me.can("audit.view_trail")) add("Governance" to listOf(Tile("Audit trail", Screen.AuditTrail)))
-        if (me.isHead && !me.can("correspondence.manage")) add("Letters" to listOf(Tile("Correspondence for my department", Screen.Correspondence, add = Screen.NewCorrespondence)))
-        add("This phone" to listOf(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()), Tile("Client Charter", Screen.Charter)))
-    }.filter { it.second.isNotEmpty() }
-
-    AppScreen("Site administration", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen(if (LocalSiteName.current.isEmpty()) "Dashboard" else "Dashboard – ${me.departmentLabel}", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Kpi("Waiting for my approval", approvals.size.toString(), "tap to open", CrdcColors.Warning, Modifier.weight(1f)) { ctx.go(Screen.Approvals) }
                 if (me.can("receipt.create")) {
                     val usd = myToday.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
                     Kpi("My collections today", "$${money(usd.toString())}", "${myToday.size} receipt(s)", modifier = Modifier.weight(1f)) { ctx.go(Screen.Receipts) }
-                }
-                Kpi("Waiting for me", approvals.size.toString(), "approvals", CrdcColors.Warning, Modifier.weight(1f)) { ctx.go(Screen.Approvals) }
+                } else Kpi("My open tasks", myTasks.size.toString(), "assigned to me", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Tasks) }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Open complaints", openComplaints.size.toString(), "$unacked not acknowledged (48h)", if (unacked > 0) CrdcColors.Danger else CrdcColors.Green, Modifier.weight(1f)) { ctx.go(Screen.Complaints) }
-                Kpi("Service requests", openRequests.size.toString(), "${openRequests.count { isPast(it.dueAt) }} overdue", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Requests) }
+                Kpi("Faults / service requests", openFaults.size.toString(), "${openFaults.count { isPast(it.dueAt) }} past charter time", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Requests) }
+                if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || openComplaints.isNotEmpty())
+                    Kpi("Complaints", openComplaints.size.toString(), "${openComplaints.count { it.acknowledgedAt == null }} not acknowledged", CrdcColors.Danger, Modifier.weight(1f)) { ctx.go(Screen.Complaints) }
+                else Kpi("My requests for funds", myFunds.size.toString(), "in progress", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(Screen.Funds) }
             }
-            sections.forEach { (title, tiles) ->
-                IndexModule(title, tiles.map { t -> IndexRow(t.label, t.badge, { ctx.go(t.screen) }, t.add?.let { a -> { ctx.go(a) } }) })
+            SectionCard("Waiting for my approval") {
+                if (approvals.isEmpty()) Empty("Nothing waiting for you.")
+                approvals.take(5).forEach { a -> RowCard(a.ref, "${a.kind} · ${a.text}", null, a.stage, "PENDING") { a.screen?.let(ctx::go) ?: ctx.go(Screen.Approvals) } }
+                if (approvals.size > 5) Text("See all ${approvals.size} ›", color = CrdcColors.Blue, fontSize = 13.sp, modifier = Modifier.padding(8.dp))
             }
+            SectionCard("My tasks") {
+                if (myTasks.isEmpty()) Empty("No open tasks.")
+                myTasks.take(4).forEach { t -> RowCard(t.title, "${t.reference} · due ${t.dueDate ?: "-"} · from ${t.assignedByName}", null, t.statusLabel, t.status) { ctx.go(Screen.TaskDetail(t.id)) } }
+            }
+            if (myFunds.isNotEmpty()) SectionCard("My requests for funds & purchases") {
+                myFunds.forEach { r -> RowCard(r.title, "Now: ${r.whereNow}", "${r.currency} ${money(r.total)}", r.statusLabel, r.status, r.localNote) { ctx.go(Screen.FundsDetail(r.id)) } }
+            }
+            Text("Use the menu icon (top left) for everything in ${me.departmentLabel}; your profile, leave and payslips are under your picture (top right).",
+                fontSize = 11.sp, color = CrdcColors.Muted)
         }
     }
 }

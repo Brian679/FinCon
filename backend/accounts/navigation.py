@@ -11,7 +11,7 @@ ADD_LINKS = {
     "finance:suppliers": ("finance:supplier_new", "supplier.manage"), "finance:requisitions": ("finance:requisition_new", None),
     "finance:cashups": ("finance:cashup_new", "cashup.submit"), "finance:area_list": ("finance:area_new", "areas.manage"),
     "finance:leases": ("finance:lease_new", "leases.manage"), "finance:messages": ("finance:broadcast", "reminders.send"),
-    "workflow:tasks": ("workflow:task_new", ("tasks.assign_any", "tasks.assign_department")), "workflow:complaints": ("workflow:complaint_new", None),
+    "workflow:tasks": ("workflow:task_new", ("tasks.assign_any", "tasks.assign_department")), "workflow:complaints": ("workflow:complaint_new", ("complaints.manage", "complaints.department", "complaints.view_all")),
     "workflow:requests": ("workflow:request_new", None), "workflow:correspondence": ("workflow:correspondence_new", "correspondence.manage"),
     "departments:leave": ("departments:leave_new", None), "departments:stands": ("departments:stand_new", "stands.manage"),
     "departments:projects": ("departments:project_new", "projects.manage"), "departments:findings": ("departments:finding_new", "audit.findings_manage"),
@@ -69,27 +69,35 @@ def build_nav(user):
     dept = user.department
     sections = []
 
-    # ---- My work: self-service + links to other departments (every staff member)
+    # ---- The person's own department: its day-to-day work and its registers in one place.
+    # (Personal things – profile, leave, payslips, notifications – are under the profile icon.)
     general = [_item("Dashboard", "core:dashboard")]
     if user.is_ceo or c("reports.executive"):
         general.append(_item("Executive overview", "core:executive"))
     if c("dept.overview", "dept.overview_all"):
-        general.append(_item("My department (overview)", "departments:overview"))
+        general.append(_item("Department overview", "departments:overview"))
     general += [
-        _item("Notifications", "core:notifications"),
-        _item("My tasks", "workflow:tasks"),
+        _item("Tasks", "workflow:tasks"),
         _item("Memos to / from departments", "workflow:memos"),
         _item("Requests for funds & purchases", "workflow:funds"),
         _item("Purchase requisitions", "finance:requisitions"),
-        _item("Leave", "departments:leave"),
-        _item("ICT helpdesk", "departments:tickets"),
+        _item("Service requests / faults", "workflow:requests"),
+        _item("ICT support", "departments:tickets"),
     ]
+    if c("leave.approve"):
+        general.append(_item("Leave applications to approve", "departments:leave"))
     if c("resolutions.update") and not c("meetings.view"):
-        general.append(_item("Council resolutions for my department", "departments:resolutions"))
-    sections.append({"title": "My work", "items": general})
+        general.append(_item("Council resolutions for the department", "departments:resolutions"))
+    sections.append({"title": user.get_department_display() or "My department", "items": general, "own": True})
 
-    sections.append({"title": "Client service (Charter)", "items": [
-        _item("Complaints & feedback", "workflow:complaints"), _item("Service requests / faults", "workflow:requests")]})
+    # ---- Complaints are confidential: customer care, the CEO, heads (their department) and officers given one.
+    if c("complaints.view_all", "complaints.manage", "complaints.department"):
+        sections.append({"title": "Customer care", "items": [_item("Complaints, compliments & suggestions", "workflow:complaints")]})
+    else:
+        from workflow.models import Complaint
+
+        if Complaint.objects.alive().filter(assigned_to=user).exists():
+            sections.append({"title": "Customer care", "items": [_item("Complaints given to me", "workflow:complaints")]})
 
     def show(code):
         return dept == code or sees_all
@@ -126,6 +134,8 @@ def build_nav(user):
             fin.append(_item("Online payments", "finance:online_payments"))
         if c("finance.reports"):
             fin.append(_item("Financial reports", "finance:reports"))
+        if c("payroll.view", "payroll.manage"):
+            fin += [_item("Payroll", "payroll:payroll"), _item("Salaries", "payroll:salaries"), _item("Salaries owed to staff", "payroll:arrears")]
         sections.append({"title": "Finance", "items": fin})
 
     # ---- Procurement (Administration's procurement unit + Finance)
@@ -202,6 +212,19 @@ def build_nav(user):
     if gov:
         sections.append({"title": "Governance", "items": gov})
 
-    for s in sections:
-        s["items"] = [i for i in s["items"] if i]
-    return [s for s in sections if s["items"]]
+    for sec in sections:
+        sec["items"] = [i for i in sec["items"] if i]
+    # Everyone except the CEO / Internal Audit: fold their own department's registers into their department section.
+    if not sees_all:
+        own_titles = {D.FINANCE: ("Finance", "Procurement", "Assets"), D.ADMINISTRATION: ("Administration", "Procurement", "Assets", "Staff development"),
+                      D.SOCIAL_SERVICES: ("Social services", "Assets"), D.TECHNICAL_SERVICES: ("Technical services", "Assets"),
+                      D.INTERNAL_AUDIT: ("Internal audit",)}.get(dept, ())
+        head = sections[0]
+        rest = []
+        for sec in sections[1:]:
+            if sec["title"] in own_titles or sec["title"].startswith("Audit & risks"):
+                head["items"] += [i for i in sec["items"] if i["url"] != head["items"][0]["url"]]
+            else:
+                rest.append(sec)
+        sections = [head] + rest
+    return [sec for sec in sections if sec["items"]]

@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1>Payslip – {{ s.employee.get_full_name }}, {{ s.period }} <span class="badge text-bg-{% if s.status == 'PAID' %}success{% elif s.status == 'DRAFT' %}secondary{% else %}warning{% endif %}">{{ s.get_status_display }}</span></h1>
+<ul class="object-tools no-print"><li><a href="javascript:window.print()">Print</a></li></ul>
+<div class="row g-4"><div class="col-xl-6">
+<div class="module"><h2>{{ s.reference }} · {{ s.employee.role_label }} · {{ s.employee.get_department_display }}</h2><table class="w-100">
+<tr><td>Grade</td><td class="text-end">{{ s.grade|default:"—" }}</td></tr>
+<tr><td>Basic salary</td><td class="text-end">{{ s.basic_salary|floatformat:2|intcomma }}</td></tr>
+<tr><td>Allowances</td><td class="text-end">{{ s.allowances|floatformat:2|intcomma }}</td></tr>
+<tr class="fw-bold"><td>Gross pay</td><td class="text-end">{{ s.currency }} {{ s.gross|floatformat:2|intcomma }}</td></tr>
+<tr><td>PAYE</td><td class="text-end">− {{ s.paye|floatformat:2 }}</td></tr><tr><td>NSSA</td><td class="text-end">− {{ s.nssa|floatformat:2 }}</td></tr>
+<tr><td>Pension (LAPF)</td><td class="text-end">− {{ s.pension|floatformat:2 }}</td></tr><tr><td>Medical aid, loans, other</td><td class="text-end">− {{ s.other_deductions|floatformat:2 }}</td></tr>
+<tr class="fw-bold"><td>Net pay</td><td class="text-end">{{ s.currency }} {{ s.net|floatformat:2|intcomma }}</td></tr>
+<tr><td>Paid so far</td><td class="text-end text-success">{{ s.amount_paid|floatformat:2|intcomma }}</td></tr>
+<tr class="fw-bold"><td>Still owed</td><td class="text-end{% if s.balance %} text-danger{% endif %}">{{ s.balance|floatformat:2|intcomma }}</td></tr>
+</table>{% if s.approved_by %}<p class="small quiet p-2 mb-0">Approved by {{ s.approved_by.get_full_name }} on {{ s.approved_at }}</p>{% endif %}</div>
+</div><div class="col-xl-6">
+<div class="module"><h2>Payments</h2><table class="w-100">{% for p in payments %}<tr><td>{{ p.paid_on }}</td><td>{{ p.get_method_display }} {{ p.reference }}</td><td class="text-end">{{ p.amount|floatformat:2|intcomma }}</td><td class="small quiet">{{ p.paid_by.get_full_name }}</td></tr>{% empty %}<tr><td class="quiet">Nothing paid yet.</td></tr>{% endfor %}</table></div>
+{% if can_pay %}<div class="module"><h2>Record a payment</h2><form method="post" class="p-2">{% csrf_token %}
+<label class="form-label">Amount (owed {{ s.balance|floatformat:2 }})</label><input class="form-control mb-2" name="amount" value="{{ s.balance|floatformat:2 }}" inputmode="decimal">
+<label class="form-label">Method</label><select class="form-select mb-2" name="method">{% for v, l in methods %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
+<label class="form-label">Paid from</label><select class="form-select mb-2" name="bank_account"><option value="">—</option>{% for b in banks %}<option value="{{ b.pk }}">{{ b }}</option>{% endfor %}</select>
+<label class="form-label">Bank / transaction reference</label><input class="form-control mb-2" name="reference">
+<div class="submit-row m-0"><button class="btn btn-primary">Record payment</button></div></form></div>{% endif %}
+</div></div>
+{% endblock %}

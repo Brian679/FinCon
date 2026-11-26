@@ -25,6 +25,7 @@ from finance import services as fin
 from finance.models import (
     Bill, BudgetLine, ClientAccount, Licence, OnlinePayment, PaymentVoucher, Property, Receipt, Requisition, RevenueHead,
 )
+from payroll import services as pr
 from workflow import services as wf
 from workflow.models import Complaint, FundsRequest, Memo, ServiceRequest, Task, TaskComment
 
@@ -135,6 +136,9 @@ def staff_entities(user):
         "funds_requests": (wf.funds_scope(user, FundsRequest.objects.select_related("requested_by", "voucher").prefetch_related("lines")),
                            s.FundsRequestSerializer),
         "memos": (wf.memo_scope(user, Memo.objects.select_related("sender", "to_user").prefetch_related("replies__author")), s.MemoSerializer),
+        "salary_profiles": (pr.salary_scope(user, s.SalaryProfile.objects.select_related("employee")), s.SalaryProfileSerializer),
+        "payslips": (pr.payslip_scope(user, s.Payslip.objects.exclude(status="DRAFT") if not pr.can_view_payroll(user) else s.Payslip.objects.all())
+                     .select_related("employee").prefetch_related("payments"), s.PayslipSerializer),
         "cashups": ((s.CashUp.objects.select_related("cashier", "verified_by") if c("cashup.verify")
                      else s.CashUp.objects.filter(cashier=user).select_related("cashier", "verified_by")), s.CashUpSerializer)
         if c("cashup.submit", "cashup.verify") else None,
@@ -152,7 +156,7 @@ def _staff_scope(user):
     from accounts.models import User
 
     qs = User.objects.filter(user_type=User.UserType.STAFF)
-    if user.sees_all_departments() or user.has_cap("hr.view", "tasks.assign_any"):
+    if user.sees_all_departments() or user.has_cap("hr.view", "tasks.assign_any", "payroll.view", "payroll.manage"):
         return qs
     return qs.filter(department=user.department)
 
@@ -666,7 +670,41 @@ def op_correspondence_update(user, p):
     return "correspondence", s.CorrespondenceSerializer(c).data
 
 
+# ------------------------------------------------------------------ payroll
+def op_salary_update(user, p):
+    from accounts.models import User
+
+    emp = User.objects.filter(pk=p["employee"]).first()
+    if emp is None:
+        raise ValidationError("Employee not found.")
+    data = {k: v for k, v in p.items() if k in pr.FIELDS}
+    prof = pr.update_salary(user, emp, **data)
+    return "salary_profiles", s.SalaryProfileSerializer(prof).data
+
+
+def op_payroll_run(user, p):
+    n = pr.run_payroll(user, int(p["year"]), int(p["month"]))
+    return "", {"created": n}
+
+
+def op_payroll_approve(user, p):
+    n = pr.approve_payroll(user, int(p["year"]), int(p["month"]))
+    return "", {"approved": n}
+
+
+def op_payslip_pay(user, p):
+    slip = _get(s.Payslip, p["payslip"])
+    bank = _get(s.BankAccount, p["bank_account"]) if p.get("bank_account") else None
+    pr.pay_payslip(user, slip, amount=p["amount"], method=p.get("method", "EFT"), reference=p.get("reference", ""), bank_account=bank)
+    slip.refresh_from_db()
+    return "payslips", s.PayslipSerializer(slip).data
+
+
 STAFF_OPS = {
+    "salary.update": op_salary_update,
+    "payroll.run": op_payroll_run,
+    "payroll.approve": op_payroll_approve,
+    "payslip.pay": op_payslip_pay,
     "voucher.prepare": op_voucher_prepare,
     "voucher.pay": op_voucher_pay,
     "cashup.submit": op_cashup_submit,

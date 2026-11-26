@@ -1,0 +1,10 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1>Salaries owed to staff</h1>
+<p class="help">Approved payslips not yet paid in full – how much the council still owes each person.</p>
+<div class="module" id="changelist"><div class="changelist-form-container"><div class="results"><table id="result_list">
+<thead><tr><th>Employee</th><th>Department</th><th class="text-end">Months unpaid / part paid</th><th class="text-end">Owed</th></tr></thead>
+{% for r in rows %}<tr><th class="field-first">{{ r.employee__first_name }} {{ r.employee__last_name }}</th><td>{{ r.employee__department }}</td><td class="text-end">{{ r.months }}</td><td class="text-end text-danger fw-bold">{{ r.currency }} {{ r.owed|floatformat:2|intcomma }}</td></tr>
+{% empty %}<tr><td colspan="4" class="quiet">Nobody is owed – all approved salaries are paid.</td></tr>{% endfor %}
+</table></div></div></div>
+{% endblock %}

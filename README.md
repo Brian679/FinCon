@@ -72,7 +72,7 @@ What a user sees and can do is decided by their **role**, which belongs to a dep
 | Department | Roles |
 |---|---|
 | Office of the CEO | Chief Executive Officer, Executive Assistant |
-| Administration | Administration Officer (HOD), HR Officer, Procurement Officer, Records Clerk, **ICT / System Administrator** |
+| Administration | Administration Officer (HOD), HR Officer, Procurement Officer, Records Clerk, Receptionist / Customer Care, **ICT / System Administrator** |
 | Finance | **Treasurer** (HOD – oversees everything in Finance), **Accountant**, Revenue Clerk / Cashier, Expenditure Clerk |
 | Internal Audit | Chief Internal Auditor (HOD), Internal Auditor |
 | Social Services | Director of Social Services (HOD), Social Services Officer, Environmental Health Officer, Natural Resources Officer, Public Safety Officer |
@@ -111,6 +111,27 @@ Both apps and both websites work from the same council database, so a payment re
 with: shops / stands, **paid up**, **not paid up**, % paid up, amount owed, shops without a valid licence, owners not yet on
 the app, and money paid this year – with district totals, sorting (most owed, best paid …), search, CSV export and print.
 Click an area to open its shop board. The council app has the same overview, calculated on the phone so it works offline.
+
+### Dashboard, menu and profile
+After logging in everyone lands on their **dashboard** (what is waiting for their approval, their tasks, their requests,
+the department's key figures). The **menu icon** (three bars, top left) opens the menu for the person's own department:
+its day-to-day work (tasks, memos, requests for funds, requisitions, faults, ICT support) and its registers in one list.
+On a desktop computer the menu stays open on the left. **Personal things** are under the profile picture (top right):
+*My profile* (details, **leave days** – a year / taken / waiting / left, **salary**, **payslips** – what was paid and what is
+still owed), apply for leave, notifications, change password, log out.
+
+### Payroll (Finance)
+Finance keeps each employee's salary (grade, basic, allowances, PAYE, NSSA, pension, medical aid, other deductions,
+bank details) – nobody can change their own salary and every change is in the audit trail. Each month Finance prepares the
+payslips, the Treasurer approves them (never the person who prepared them; the Treasurer's own payslip is approved by the
+CEO), and payments are recorded in full or in part. *Salaries owed to staff* shows how much the council still owes each
+person. Employees see their own payslips and are notified when paid. Annual leave cannot exceed the days left, and leave
+applications cannot overlap.
+
+### Complaints are confidential
+Complaints, compliments and suggestions go to **customer care** (the Receptionist / Customer Care Officer) and the head of
+the department concerned – not to everyone. An officer only sees a complaint once it is assigned to them; only customer
+care and heads can assign or transfer complaints.
 
 ### Requests for funds & purchases
 Any officer can ask for money or a purchase – travel & subsistence (T&S), a cash advance / imprest, goods or

@@ -34,6 +34,7 @@ INSTALLED_APPS = [
     "finance",
     "workflow",
     "departments",
+    "payroll",
     "portal",
     "api",
 ]

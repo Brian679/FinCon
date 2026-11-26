@@ -29,19 +29,23 @@ class StaffUserForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["username", "first_name", "last_name", "email", "phone", "employee_number", "national_id", "role", "is_active"]
+        fields = ["username", "first_name", "last_name", "email", "phone", "employee_number", "national_id", "role", "annual_leave_days", "is_active"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["role"].required = True
         self.fields["first_name"].required = True
         self.fields["last_name"].required = True
+        self.fields["annual_leave_days"].required = False
         grouped = {}
         for code, (label, dept, _lvl) in roles.ROLES.items():
             grouped.setdefault(Department(dept).label, []).append((code, label))
         self.fields["role"].choices = [("", "---------")] + list(grouped.items())
         if not self.instance.pk:
             self.fields["temporary_password"].required = True
+
+    def clean_annual_leave_days(self):
+        return self.cleaned_data.get("annual_leave_days") or 22
 
     def save(self, commit=True):
         user = super().save(commit=False)

@@ -36,6 +36,24 @@ class LeaveRequest(SyncModel):
     def __str__(self):
         return f"{self.employee} {self.get_leave_type_display()} {self.start_date} - {self.end_date}"
 
+    def save(self, *args, **kwargs):
+        if self._state.adding:
+            from django.core.exceptions import ValidationError
+
+            if self.end_date < self.start_date:
+                raise ValidationError("End date is before the start date.")
+            clash = LeaveRequest.objects.alive().filter(employee_id=self.employee_id, status__in=[self.Status.PENDING, self.Status.APPROVED],
+                                                       start_date__lte=self.end_date, end_date__gte=self.start_date)
+            if clash.exists():
+                raise ValidationError("You already have leave applied for or approved on some of these days.")
+            if self.leave_type == self.LeaveType.ANNUAL:
+                from payroll.services import leave_balance
+
+                left = leave_balance(self.employee, self.start_date.year)["left"]
+                if self.days > left:
+                    raise ValidationError(f"Not enough annual leave: you asked for {self.days} working day(s) but have {left} left this year.")
+        super().save(*args, **kwargs)
+
     @property
     def days(self):
         from core.sla import is_working_day

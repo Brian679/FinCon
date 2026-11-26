@@ -83,6 +83,12 @@ fun AppScreen(
             Modifier.fillMaxWidth().background(CrdcColors.Green).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            LocalMenuOpener.current?.let { open ->
+                // menu icon (three bars): opens the department menu
+                Column(Modifier.clickable { open() }.padding(end = 14.dp, top = 4.dp, bottom = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    repeat(3) { Box(Modifier.width(22.dp).height(2.dp).background(Color.White)) }
+                }
+            }
             Text(LocalSiteName.current, color = CrdcColors.Gold, fontSize = 19.sp, fontWeight = FontWeight.Light, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             actions()
@@ -422,6 +428,9 @@ fun IndexModule(title: String, rows: List<IndexRow>) {
         }
     }
 }
+
+/** When set (phones), the header shows a menu icon that calls it. */
+val LocalMenuOpener = androidx.compose.runtime.staticCompositionLocalOf<(() -> Unit)?> { null }
 
 /** Simple back-stack navigator shared by both apps. */
 class Navigator<S>(start: S) {

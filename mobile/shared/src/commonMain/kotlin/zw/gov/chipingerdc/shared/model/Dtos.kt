@@ -31,6 +31,8 @@ data class Me(
     val isHead: Boolean = false,
     val mustChangePassword: Boolean = false,
     val capabilities: List<String> = emptyList(),
+    val employeeNumber: String? = null,
+    val annualLeaveDays: Int = 22,
 ) {
     fun can(vararg caps: String) = caps.any { it in capabilities }
     val isClient get() = userType == "CLIENT"

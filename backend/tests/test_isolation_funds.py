@@ -31,10 +31,9 @@ class DepartmentIsolationTests(CouncilTestCase):
     def test_technical_staff_see_only_technical_and_shared_work(self):
         for name in ("engineer", "tech.officer"):
             titles = nav_titles(self.user(name))
-            self.assertIn("Technical services", titles)
-            for other in ("Finance", "Social services", "Administration", "Procurement"):
+            self.assertEqual(titles[0], "Technical Services")
+            for other in ("Finance", "Social services", "Social Services", "Administration", "Procurement"):
                 self.assertNotIn(other, titles, f"{name} sees {other}")
-            self.assertIn("My work", titles)
 
     def test_administration_staff_do_not_see_finance(self):
         for name in ("admin.officer", "hr.officer", "registry", "procurement"):
@@ -47,7 +46,7 @@ class DepartmentIsolationTests(CouncilTestCase):
     def test_social_staff_do_not_see_finance_or_technical(self):
         for name in ("social.director", "social.officer", "eho"):
             titles = nav_titles(self.user(name))
-            self.assertIn("Social services", titles)
+            self.assertEqual(titles[0], "Social Services")
             self.assertNotIn("Finance", titles)
             self.assertNotIn("Technical services", titles)
             self.assertNotIn("Administration", titles)
@@ -619,3 +618,88 @@ class AllocationTests(CouncilTestCase):
         bill.save()
         self.other_acc.recalculate()
         self.assertEqual(self.other_acc.balance, before - Decimal("10"))
+
+
+class PayrollProfileComplaintTests(CouncilTestCase):
+    def test_payroll_run_approve_pay_and_owed(self):
+        from payroll import services as pr
+        from payroll.models import Payslip
+
+        y, m = 2031, 3
+        self.assertGreater(pr.run_payroll(self.user("accountant"), y, m), 0)
+        with self.assertRaises(PermissionDenied):          # the preparer cannot approve
+            pr.approve_payroll(self.user("accountant"), y, m)
+        pr.approve_payroll(self.user("treasurer"), y, m)
+        own = Payslip.objects.get(year=y, month=m, employee=self.user("treasurer"))
+        self.assertEqual(own.status, "DRAFT")              # the Treasurer's own payslip waits for the CEO
+        pr.approve_payroll(self.user("ceo"), y, m)
+        own.refresh_from_db()
+        self.assertEqual(own.status, "APPROVED")
+        slip = Payslip.objects.get(year=y, month=m, employee=self.user("eho"))
+        with self.assertRaises(ValidationError):
+            pr.pay_payslip(self.user("exp.clerk"), slip, amount=slip.net + 1, reference="X")
+        pr.pay_payslip(self.user("exp.clerk"), slip, amount=slip.net - 100, reference="RTGS-1")
+        slip.refresh_from_db()
+        self.assertEqual(slip.status, "PART")
+        self.assertEqual(slip.balance, Decimal("100.00"))
+        self.assertTrue(any(r["employee"] == slip.employee_id for r in pr.owed_by_employee()))
+        self.assertTrue(Notification.objects.filter(recipient=slip.employee, title__startswith="Salary paid").exists())
+        mine = Payslip.objects.get(year=y, month=m, employee=self.user("exp.clerk"))
+        with self.assertRaises(PermissionDenied):
+            pr.pay_payslip(self.user("exp.clerk"), mine, amount=1, reference="X")
+
+    def test_nobody_changes_their_own_salary(self):
+        from payroll import services as pr
+
+        with self.assertRaises(PermissionDenied):
+            pr.update_salary(self.user("accountant"), self.user("accountant"), basic_salary="99999")
+        with self.assertRaises(PermissionDenied):
+            pr.update_salary(self.user("cashier"), self.user("eho"), basic_salary="1")
+
+    def test_profile_page_shows_leave_salary_and_payslips(self):
+        c = Client()
+        c.login(username="eho", password=PW)
+        page = c.get("/staff/profile/")
+        self.assertContains(page, "My leave")
+        self.assertContains(page, "My salary")
+        self.assertContains(page, "My payslips")
+        self.assertEqual(c.get("/staff/finance/payroll/").status_code, 403)
+        c.login(username="treasurer", password=PW)
+        self.assertEqual(c.get("/staff/finance/payroll/").status_code, 200)
+        self.assertEqual(c.get("/staff/finance/payroll/salaries/").status_code, 200)
+        self.assertEqual(c.get("/staff/finance/payroll/owed/").status_code, 200)
+
+    def test_annual_leave_cannot_exceed_balance_or_overlap(self):
+        from datetime import date, timedelta
+
+        from departments.models import LeaveRequest
+
+        u = self.user("tech.officer")
+        u.annual_leave_days = 5
+        u.save()
+        start = date(2031, 6, 2)  # a Monday
+        LeaveRequest.objects.create(employee=u, start_date=start, end_date=start + timedelta(days=2))     # 3 days
+        with self.assertRaises(ValidationError):    # overlaps
+            LeaveRequest.objects.create(employee=u, start_date=start + timedelta(days=1), end_date=start + timedelta(days=1), leave_type="SICK")
+        with self.assertRaises(ValidationError):    # 5 more days but only 2 left
+            LeaveRequest.objects.create(employee=u, start_date=start + timedelta(days=7), end_date=start + timedelta(days=11))
+
+    def test_complaints_only_reach_the_right_people(self):
+        from workflow import services as wf
+        from workflow.models import Complaint
+
+        c = wf.log_complaint(self.user("reception"), kind="COMPLAINT", subject="Rude officer at Checheche", details="…", department="FINANCE",
+                             name="J. Moyo")
+        self.assertTrue(Notification.objects.filter(recipient=self.user("reception"), title__contains=c.reference).exists())
+        self.assertTrue(Notification.objects.filter(recipient=self.user("treasurer"), title__contains=c.reference).exists())
+        self.assertFalse(Notification.objects.filter(recipient=self.user("cashier"), title__contains=c.reference).exists())
+        scope = lambda name: wf.complaint_scope(self.user(name), Complaint.objects.filter(pk=c.pk)).exists()  # noqa: E731
+        self.assertTrue(scope("reception"))
+        self.assertTrue(scope("treasurer"))
+        self.assertFalse(scope("cashier"))
+        self.assertFalse(scope("accountant"))
+        wf.act_on_complaint(self.user("reception"), c, "assign", assignee=self.user("accountant"))
+        self.assertTrue(scope("accountant"))
+        self.assertFalse(scope("cashier"))
+        with self.assertRaises(PermissionDenied):
+            wf.act_on_complaint(self.user("accountant"), c, "transfer", department="ADMIN")

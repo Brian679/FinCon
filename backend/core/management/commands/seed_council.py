@@ -94,6 +94,7 @@ DEMO_STAFF = [
     ("hr.officer", "Ruvimbo", "Mhlanga", "HR_OFFICER"),
     ("procurement", "Kuda", "Mapfumo", "PROCUREMENT_OFFICER"),
     ("registry", "Blessing", "Zhou", "RECORDS_CLERK"),
+    ("reception", "Rumbidzai", "Makoni", "RECEPTIONIST"),
     ("chief.auditor", "Patience", "Mazarura", "CHIEF_AUDITOR"),
     ("auditor", "Tinashe", "Chari", "AUDITOR"),
     ("social.director", "Memory", "Sibanda", "SOCIAL_HEAD"),
@@ -291,6 +292,7 @@ class Command(BaseCommand):
         Policy.objects.create(title="Strategic plan 2026–2030", kind="STRATEGY", department="EXEC", version="1.0", status="ADOPTED", adopted_on=today - timedelta(days=200))
         self._demo_more_areas(u)
         self._demo_requests(u)
+        self._demo_payroll(u)
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""
@@ -421,3 +423,34 @@ class Command(BaseCommand):
                                            status=Licence.Status.EXPIRED, fee=Decimal("60"), revenue_head=shop_lic,
                                            issue_date=date(today.year - 1, 1, 10), expiry_date=date(today.year - 1, 12, 31))
                 # else: nothing paid, no licence
+
+    def _demo_payroll(self, u):
+        """Demo salaries and two months of payroll (illustrative amounts only – not real council salaries)."""
+        from payroll import services as pr
+        from payroll.models import Payslip
+
+        User = get_user_model()
+        bands = {"EXEC": ("D1", 2800), "HEAD": ("C2", 1800), "OFFICER": ("B3", 1000), "CLERK": ("A4", 650)}
+        for user in User.objects.filter(user_type=User.UserType.STAFF, is_active=True).exclude(role=""):
+            grade, basic = bands.get(user.level or "OFFICER", ("B3", 1000))
+            basic = Decimal(basic)
+            payer = u["accountant"] if user.pk != u["accountant"].pk else u["treasurer"]
+            pr.update_salary(payer, user, grade=grade, basic_salary=basic, housing_allowance=(basic * Decimal("0.15")).quantize(Decimal("1")),
+                             transport_allowance=Decimal("80"), paye=(basic * Decimal("0.12")).quantize(Decimal("1")), nssa=Decimal("27"),
+                             pension=(basic * Decimal("0.06")).quantize(Decimal("1")), medical_aid=Decimal("25"), payment_method="EFT",
+                             bank_name="CBZ Bank Chipinge", bank_account=f"01{user.pk:04d}77{user.pk:03d}")
+        today = timezone.localdate()
+        prev = (today.replace(day=1) - timezone.timedelta(days=1))
+        for (y, m), paid_share in (((prev.year, prev.month), 1.0), ((today.year, today.month), 0.0)):
+            pr.run_payroll(u["accountant"], y, m)
+            pr.approve_payroll(u["treasurer"], y, m)
+            pr.approve_payroll(u["ceo"], y, m)          # the Treasurer's own payslip
+            for n, slip in enumerate(Payslip.objects.filter(year=y, month=m, status="APPROVED").order_by("employee__username")):
+                payer = u["exp.clerk"] if slip.employee_id != u["exp.clerk"].pk else u["treasurer"]
+                if paid_share == 1.0:
+                    amount = slip.net if n % 5 else (slip.net / 2).quantize(Decimal("0.01"))    # a few people only half paid last month
+                elif n % 3 == 0:
+                    amount = (slip.net * Decimal("0.6")).quantize(Decimal("0.01"))             # this month: some advances
+                else:
+                    continue
+                pr.pay_payslip(payer, slip, amount=amount, method="EFT", reference=f"RTGS-SAL-{y}{m:02d}-{n + 1:03d}")

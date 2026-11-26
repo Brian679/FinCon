@@ -61,7 +61,7 @@ def task_detail(request, pk):
 # ---------------------------------------------------------------- complaints
 class ComplaintList(GenericListView):
     model = Complaint
-    required_caps = ("complaints.department", "complaints.view_all")
+    required_caps = ("complaints.department", "complaints.view_all", "complaints.assigned")
     title = "Complaints, compliments, suggestions & enquiries"
     columns = [("Ref.", "reference"), ("Received", "created_at"), ("Type", "kind"), ("From", "name"), ("Subject", "subject"),
                ("Department", "department"), ("Ack. due", "acknowledge_due"), ("Acknowledged", "acknowledged_at"), ("Status", "status")]
@@ -79,7 +79,7 @@ class ComplaintList(GenericListView):
 class ComplaintCreate(GenericCreateView):
     model = Complaint
     form_class = forms.ComplaintForm
-    required_caps = ("complaints.department",)
+    required_caps = ("complaints.manage", "complaints.department", "complaints.view_all")
     title = "Record complaint / feedback"
     detail_url_name = "workflow:complaint"
     offline_capable = True

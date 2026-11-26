@@ -24,6 +24,7 @@ ROLES = {
     "HR_OFFICER": ("Human Resources Officer", D.ADMINISTRATION, Level.OFFICER),
     "PROCUREMENT_OFFICER": ("Procurement Officer", D.ADMINISTRATION, Level.OFFICER),
     "RECORDS_CLERK": ("Records / Registry Clerk", D.ADMINISTRATION, Level.CLERK),
+    "RECEPTIONIST": ("Receptionist / Customer Care Officer", D.ADMINISTRATION, Level.CLERK),
     # Finance
     "TREASURER": ("Treasurer (Head of Finance)", D.FINANCE, Level.HEAD),
     "ACCOUNTANT": ("Accountant", D.FINANCE, Level.OFFICER),
@@ -57,7 +58,7 @@ STAFF_BASE = {
     "tasks.view",
     "memos.send",
     "funds.request",
-    "complaints.department",
+    "complaints.assigned",
     "requests.department",
     "requisition.create",
     "leave.apply",
@@ -65,6 +66,7 @@ STAFF_BASE = {
 
 HEAD_CAPS = {
     "dept.overview",
+    "complaints.department",
     "funds.hod_approve",
     "risks.view",
     "resolutions.update",
@@ -90,6 +92,8 @@ ROLE_CAPS = {
         "voucher.authorise",
         "funds.ceo_approve",
         "funds.view_all",
+        "payroll.view",
+        "payroll.approve",
         "assets.view",
         "audit.view_trail",
         "audit.view_all",
@@ -115,10 +119,13 @@ ROLE_CAPS = {
     # Administration
     "ADMIN_OFFICER": HEAD_CAPS
     | {"complaints.view_all", "correspondence.manage", "hr.manage", "hr.view", "users.view", "procurement.order", "meetings.manage",
-       "meetings.view", "policies.manage", "policies.view", "activities.manage", "assets.manage", "assets.view", "funds.admin_approve"},
+       "meetings.view", "policies.manage", "policies.view", "activities.manage", "assets.manage", "assets.view", "funds.admin_approve",
+       "complaints.manage"},
     "HR_OFFICER": {"activities.manage", "hr.manage", "hr.view", "meetings.view", "policies.view"},
     "PROCUREMENT_OFFICER": {"procurement.order", "supplier.manage", "meetings.view", "policies.view", "assets.view"},
     "RECORDS_CLERK": {"meetings.manage", "meetings.view", "policies.view", "correspondence.manage"},
+    # Front desk: receives every complaint, compliment, suggestion and enquiry and routes it to the right officer.
+    "RECEPTIONIST": {"complaints.view_all", "complaints.manage", "correspondence.manage", "policies.view"},
     # Finance
     "TREASURER": HEAD_CAPS
     | FINANCE_READ
@@ -139,6 +146,10 @@ ROLE_CAPS = {
         "requisition.approve",
         "funds.treasurer_approve",
         "funds.view_all",
+        "payroll.manage",
+        "payroll.approve",
+        "payroll.pay",
+        "payroll.view",
         "procurement.order",
         "budget.manage",
         "budget.view",
@@ -183,20 +194,22 @@ ROLE_CAPS = {
         "assets.manage",
         "assets.view",
         "funds.view_all",
+        "payroll.manage",
+        "payroll.view",
     },
     "REVENUE_CLERK": {"claims.review", "reminders.send", "areas.view", "leases.view", "finance.view", "receipt.create", "receipt.void_request", "accounts.manage", "licence.view", "licence.manage", "cashup.submit"},
-    "EXPENDITURE_CLERK": {"assets.manage", "assets.view", "funds.view_all", "finance.view", "supplier.manage", "voucher.prepare", "voucher.pay", "procurement.order", "budget.view"},
+    "EXPENDITURE_CLERK": {"payroll.pay", "payroll.view", "assets.manage", "assets.view", "funds.view_all", "finance.view", "supplier.manage", "voucher.prepare", "voucher.pay", "procurement.order", "budget.view"},
     # Internal audit - read everything, change nothing operational
     "CHIEF_AUDITOR": HEAD_CAPS
     | FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "complaints.view_all",
        "requests.view_all", "budget.view", "licence.view", "stands.view", "projects.view", "hr.view", "payments.online_view", "risks.manage",
        "incidents.view", "plans.view", "areas.view", "leases.view", "messages.view", "dept.overview_all", "assets.view",
-       "meetings.view", "policies.view", "funds.view_all"},
+       "meetings.view", "policies.view", "funds.view_all", "payroll.view"},
     "AUDITOR": FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "budget.view", "licence.view",
        "stands.view", "projects.view", "payments.online_view", "risks.manage", "risks.view", "incidents.view", "plans.view", "areas.view",
-       "leases.view", "assets.view", "meetings.view", "policies.view", "funds.view_all"},
+       "leases.view", "assets.view", "meetings.view", "policies.view", "funds.view_all", "payroll.view"},
     # Social services
     "SOCIAL_HEAD": HEAD_CAPS | {"stands.manage", "stands.view", "stands.allocate", "licence.inspect", "activities.manage",
                                 "incidents.manage", "incidents.view", "assets.condition", "assets.view"},

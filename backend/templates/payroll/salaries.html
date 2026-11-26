@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1>Salaries</h1>
+<ul class="object-tools"><li><a href="{% url 'payroll:payroll' %}">Payroll</a></li><li><a href="{% url 'payroll:arrears' %}">Salaries owed</a></li></ul>
+<p class="help">Finance keeps each person's salary up to date; every change is recorded in the audit trail. Nobody can change their own salary.</p>
+<div class="module" id="changelist"><div class="changelist-form-container"><div class="results"><table id="result_list">
+<thead><tr><th>Employee</th><th>Department / role</th><th>Grade</th><th class="text-end">Gross</th><th class="text-end">Deductions</th><th class="text-end">Net a month</th><th>On payroll</th></tr></thead>
+{% for e in staff %}<tr><th class="field-first">{% if can_edit and e.pk != user.pk %}<a href="{% url 'payroll:salary_edit' e.pk %}">{{ e.get_full_name|default:e.username }}</a>{% else %}{{ e.get_full_name|default:e.username }}{% endif %}<div class="small quiet">{{ e.employee_number|default:"" }}</div></th>
+<td>{{ e.get_department_display }}<div class="small quiet">{{ e.role_label }}</div></td>
+{% with s=e.salary %}{% if s %}<td>{{ s.grade }}</td><td class="text-end">{{ s.gross|floatformat:2|intcomma }}</td><td class="text-end">{{ s.deductions|floatformat:2|intcomma }}</td><td class="text-end fw-bold">{{ s.currency }} {{ s.net|floatformat:2|intcomma }}</td><td>{% if s.is_active %}Yes{% else %}No{% endif %}</td>
+{% else %}<td colspan="5" class="quiet">Not set up{% if can_edit and e.pk != user.pk %} – <a href="{% url 'payroll:salary_edit' e.pk %}">add salary</a>{% endif %}</td>{% endif %}{% endwith %}</tr>{% endfor %}
+</table></div></div></div>
+{% endblock %}

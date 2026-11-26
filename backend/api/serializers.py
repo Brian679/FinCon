@@ -41,7 +41,7 @@ class MeSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["id", "username", "full_name", "email", "phone", "user_type", "department", "department_label", "role", "role_label",
-                  "is_head", "must_change_password", "capabilities"]
+                  "is_head", "must_change_password", "capabilities", "employee_number", "annual_leave_days"]
 
     def get_capabilities(self, obj):
         return sorted(obj.capabilities)
@@ -230,11 +230,12 @@ class AuditFindingSerializer(SyncSerializer):
 
 class LeaveRequestSerializer(SyncSerializer):
     employee_name = serializers.CharField(source="employee.get_full_name", read_only=True)
+    days = serializers.IntegerField(read_only=True)
     employee_department = serializers.CharField(source="employee.department", read_only=True)
 
     class Meta:
         model = LeaveRequest
-        fields = _sync_fields(LeaveRequest, ["employee", "employee_name", "employee_department", "leave_type", "start_date", "end_date", "reason", "status",
+        fields = _sync_fields(LeaveRequest, ["employee", "employee_name", "employee_department", "leave_type", "start_date", "end_date", "days", "reason", "status",
                                              "decision_comment"])
 
 
@@ -530,3 +531,45 @@ class CorrespondenceSerializer(SyncSerializer):
         model = Correspondence
         fields = _sync_fields(Correspondence, ["reference", "sender", "sender_contact", "subject", "date_received", "department", "assigned_to",
                                                "assigned_to_name", "status", "response_due", "responded_at", "response_summary", "file_reference"])
+
+
+
+# ------------------------------------------------------------------ payroll
+from payroll.models import Payslip, SalaryProfile  # noqa: E402
+
+
+class SalaryProfileSerializer(SyncSerializer):
+    employee_id = serializers.IntegerField(source="employee.pk", read_only=True)
+    employee_name = serializers.CharField(source="employee.get_full_name", read_only=True)
+    department = serializers.CharField(source="employee.department", read_only=True)
+    role_label = serializers.CharField(source="employee.role_label", read_only=True)
+    allowances = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    gross = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    deductions = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    net = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = SalaryProfile
+        fields = _sync_fields(SalaryProfile, ["employee_id", "employee_name", "department", "role_label", "grade", "currency", "basic_salary",
+                                              "housing_allowance", "transport_allowance", "other_allowances", "paye", "nssa", "pension", "medical_aid",
+                                              "other_deductions", "payment_method", "bank_name", "bank_account", "is_active", "allowances", "gross",
+                                              "deductions", "net"])
+
+
+class PayslipSerializer(SyncSerializer):
+    employee_id = serializers.IntegerField(source="employee.pk", read_only=True)
+    employee_name = serializers.CharField(source="employee.get_full_name", read_only=True)
+    department = serializers.CharField(source="employee.department", read_only=True)
+    period = serializers.CharField(read_only=True)
+    balance = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    payments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Payslip
+        fields = _sync_fields(Payslip, ["reference", "employee_id", "employee_name", "department", "year", "month", "period", "currency", "grade",
+                                        "basic_salary", "allowances", "gross", "paye", "nssa", "pension", "other_deductions", "net", "amount_paid",
+                                        "balance", "status", "approved_at", "payments"])
+
+    def get_payments(self, obj):
+        return [{"amount": str(p.amount), "method": p.get_method_display(), "reference": p.reference, "paid_on": p.paid_on.isoformat(),
+                 "paid_by": p.paid_by.get_full_name()} for p in obj.payments.all() if not p.is_deleted]

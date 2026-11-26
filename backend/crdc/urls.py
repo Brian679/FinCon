@@ -16,6 +16,7 @@ urlpatterns = [
     path("", include("core.urls")),
     path("staff/finance/", include("finance.urls")),
     path("staff/", include("workflow.urls")),
+    path("staff/", include("payroll.urls")),
     path("staff/", include("departments.urls")),
     path("portal/", include("portal.urls")),
     path("api/v1/", include("api.urls")),

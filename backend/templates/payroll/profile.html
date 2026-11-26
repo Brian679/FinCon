@@ -1,0 +1,47 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1>My profile</h1>
+<div class="row g-4">
+<div class="col-xl-6">
+  <fieldset class="module aligned"><h2>My details</h2>
+    <div class="form-row"><div class="flex-container"><label>Name:</label><div class="readonly">{{ u.get_full_name }}</div></div></div>
+    <div class="form-row"><div class="flex-container"><label>Employee no.:</label><div class="readonly">{{ u.employee_number|default:"—" }}</div></div></div>
+    <div class="form-row"><div class="flex-container"><label>Role:</label><div class="readonly">{{ u.role_label }}</div></div></div>
+    <div class="form-row"><div class="flex-container"><label>Department:</label><div class="readonly">{{ u.get_department_display }}</div></div></div>
+    <div class="form-row"><div class="flex-container"><label>Phone:</label><div class="readonly">{{ u.phone|default:"—" }}</div></div></div>
+    <div class="form-row"><div class="flex-container"><label>E-mail:</label><div class="readonly">{{ u.email|default:"—" }}</div></div></div>
+    <div class="form-row"><div class="flex-container"><label>Username:</label><div class="readonly">{{ u.username }} · <a href="{% url 'accounts:password_change' %}">change password</a></div></div></div>
+  </fieldset>
+  <div class="module"><h2>My leave {{ leave.year }}</h2>
+    <div class="row g-2 p-2">
+      <div class="col-6 col-md-3"><div class="card kpi shadow-sm"><div class="card-body"><div class="small text-muted">Days a year</div><div class="value">{{ leave.entitled }}</div></div></div></div>
+      <div class="col-6 col-md-3"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="small text-muted">Taken</div><div class="value">{{ leave.taken }}</div></div></div></div>
+      <div class="col-6 col-md-3"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="small text-muted">Waiting approval</div><div class="value">{{ leave.pending }}</div></div></div></div>
+      <div class="col-6 col-md-3"><div class="card kpi shadow-sm"><div class="card-body"><div class="small text-muted">Left</div><div class="value text-success">{{ leave.left }}</div></div></div></div>
+    </div>
+    <table class="w-100">{% for lv in leave_list %}<tr><td><a href="{% url 'departments:leave_detail' lv.pk %}">{{ lv.get_leave_type_display }}</a></td><td>{{ lv.start_date }} – {{ lv.end_date }}</td><td>{{ lv.days }} day(s)</td><td>{{ lv.get_status_display }}</td></tr>{% empty %}<tr><td class="quiet">No leave this year.</td></tr>{% endfor %}</table>
+    <p class="p-2 mb-0"><a class="addlink" href="{% url 'departments:leave_new' %}">Apply for leave</a></p>
+  </div>
+</div>
+<div class="col-xl-6">
+  <div class="module"><h2>My salary</h2>
+  {% if salary %}
+    <table class="w-100">
+      <tr><td>Grade</td><td class="text-end">{{ salary.grade|default:"—" }}</td></tr>
+      <tr><td>Basic salary</td><td class="text-end">{{ salary.currency }} {{ salary.basic_salary|floatformat:2|intcomma }}</td></tr>
+      <tr><td>Allowances</td><td class="text-end">{{ salary.allowances|floatformat:2|intcomma }}</td></tr>
+      <tr><td><strong>Gross</strong></td><td class="text-end"><strong>{{ salary.gross|floatformat:2|intcomma }}</strong></td></tr>
+      <tr><td>Deductions (PAYE {{ salary.paye|floatformat:2 }}, NSSA {{ salary.nssa|floatformat:2 }}, pension {{ salary.pension|floatformat:2 }}, other {{ salary.medical_aid|add:salary.other_deductions|floatformat:2 }})</td><td class="text-end">− {{ salary.deductions|floatformat:2|intcomma }}</td></tr>
+      <tr><td><strong>Net pay a month</strong></td><td class="text-end"><strong>{{ salary.currency }} {{ salary.net|floatformat:2|intcomma }}</strong></td></tr>
+      <tr><td>Paid into</td><td class="text-end">{{ salary.get_payment_method_display }} {{ salary.bank_name }} {{ salary.bank_account }}</td></tr>
+    </table>
+  {% else %}<p class="p-2 quiet">Finance has not set up your salary yet.</p>{% endif %}
+  </div>
+  <div class="module"><h2>My payslips – paid this year {{ salary.currency|default:"USD" }} {{ paid_year|floatformat:2|intcomma }}{% if owed %} · <span class="text-danger">still owed {{ owed|floatformat:2|intcomma }}</span>{% endif %}</h2>
+    <table class="w-100"><thead><tr><th>Month</th><th class="text-end">Net</th><th class="text-end">Paid</th><th class="text-end">Owed</th><th>Status</th></tr></thead>
+    {% for s in slips %}<tr><td><a href="{% url 'payroll:payslip' s.pk %}">{{ s.period }}</a></td><td class="text-end">{{ s.net|floatformat:2|intcomma }}</td><td class="text-end">{{ s.amount_paid|floatformat:2|intcomma }}</td><td class="text-end{% if s.balance %} text-danger{% endif %}">{{ s.balance|floatformat:2|intcomma }}</td><td><span class="badge text-bg-{% if s.status == 'PAID' %}success{% elif s.status == 'PART' %}warning{% else %}secondary{% endif %}">{{ s.get_status_display }}</span></td></tr>
+    {% empty %}<tr><td colspan="5" class="quiet">No payslips yet.</td></tr>{% endfor %}</table>
+  </div>
+</div>
+</div>
+{% endblock %}

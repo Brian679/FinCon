@@ -114,7 +114,9 @@ def dashboard(request):
     ctx = {"title": "Dashboard", "approvals": pending_approvals(user)}
     ctx["my_tasks"] = Task.objects.alive().filter(assigned_to=user, status__in=[Task.Status.OPEN, Task.Status.IN_PROGRESS])[:10]
     dept_filter = Q() if user.sees_all_departments() else Q(department=user.department)
-    ctx["complaints_open"] = Complaint.objects.alive().filter(dept_filter).exclude(status__in=[Complaint.Status.RESOLVED, Complaint.Status.CLOSED])
+    from workflow.services import complaint_scope
+
+    ctx["complaints_open"] = complaint_scope(user, Complaint.objects.alive()).exclude(status__in=[Complaint.Status.RESOLVED, Complaint.Status.CLOSED])
     ctx["complaints_unacked"] = ctx["complaints_open"].filter(acknowledged_at__isnull=True).count()
     ctx["requests_open"] = ServiceRequest.objects.alive().filter(dept_filter).exclude(
         status__in=[ServiceRequest.Status.RESOLVED, ServiceRequest.Status.CLOSED, ServiceRequest.Status.REJECTED])
