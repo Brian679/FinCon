@@ -105,7 +105,38 @@ def issue_receipt(user, *, revenue_head, amount, payer_name="", account=None, bi
     if account is not None:
         account.recalculate()
         _maybe_issue_licences(account)
+        notify_payment(receipt)
     return receipt
+
+
+def client_people(account, *extra):
+    """Everyone who follows this account on the client app / portal."""
+    people = list(account.portal_users.filter(is_active=True)) if account is not None else []
+    return [u for u in {*people, *extra} if u is not None]
+
+
+def notify_payment(receipt, extra_users=()):
+    """Tell the shop / stand owner on their phone (app notification + SMS) that the council
+    received their payment and what is still owing - wherever the payment was taken."""
+    from core.messaging import notify_client
+
+    account = receipt.account
+    if account is None:
+        return 0
+    account.refresh_from_db(fields=["balance"])
+    prop = receipt.bill.property if receipt.bill_id and receipt.bill.property_id else None
+    what = f" for stand {prop.stand_number}" + (f" ({prop.business_name})" if prop and prop.business_name else "") if prop else ""
+    where = {Receipt.Channel.COUNTER: "at the council offices", Receipt.Channel.FIELD: "by a council revenue collector"}.get(receipt.channel, "online")
+    left = "Your account is fully paid – nothing owing." if account.balance <= 0 else f"Balance remaining: USD {account.balance:,.2f}."
+    body = (f"Receipt {receipt.number}: {receipt.currency} {receipt.amount:,.2f}{what} paid {where} on "
+            f"{timezone.localtime(receipt.created_at).strftime('%d %b %Y %H:%M')}. {left}")
+    issued = [lic for lic in account.licences.alive().filter(status=Licence.Status.ISSUED, issue_date=timezone.localdate())]
+    if issued:
+        body += " Licence " + ", ".join(f"{lic.number} ({lic.business_name})" for lic in issued) + " is now issued."
+    sms_to = account.phone if receipt.channel in (Receipt.Channel.COUNTER, Receipt.Channel.FIELD) else ""
+    return notify_client(users=client_people(account, *extra_users), phone=sms_to, subject=f"Payment received – {account.account_number}",
+                         body=body, account_number=account.account_number, sent_by=receipt.received_by, campaign="Payment confirmation",
+                         link=f"/portal/receipts/{receipt.pk}/")
 
 
 @transaction.atomic
@@ -275,7 +306,7 @@ def decide_licence(user, lic, approve: bool, reason="", fee=None):
         lic.rejection_reason = reason
         lic.save()
         _record(lic, "Licence decision", "REJECTED", user, reason)
-        notify([lic.applicant], f"Licence application rejected: {lic.business_name}", reason)
+        notify(client_people(lic.account, lic.applicant), f"Licence application rejected: {lic.business_name}", reason)
         return lic
     if fee is not None:
         lic.fee = q2(fee)
@@ -291,7 +322,8 @@ def decide_licence(user, lic, approve: bool, reason="", fee=None):
     _maybe_issue_licences(lic.account)
     lic.refresh_from_db()
     if lic.status == Licence.Status.APPROVED:
-        notify([lic.applicant], f"Licence approved - please pay ${lic.fee}", f"{lic.business_name}. Pay bill {lic.bill.number if lic.bill else ''} to receive your licence.")
+        notify(client_people(lic.account, lic.applicant), f"Licence approved - please pay ${lic.fee}",
+               f"{lic.business_name}. Pay bill {lic.bill.number if lic.bill else ''} in the app or at the council offices to receive your licence.")
     return lic
 
 
@@ -305,7 +337,7 @@ def _maybe_issue_licences(account):
             lic.expiry_date = date(today.year, 12, 31)
             lic.save()
             audit.log(AuditLog.Action.APPROVE, lic, message="Licence issued on payment of fee")
-            notify([lic.applicant], f"Licence issued: {lic.number}", f"{lic.business_name} - valid until {lic.expiry_date}")
+            notify(client_people(account, lic.applicant), f"Licence issued: {lic.number}", f"{lic.business_name} - valid until {lic.expiry_date}")
 
 
 def expire_licences():
@@ -582,7 +614,11 @@ def confirm_online_payment(payment, provider_reference=""):
     payment.receipt = receipt
     payment.paid_at = timezone.now()
     payment.save()
-    notify([payment.user], f"Payment received - receipt {receipt.number}", f"{payment.currency} {payment.amount} for {payment.account.account_number}")
+    if payment.user_id and not payment.account.portal_users.filter(pk=payment.user_id).exists():
+        notify([payment.user], f"Payment received - receipt {receipt.number}", f"{payment.currency} {payment.amount} for {payment.account.account_number}")
+    # Revenue staff see online money arrive straight away (it is already in the cashbook and on the area board).
+    notify(users_with_cap("cashup.verify", "FINANCE"), f"Online payment {payment.currency} {payment.amount:,.2f} – {payment.account.name}",
+           f"Receipt {receipt.number}, account {payment.account.account_number}", f"/staff/finance/receipts/{receipt.pk}/")
     return receipt
 
 
@@ -874,3 +910,54 @@ def decide_claim(user, claim, approve: bool, *, account=None, note="", create_ac
     _record(claim, "Stand claim", "APPROVED", user, note)
     notify([claim.user], f"Stand {claim.stand_number} approved and linked", f"Account {account.account_number}. Your bills, payments and licences are now in the app.")
     return claim
+
+
+def area_overview(year=None):
+    """One row per trading area (growth point, business centre, market …): how many
+    shops / stands are paid up, how many still owe, how much, licences and app take-up.
+    Uses the same rule as the shop board: paid up = nothing owing and a valid licence."""
+    from django.db.models import F, Sum
+
+    from .models import TradingArea
+
+    year = year or timezone.localdate().year
+    today = timezone.localdate()
+    props = list(Property.objects.alive().filter(is_active=True, area__isnull=False).values(
+        "id", "area_id", "account_id", "land_use", "business_name"))
+    owed = dict(Bill.objects.alive().filter(property__isnull=False).exclude(status__in=[Bill.Status.CANCELLED, Bill.Status.PAID])
+                .values("property").annotate(t=Sum(F("amount") - F("amount_paid"))).values_list("property", "t"))
+    paid_year = dict(Bill.objects.alive().filter(property__isnull=False, created_at__year=year).exclude(status=Bill.Status.CANCELLED)
+                     .values("property").annotate(t=Sum("amount_paid")).values_list("property", "t"))
+    latest = {}
+    for lic in Licence.objects.alive().filter(property__isnull=False).order_by("created_at").values("property", "status", "expiry_date"):
+        latest[lic["property"]] = lic
+    on_app = set(ClientAccount.portal_users.through.objects.values_list("clientaccount_id", flat=True))
+    rows = {a.pk: {"area": a, "shops": 0, "paid": 0, "owing": 0, "owed": ZERO_D, "no_licence": 0, "not_on_app": 0, "collected": ZERO_D}
+            for a in TradingArea.objects.alive().filter(is_active=True)}
+    for p in props:
+        r = rows.get(p["area_id"])
+        if r is None:
+            continue
+        debt = owed.get(p["id"]) or ZERO_D
+        needs = p["land_use"] in (Property.LandUse.COMMERCIAL, Property.LandUse.INDUSTRIAL) or bool(p["business_name"])
+        lic = latest.get(p["id"])
+        valid = bool(lic and lic["status"] == Licence.Status.ISSUED and lic["expiry_date"] and lic["expiry_date"] >= today)
+        licence_ok = valid or not needs
+        r["shops"] += 1
+        r["owed"] += debt
+        r["collected"] += paid_year.get(p["id"]) or ZERO_D
+        if debt <= 0 and licence_ok:
+            r["paid"] += 1
+        else:
+            r["owing"] += 1
+        if needs and not valid:
+            r["no_licence"] += 1
+        if p["account_id"] not in on_app:
+            r["not_on_app"] += 1
+    out = list(rows.values())
+    for r in out:
+        r["pct"] = round(r["paid"] * 100 / r["shops"]) if r["shops"] else 0
+    keys = ("shops", "paid", "owing", "owed", "no_licence", "not_on_app", "collected")
+    total = {k: sum((r[k] for r in out), ZERO_D if k in ("owed", "collected") else 0) for k in keys}
+    total["pct"] = round(total["paid"] * 100 / total["shops"]) if total["shops"] else 0
+    return out, total

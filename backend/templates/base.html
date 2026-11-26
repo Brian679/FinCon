@@ -27,10 +27,31 @@
     </div>
     {% block usertools %}<div id="user-tools">
       {% if user.is_authenticated %}
-        Welcome, <strong>{{ user.first_name|default:user.username }}</strong>{% if user.is_staff_member %} ({{ user.role_label }}){% endif %}.
-        <a href="{% if user.is_client %}{% url 'portal:notifications' %}{% else %}{% url 'core:notifications' %}{% endif %}">Notifications{% if unread_notifications %} ({{ unread_notifications }}){% endif %}</a> /
-        <a href="{% url 'accounts:password_change' %}">Change password</a> /
-        <form id="logout-form" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Log out</button></form>
+      <details class="profile-menu" id="profile-menu">
+        <summary aria-label="My profile and menu">
+          <span class="avatar">{{ user.first_name|first|default:user.username|first|upper }}{{ user.last_name|first|upper }}</span>
+          {% if unread_notifications %}<span class="avatar-badge">{{ unread_notifications }}</span>{% endif %}
+          <span class="caret" aria-hidden="true">&#9662;</span>
+        </summary>
+        <div class="profile-dropdown">
+          <div class="profile-card">
+            <span class="avatar big">{{ user.first_name|first|default:user.username|first|upper }}{{ user.last_name|first|upper }}</span>
+            <div><strong>{{ user.get_full_name|default:user.username }}</strong>
+              <div class="quiet">{% if user.is_staff_member %}{{ user.role_label }}<br>{{ user.get_department_display }}{% else %}{{ user.username }}{% endif %}</div>
+              {% if user.email %}<div class="quiet small">{{ user.email }}</div>{% endif %}</div>
+          </div>
+          <a href="{% if user.is_client %}{% url 'portal:notifications' %}{% else %}{% url 'core:notifications' %}{% endif %}">Notifications{% if unread_notifications %} <span class="count">{{ unread_notifications }}</span>{% endif %}</a>
+          <a href="{% url 'accounts:password_change' %}">Change password</a>
+          <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Log out</button></form>
+          {% if nav_items %}
+          <div class="profile-nav">
+            {% for section in nav_items %}<div class="profile-nav-title">{{ section.title }}</div>
+            {% for item in section.items %}<div class="profile-nav-row"><a href="{{ item.url }}"{% if request.path == item.url %} class="current"{% endif %}>{{ item.label }}</a>{% if item.add %}<a href="{{ item.add }}" class="addlink">Add</a>{% endif %}</div>{% endfor %}
+            {% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </details>
       {% elif SITE_KIND == 'staff' %}
         <a href="{% url 'accounts:login' %}">Staff log in</a>
       {% else %}
@@ -40,7 +61,6 @@
   </header>
   {% block nav_breadcrumbs %}<nav aria-label="Breadcrumbs" class="no-print">
     <div class="breadcrumbs">
-      {% if user.is_authenticated and nav_items %}<button type="button" class="mobile-menu-btn" onclick="document.body.classList.toggle('mobile-nav-open')" aria-controls="nav-sidebar">&#9776; Menu</button>{% endif %}
       <a href="{% if user.is_authenticated %}{% url 'accounts:home' %}{% else %}/{% endif %}">Home</a>{% block breadcrumbs %}{% if title and title != 'Home' %} &rsaquo; {{ title }}{% endif %}{% endblock %}
     </div>
   </nav>{% endblock %}
@@ -77,5 +97,11 @@
 <script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
 <script src="{% static 'js/offline.js' %}"></script>
 {% block scripts %}{% endblock %}
+<script>
+document.addEventListener("click", function (e) {
+  var m = document.getElementById("profile-menu");
+  if (m && m.open && !m.contains(e.target)) m.open = false;
+});
+</script>
 </body>
 </html>

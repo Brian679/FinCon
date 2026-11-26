@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="h3 mb-1">Welcome, {{ user.first_name|default:user.username }}</h1>
-<p class="text-muted">{{ user.role_label }} · {{ user.get_department_display }}</p>
+<h1 class="h3 mb-1">Dashboard</h1>
+<p class="text-muted">{{ user.get_department_display }}</p>
 {% if fin %}{% include "core/_fin_kpis.html" %}{% endif %}
 <div class="row g-3 mb-3">
   <div class="col-sm-6 col-xl-3"><a class="text-decoration-none" href="{% url 'workflow:complaints' %}"><div class="card kpi {% if complaints_unacked %}bad{% endif %} shadow-sm"><div class="card-body"><div class="text-muted small">Open complaints {% if not user.sees_all_departments %}(my department){% endif %}</div><div class="value">{{ complaints_open_count }}</div><div class="small">{{ complaints_unacked }} not yet acknowledged (48h standard)</div></div></div></a></div>

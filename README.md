@@ -83,6 +83,25 @@ Audit has read-only oversight of every department (that is its job). Everyone sh
 * **Tasks** – Heads can send a task to another department; it goes to that department's Head.
 * **Requests for funds & purchases** and **purchase requisitions** (below), leave and the ICT helpdesk.
 
+### Council app ↔ client app: one set of figures
+Both apps and both websites work from the same council database, so a payment recorded anywhere shows everywhere:
+
+* **Collector or cashier takes a payment** (counter, or in the field on the council app – offline too) → the receipt is
+  allocated to the oldest bills, the shop's levy / rates / licence position updates, and the owner immediately gets an
+  **app notification and SMS**: receipt number, what it was for and the **balance remaining** (or "fully paid"). A licence
+  whose fee is now paid is issued and the owner is told.
+* **Owner pays in the client app** (EcoCash / OneMoney / InnBucks) → the receipt is issued at once, it appears in the
+  council's receipts, cashbook and area board, and revenue staff are notified.
+* In the **client app**, *My stands & shops* shows each shop as **Paid up** or **Balance remaining: USD x** (rates, levies,
+  rent, licence) with a **Pay now** button.
+* On each area's shop board, collectors tap **Record payment** next to any shop that owes.
+
+### Areas overview
+*Finance → Areas overview* lists every growth point, business centre, township and market (as many as the district has)
+with: shops / stands, **paid up**, **not paid up**, % paid up, amount owed, shops without a valid licence, owners not yet on
+the app, and money paid this year – with district totals, sorting (most owed, best paid …), search, CSV export and print.
+Click an area to open its shop board. The council app has the same overview, calculated on the phone so it works offline.
+
 ### Requests for funds & purchases
 Any officer can ask for money or a purchase – travel & subsistence (T&S), a cash advance / imprest, goods or
 services, fuel, training / workshop fees, repairs – with all the details (purpose, travel dates and destination,

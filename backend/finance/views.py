@@ -786,6 +786,34 @@ def reports(request):
 from .models import AccountClaim, Lease, Property, TradingArea  # noqa: E402
 
 
+@cap_required("areas.view", "accounts.manage")
+def areas_overview(request):
+    """Every growth point / business centre / market on one page: how many shops are paid up,
+    how many still owe and how much – the same rule as each area's shop board."""
+    rows, total = services.area_overview()
+    q = request.GET.get("q", "").strip().lower()
+    if q:
+        rows = [r for r in rows if q in r["area"].name.lower()]
+    sort = request.GET.get("sort", "owed")
+    keyf = {"name": lambda r: r["area"].name, "paid": lambda r: -r["pct"], "shops": lambda r: -r["shops"],
+            "collected": lambda r: -r["collected"]}.get(sort, lambda r: -r["owed"])
+    rows.sort(key=keyf)
+    if request.GET.get("export") == "csv":
+        log_export(request, "areas overview")
+        resp = HttpResponse(content_type="text/csv")
+        resp["Content-Disposition"] = 'attachment; filename="areas-overview.csv"'
+        w = csv.writer(resp)
+        w.writerow(["Area", "Type", "Ward", "Shops / stands", "Paid up", "Not paid up", "Owed (USD)", "No valid licence", "Not on app",
+                    "Paid this year (USD)"])
+        for r in rows:
+            a = r["area"]
+            w.writerow([a.name, a.get_kind_display(), a.ward or "", r["shops"], r["paid"], r["owing"], r["owed"], r["no_licence"], r["not_on_app"],
+                        r["collected"]])
+        return resp
+    return render(request, "finance/areas_overview.html", {"title": "Areas overview – shops paid & owing", "rows": rows, "total": total,
+                                                           "sort": sort, "q": q, "year": timezone.localdate().year})
+
+
 class AreaList(GenericListView):
     model = TradingArea
     required_caps = ("areas.view", "accounts.manage")
@@ -843,7 +871,10 @@ def area_detail(request, pk):
         "amount": sum((r["total"] for r in all_rows), Decimal(0)), "unregistered": sum(1 for r in all_rows if not r["registered"]),
         "no_licence": sum(1 for r in all_rows if r["licence"] in ("NONE", "UNPAID", "EXPIRED")),
     }
-    return render(request, "finance/area_detail.html", {"title": area.name, "area": area, "rows": rows, "summary": summary, "show": show})
+    for r in rows:
+        r["first_bill"] = r["property"].bills.alive().filter(status__in=[Bill.Status.UNPAID, Bill.Status.PART_PAID]).order_by("due_date").first()
+    return render(request, "finance/area_detail.html", {"title": area.name, "area": area, "rows": rows, "summary": summary, "show": show,
+                                                        "can_receipt": request.user.has_cap("receipt.create")})
 
 
 @cap_required("accounts.manage")

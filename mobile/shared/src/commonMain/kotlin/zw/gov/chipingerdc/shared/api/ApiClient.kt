@@ -105,6 +105,14 @@ class ApiClient(private val session: Session, private val app: AppKind) {
         return resp.body()
     }
 
+    suspend fun changePassword(old: String, new: String) {
+        val resp = authed { t ->
+            http.post(url("auth/password/")) { common(); bearer(t); setBody(kotlinx.serialization.json.buildJsonObject {
+                put("old_password", kotlinx.serialization.json.JsonPrimitive(old)); put("new_password", kotlinx.serialization.json.JsonPrimitive(new)) }) }
+        }
+        if (!resp.status.isSuccess()) throw ApiException(errorMessage(resp), resp.status.value)
+    }
+
     suspend fun me(): Me = authed { t -> http.get(url("me/")) { common(); bearer(t) } }.body()
 
     suspend fun pull(cursors: Map<String, String>, limit: Int = 500): PullResponse =

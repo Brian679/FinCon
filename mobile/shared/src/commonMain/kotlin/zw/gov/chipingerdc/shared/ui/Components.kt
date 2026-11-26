@@ -86,6 +86,7 @@ fun AppScreen(
             Text(LocalSiteName.current, color = CrdcColors.Gold, fontSize = 19.sp, fontWeight = FontWeight.Light, maxLines = 1,
                 overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             actions()
+            LocalProfile.current?.let { ProfileButton(it) }
         }
         Box(Modifier.fillMaxWidth().height(3.dp).background(CrdcColors.Gold))
         // div.breadcrumbs

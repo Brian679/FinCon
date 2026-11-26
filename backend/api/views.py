@@ -44,6 +44,27 @@ class MeView(AuditActorMixin, APIView):
         return Response(s.MeSerializer(request.user).data)
 
 
+class PasswordView(AuditActorMixin, APIView):
+    """Change password from the phone (same rules as the website)."""
+
+    def post(self, request):
+        from django.contrib.auth.password_validation import validate_password
+
+        user = request.user
+        old, new = request.data.get("old_password", ""), request.data.get("new_password", "")
+        if not user.check_password(old):
+            return Response({"detail": "Your current password is wrong."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_password(new, user)
+        except ValidationError as exc:
+            return Response({"detail": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        user.set_password(new)
+        user.must_change_password = False
+        user.save(update_fields=["password", "must_change_password"])
+        audit.log(AuditLog.Action.UPDATE, user, user=user, message="Password changed (mobile app)")
+        return Response({"detail": "Password changed."})
+
+
 class PullView(AuditActorMixin, APIView):
     def post(self, request):
         cursors = request.data.get("cursors") or {}

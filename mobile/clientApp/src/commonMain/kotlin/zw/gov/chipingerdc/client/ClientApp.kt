@@ -11,7 +11,12 @@ import zw.gov.chipingerdc.shared.CouncilSdk
 import zw.gov.chipingerdc.shared.PlatformBackHandler
 import zw.gov.chipingerdc.shared.model.Me
 import zw.gov.chipingerdc.shared.sync.SyncState
+import androidx.compose.runtime.CompositionLocalProvider
+import zw.gov.chipingerdc.shared.ui.ChangePasswordScreen
 import zw.gov.chipingerdc.shared.ui.CouncilTheme
+import zw.gov.chipingerdc.shared.ui.LocalProfile
+import zw.gov.chipingerdc.shared.ui.Profile
+import zw.gov.chipingerdc.shared.ui.ProfileItem
 import zw.gov.chipingerdc.shared.ui.LoginScreen
 import zw.gov.chipingerdc.shared.ui.Navigator
 
@@ -38,6 +43,7 @@ sealed interface CScreen {
     data object RegisterStand : CScreen
     data object Plans : CScreen
     data object NewPlan : CScreen
+    data object ChangePassword : CScreen
 }
 
 class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long) {
@@ -71,7 +77,26 @@ fun ClientApp(sdk: CouncilSdk) {
 
 /** Shows the screen on top of the back stack (also used to render screens for documentation). */
 @Composable
-fun ClientRouter(ctx: CCtx) {
+fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false) {
+    val unread by ctx.sdk.observe(zw.gov.chipingerdc.shared.model.Entities.NOTIFICATIONS, zw.gov.chipingerdc.shared.model.AppNotification.serializer())
+        .collectAsState(initial = emptyList())
+    val n = unread.count { !it.isRead }
+    val me = ctx.me
+    val profile = Profile(
+        name = me.fullName.ifBlank { me.username }, lines = listOf(me.username, me.phone, me.email).filter { it.isNotBlank() },
+        badge = n, startOpen = profileOpen,
+        items = listOf(
+            ProfileItem("Notifications", n) { ctx.go(CScreen.Notifications) },
+            ProfileItem("Change password") { ctx.go(CScreen.ChangePassword) },
+            ProfileItem("Sync status", ctx.pending.toInt()) { ctx.go(CScreen.SyncCentre) },
+            ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
+        ),
+    )
+    CompositionLocalProvider(LocalProfile provides profile) { ClientScreens(ctx) }
+}
+
+@Composable
+private fun ClientScreens(ctx: CCtx) {
     when (val s = ctx.nav.current) {
         CScreen.Home -> ClientHome(ctx)
         CScreen.LinkAccount -> LinkAccountScreen(ctx)
@@ -95,5 +120,6 @@ fun ClientRouter(ctx: CCtx) {
         CScreen.RegisterStand -> RegisterStandScreen(ctx)
         CScreen.Plans -> PlansScreen(ctx)
         CScreen.NewPlan -> NewPlanScreen(ctx)
+        CScreen.ChangePassword -> ChangePasswordScreen(ctx.sdk, ctx::back)
     }
 }

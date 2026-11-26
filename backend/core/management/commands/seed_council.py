@@ -88,6 +88,7 @@ DEMO_STAFF = [
     ("treasurer", "Rudo", "Sithole", "TREASURER"),
     ("accountant", "Tatenda", "Ncube", "ACCOUNTANT"),
     ("cashier", "Chipo", "Dube", "REVENUE_CLERK"),
+    ("collector", "Kudzai", "Chirwa", "REVENUE_CLERK"),
     ("exp.clerk", "Simba", "Gumbo", "EXPENDITURE_CLERK"),
     ("admin.officer", "Nyasha", "Chikore", "ADMIN_OFFICER"),
     ("hr.officer", "Ruvimbo", "Mhlanga", "HR_OFFICER"),
@@ -288,6 +289,7 @@ class Command(BaseCommand):
                               summary="Licence categories, fees, inspections and penalties for trading without a licence.")
         Policy.objects.create(title="ICT acceptable use policy", department="ADMIN", version="1.0", status="CONSULT", review_date=today - timedelta(days=5))
         Policy.objects.create(title="Strategic plan 2026–2030", kind="STRATEGY", department="EXEC", version="1.0", status="ADOPTED", adopted_on=today - timedelta(days=200))
+        self._demo_more_areas(u)
         self._demo_requests(u)
 
     def _demo_requests(self, u):
@@ -370,3 +372,52 @@ class Command(BaseCommand):
                 body="Collections at Checheche have doubled – please arrange a second printer.", priority="HIGH")
         mm.send(u["treasurer"], kind="INFO", to_department="TECH", subject="Roads budget vote at 82% utilisation",
                 body="For information: vote 0410 (roads maintenance) is 82% spent with four months remaining.")
+
+    def _demo_more_areas(self, u):
+        """More growth points / business centres with shops at every stage of payment,
+        so the areas overview shows a realistic picture (demo only)."""
+        import random
+        from datetime import date
+
+        from finance import services as fin
+        from finance.models import Bill, Licence, Property, RevenueHead, TradingArea
+
+        rnd = random.Random(2026)
+        today = timezone.localdate()
+        levy = RevenueHead.objects.get(code="DEV-LEVY")
+        shop_lic = RevenueHead.objects.get(code="LIC-SHOP")
+        places = [("Chisumbanje Business Centre", "SC", 9), ("Chibuwe Business Centre", "SC", 7), ("Birchenough Bridge Growth Point", "GP", 8),
+                  ("Mutema Business Centre", "SC", 6), ("Middle Sabi Business Centre", "SC", 5), ("Tanganda Business Centre", "SC", 4),
+                  ("Rimbi Business Centre", "SC", 5), ("Mahenye Business Centre", "SC", 4)]
+        trades = ["General Dealer", "Butchery", "Bottle Store", "Hardware", "Grinding Mill", "Bakery", "Pharmacy", "Tailoring", "Hair Salon",
+                  "Fast Foods", "Agro-dealer", "Phone Shop"]
+        surnames = ["Moyo", "Sithole", "Dube", "Ncube", "Mlambo", "Chikore", "Gumbo", "Mapfumo", "Zhou", "Sibanda", "Mutasa", "Chari",
+                    "Nyathi", "Marufu", "Matanda", "Mhlanga", "Mukwena", "Chipunza", "Rusere", "Dhliwayo"]
+        cashier = u["collector"]
+        for n, (name, kind, count) in enumerate(places):
+            area = TradingArea.objects.create(name=name, kind=kind)
+            for i in range(count):
+                owner = f"{rnd.choice(['T.', 'R.', 'S.', 'M.', 'P.', 'K.', 'G.'])} {rnd.choice(surnames)}"
+                biz = f"{owner.split()[1]} {rnd.choice(trades)}"
+                acc = ClientAccount.objects.create(name=owner, account_type="IND", phone=f"07{rnd.randint(71, 78)}{rnd.randint(100000, 999999)}")
+                prop = Property.objects.create(account=acc, area=area, location=name, stand_number=f"{name[:2].upper()}{i + 1}", business_name=biz,
+                                               land_use="COM", monthly_rates=Decimal("0"), valuation=Decimal("15000"))
+                bill = Bill.objects.create(account=acc, property=prop, revenue_head=levy, amount=Decimal("45"),
+                                           description=f"Shop levy {today.year} – {biz}", due_date=date(today.year, 3, 31), period=str(today.year))
+                roll = rnd.random()
+                if roll < 0.5:  # fully paid with a valid licence
+                    fin.issue_receipt(cashier, revenue_head=levy, amount=Decimal("45"), account=acc, bill=bill, channel="FIELD")
+                    Licence.objects.create(account=acc, property=prop, business_name=biz, premises=f"Stand {prop.stand_number}, {name}",
+                                           status=Licence.Status.ISSUED, fee=Decimal("60"), revenue_head=shop_lic, issue_date=today.replace(month=1, day=15),
+                                           expiry_date=date(today.year, 12, 31))
+                elif roll < 0.7:  # part paid
+                    fin.issue_receipt(cashier, revenue_head=levy, amount=Decimal(rnd.choice(["15", "20", "30"])), account=acc, bill=bill, channel="FIELD")
+                    Licence.objects.create(account=acc, property=prop, business_name=biz, premises=f"Stand {prop.stand_number}, {name}",
+                                           status=Licence.Status.ISSUED, fee=Decimal("60"), revenue_head=shop_lic, issue_date=today.replace(month=2, day=1),
+                                           expiry_date=date(today.year, 12, 31))
+                elif roll < 0.85:  # levy paid but licence expired last year
+                    fin.issue_receipt(cashier, revenue_head=levy, amount=Decimal("45"), account=acc, bill=bill, channel="FIELD")
+                    Licence.objects.create(account=acc, property=prop, business_name=biz, premises=f"Stand {prop.stand_number}, {name}",
+                                           status=Licence.Status.EXPIRED, fee=Decimal("60"), revenue_head=shop_lic,
+                                           issue_date=date(today.year - 1, 1, 10), expiry_date=date(today.year - 1, 12, 31))
+                # else: nothing paid, no licence

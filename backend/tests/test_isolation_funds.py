@@ -326,3 +326,94 @@ class FundsSyncTests(CouncilTestCase):
         r = officer.post("/api/v1/sync/push/", {"operations": [{"op_id": str(uuid.uuid4()), "type": "memo.create", "payload": {
             "id": str(uuid.uuid4()), "kind": "ACTION", "to_department": "FINANCE", "subject": "Fuel card", "body": "Please top up."}}]}, format="json")
         self.assertEqual(r.data["results"][0]["status"], "applied", r.data)
+
+
+class PaymentsLinkTests(CouncilTestCase):
+    """Council and client apps see the same money: a payment taken anywhere
+    reaches the shop owner's phone with the balance left, and the area overview."""
+
+    def test_counter_payment_notifies_owner_with_balance(self):
+        from core.models import MessageLog
+        from finance.models import Bill, ClientAccount
+
+        resident = self.user("resident")
+        acc = ClientAccount.objects.get(name="Johannes Mhlanga")
+        self.assertTrue(acc.portal_users.filter(pk=resident.pk).exists())
+        acc.recalculate()
+        before = acc.balance
+        bill = Bill.objects.alive().filter(account=acc, status__in=["UNPAID", "PART"]).first()
+        r = fin.issue_receipt(self.user("cashier"), revenue_head=bill.revenue_head, amount=Decimal("5"), account=acc, bill=bill)
+        n = Notification.objects.filter(recipient=resident, title__startswith="Payment received").latest("created_at")
+        self.assertIn(r.number, n.body)
+        self.assertIn(f"{before - Decimal('5'):,.2f}", n.body)
+        self.assertTrue(MessageLog.objects.filter(channel="SMS", account_number=acc.account_number, campaign="Payment confirmation").exists())
+
+    def test_field_payment_from_council_phone_reaches_client_phone(self):
+        import uuid
+
+        from finance.models import ClientAccount
+
+        acc = ClientAccount.objects.get(name="Johannes Mhlanga")
+        acc.recalculate()
+        cashier = APIClient()
+        tok = cashier.post("/api/v1/auth/login/", {"username": "cashier", "password": PW, "app": "council"}, format="json").data["access"]
+        cashier.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        r = cashier.post("/api/v1/sync/push/", {"operations": [{"op_id": str(uuid.uuid4()), "type": "receipt.create", "payload": {
+            "id": str(uuid.uuid4()), "account": str(acc.pk), "revenue_head": str(self.rates.pk), "amount": str(acc.balance), "method": "CASH"}}]},
+            format="json").data["results"][0]
+        self.assertEqual(r["status"], "applied", r)
+        client = APIClient()
+        tok = client.post("/api/v1/auth/login/", {"username": "resident", "password": PW, "app": "client"}, format="json").data["access"]
+        client.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        data = client.post("/api/v1/sync/pull/", {"cursors": {}}, format="json").data["entities"]
+        mine = [a for a in data["accounts"]["items"] if a["id"] == str(acc.pk)][0]
+        self.assertEqual(Decimal(mine["balance"]), Decimal("0.00"))
+        self.assertTrue(all(b["status"] == "PAID" for b in data["bills"]["items"] if b["account"] == str(acc.pk)))
+        self.assertTrue(any(n["title"].startswith("Payment received") for n in data["notifications"]["items"]))
+
+    def test_area_overview_matches_shop_boards(self):
+        from finance.models import Property, TradingArea
+
+        rows, total = fin.area_overview()
+        self.assertGreater(total["shops"], 0)
+        for r in rows:
+            board = [fin.property_compliance(p) for p in Property.objects.alive().filter(area=r["area"], is_active=True)]
+            self.assertEqual(r["paid"], sum(1 for b in board if b["ok"]), r["area"].name)
+            self.assertEqual(r["owed"], sum((b["total"] for b in board), Decimal("0")), r["area"].name)
+        c = Client()
+        c.login(username="treasurer", password=PW)
+        page = c.get("/staff/finance/areas/")
+        self.assertContains(page, "Areas overview")
+        self.assertContains(page, TradingArea.objects.first().name)
+        self.assertEqual(c.get("/staff/finance/areas/?export=csv")["Content-Type"], "text/csv")
+        c.login(username="engineer", password=PW)
+        self.assertEqual(c.get("/staff/finance/areas/").status_code, 403)
+
+    def test_change_password_from_phone(self):
+        api = APIClient()
+        tok = api.post("/api/v1/auth/login/", {"username": "eho", "password": PW, "app": "council"}, format="json").data["access"]
+        api.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        self.assertEqual(api.post("/api/v1/auth/password/", {"old_password": "wrong", "new_password": "Borehole#2027"}, format="json").status_code, 400)
+        self.assertEqual(api.post("/api/v1/auth/password/", {"old_password": PW, "new_password": "123"}, format="json").status_code, 400)
+        self.assertEqual(api.post("/api/v1/auth/password/", {"old_password": PW, "new_password": "Borehole#2027"}, format="json").status_code, 200)
+        self.assertTrue(self.user("eho").check_password("Borehole#2027"))
+
+    def test_header_shows_profile_menu_not_welcome_text(self):
+        c = Client()
+        c.login(username="tech.officer", password=PW)
+        page = c.get("/staff/")
+        self.assertContains(page, 'id="profile-menu"')
+        self.assertNotContains(page, "Welcome,")
+        self.assertContains(page, "Change password")
+
+
+class AreaBoardLinkTests(CouncilTestCase):
+    def test_board_offers_record_payment_for_owing_shops(self):
+        from finance.models import TradingArea
+
+        c = Client()
+        c.login(username="cashier", password=PW)
+        area = TradingArea.objects.get(name="Checheche Growth Point")
+        page = c.get(f"/staff/finance/areas/{area.pk}/")
+        self.assertContains(page, "Record payment")
+        self.assertContains(page, "/staff/finance/receipts/new/?account=")

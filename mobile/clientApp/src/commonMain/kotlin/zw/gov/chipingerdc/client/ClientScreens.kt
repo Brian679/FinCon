@@ -1,5 +1,8 @@
 package zw.gov.chipingerdc.client
 
+import kotlinx.datetime.toLocalDateTime
+import zw.gov.chipingerdc.shared.model.shopStatus
+import zw.gov.chipingerdc.shared.model.Lease
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -116,11 +119,8 @@ fun ClientHome(ctx: CCtx) {
     val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
     val unpaid = bills.filter { it.status in listOf("UNPAID", "PART") }
     val total = accounts.sumOf { it.balance.toDoubleOrNull() ?: 0.0 }
-    AppScreen("My council", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
-        TextButton(onClick = { sdk.logout() }) { Text("LOG OUT", color = Color.White, fontSize = 12.sp) }
-    }) {
+    AppScreen("My council", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            Text("Welcome, ${ctx.me.fullName.ifBlank { ctx.me.username }}.", fontSize = 13.sp, color = CrdcColors.Medium)
             if (accounts.isEmpty()) {
                 InfoBox("Register your stand or shop, or link your council account using the account number on your bill.")
                 PrimaryButton("Register my stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
@@ -129,8 +129,14 @@ fun ClientHome(ctx: CCtx) {
                 Kpi("Total amount due", "$${money(total.toString())}", "${unpaid.size} unpaid bill(s)", if (total > 0) CrdcColors.Danger else CrdcColors.Green, Modifier.fillMaxWidth())
                 PrimaryButton("Pay now (EcoCash / OneMoney / InnBucks)", onClick = { ctx.go(CScreen.Pay(null, null)) })
                 accounts.forEach { a ->
-                    RowCard(a.name, a.accountNumber, "$${money(a.balance)}", a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
+                    RowCard(a.name, a.accountNumber, if ((a.balance.toDoubleOrNull() ?: 0.0) > 0) "Owing $${money(a.balance)}" else "Paid up",
+                        a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
                 }
+                val props by sdk.observe(Entities.PROPERTIES, Property.serializer()).collectAsState(initial = emptyList())
+                val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
+                val leases by sdk.observe(Entities.LEASES, Lease.serializer()).collectAsState(initial = emptyList())
+                val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
+                props.take(3).forEach { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills) }
             }
             IndexModule("My council", listOf(
                 IndexRow("My stands & shops", 0, { ctx.go(CScreen.MyStands) }, { ctx.go(CScreen.RegisterStand) }),

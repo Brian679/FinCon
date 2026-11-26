@@ -10,6 +10,7 @@ urlpatterns = [
     path("auth/refresh/", TokenRefreshView.as_view(), name="refresh"),
     path("auth/register/", v.register_client, name="register"),
     path("me/", v.MeView.as_view(), name="me"),
+    path("auth/password/", v.PasswordView.as_view(), name="password"),
     path("sync/pull/", v.PullView.as_view(), name="pull"),
     path("sync/push/", v.PushView.as_view(), name="push"),
     path("client/link-account/", v.LinkAccountView.as_view(), name="link_account"),

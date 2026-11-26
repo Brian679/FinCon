@@ -1,0 +1,56 @@
+{% extends "base.html" %}{% load humanize %}
+{% block content %}
+<h1>Areas overview – shops paid &amp; owing</h1>
+<ul class="object-tools">
+  <li><a href="?sort={{ sort }}&export=csv">Export CSV</a></li>
+  <li><a href="javascript:window.print()">Print</a></li>
+  {% if 'areas.manage' in user.capabilities %}<li><a href="{% url 'finance:area_list' %}">Manage areas</a></li><li><a href="{% url 'finance:area_new' %}" class="addlink">Add area</a></li>{% endif %}
+</ul>
+<p class="help mb-2">Every growth point, business centre, township and market. A shop is <strong>paid up</strong> when nothing is owing on it
+(rates, levies, rent, licence fee) and it has a valid {{ year }} shop licence. Figures update the moment a payment is recorded – at the
+counter, by a collector on the council app, or by the owner on the client app. Click an area to see its shops.</p>
+<div class="row g-3 mb-3">
+  <div class="col-6 col-lg-2"><div class="card kpi blue shadow-sm"><div class="card-body"><div class="small text-muted">Areas</div><div class="value">{{ rows|length }}</div><div class="small">{{ total.shops }} shops / stands</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi shadow-sm"><div class="card-body"><div class="small text-muted">Paid up</div><div class="value text-success">{{ total.paid }}</div><div class="small">{{ total.pct }}% of shops</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi bad shadow-sm"><div class="card-body"><div class="small text-muted">Not paid up</div><div class="value">{{ total.owing }}</div><div class="small">owe money or no valid licence</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi bad shadow-sm"><div class="card-body"><div class="small text-muted">Amount owed</div><div class="value">${{ total.owed|floatformat:2|intcomma }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi warn shadow-sm"><div class="card-body"><div class="small text-muted">No valid licence</div><div class="value">{{ total.no_licence }}</div></div></div></div>
+  <div class="col-6 col-lg-2"><div class="card kpi shadow-sm"><div class="card-body"><div class="small text-muted">Paid this year</div><div class="value">${{ total.collected|floatformat:2|intcomma }}</div></div></div></div>
+</div>
+<div class="module" id="changelist">
+ <div class="changelist-form-container">
+  <div id="toolbar"><form id="changelist-search" method="get"><div>
+    <label for="searchbar"><img src="/static/admin/img/search.svg" alt="Search"></label>
+    <input type="text" size="30" name="q" value="{{ q }}" id="searchbar" placeholder="Area name"><input type="hidden" name="sort" value="{{ sort }}">
+    <input type="submit" value="Search">
+    <span class="small quiet">&nbsp; Sort by:
+      <a href="?sort=owed&q={{ q }}"{% if sort == 'owed' %} class="fw-bold"{% endif %}>most owed</a> ·
+      <a href="?sort=paid&q={{ q }}"{% if sort == 'paid' %} class="fw-bold"{% endif %}>best paid</a> ·
+      <a href="?sort=shops&q={{ q }}"{% if sort == 'shops' %} class="fw-bold"{% endif %}>most shops</a> ·
+      <a href="?sort=collected&q={{ q }}"{% if sort == 'collected' %} class="fw-bold"{% endif %}>most collected</a> ·
+      <a href="?sort=name&q={{ q }}"{% if sort == 'name' %} class="fw-bold"{% endif %}>name</a></span>
+  </div></form></div>
+  <div class="results"><table id="result_list" class="areas-overview">
+    <thead><tr><th>Area</th><th class="text-end">Shops</th><th class="text-end">Paid up</th><th class="text-end">Not paid up</th>
+      <th data-x="hide-sm" style="min-width:120px">Paid up %</th><th class="text-end">Owed (USD)</th><th data-x="hide-sm" class="text-end">No licence</th><th data-x="hide-sm" class="text-end">Not on app</th>
+      <th data-x="hide-sm" class="text-end">Paid this year</th></tr></thead>
+    <tbody>
+    {% for r in rows %}<tr>
+      <th class="field-first"><a href="{% url 'finance:area' r.area.pk %}">{{ r.area.name }}</a><div class="small quiet">{{ r.area.get_kind_display }}{% if r.area.ward %} · ward {{ r.area.ward }}{% endif %}</div><div class="small quiet show-sm">{{ r.pct }}% paid up{% if r.no_licence %} · {{ r.no_licence }} no licence{% endif %}</div></th>
+      <td class="text-end">{{ r.shops }}</td>
+      <td class="text-end">{% if r.paid %}<a class="text-success" href="{% url 'finance:area' r.area.pk %}?show=paid">{{ r.paid }}</a>{% else %}0{% endif %}</td>
+      <td class="text-end">{% if r.owing %}<a class="text-danger fw-bold" href="{% url 'finance:area' r.area.pk %}?show=owing">{{ r.owing }}</a>{% else %}0{% endif %}</td>
+      <td data-x="hide-sm"><div class="progress" style="height:8px" title="{{ r.pct }}%"><div class="progress-bar bg-success" style="width: {{ r.pct }}%"></div></div><span class="small quiet">{{ r.pct }}%</span></td>
+      <td class="text-end font-monospace">{{ r.owed|floatformat:2|intcomma }}</td>
+      <td class="text-end" data-x="hide-sm">{{ r.no_licence }}</td>
+      <td class="text-end" data-x="hide-sm">{% if r.not_on_app %}<a href="{% url 'finance:area' r.area.pk %}?show=unregistered">{{ r.not_on_app }}</a>{% else %}0{% endif %}</td>
+      <td class="text-end font-monospace" data-x="hide-sm">{{ r.collected|floatformat:2|intcomma }}</td>
+    </tr>{% empty %}<tr><td colspan="9" class="quiet">No trading areas yet.</td></tr>{% endfor %}
+    </tbody>
+    <tfoot><tr class="fw-bold"><th>All areas</th><td class="text-end">{{ total.shops }}</td><td class="text-end">{{ total.paid }}</td><td class="text-end">{{ total.owing }}</td>
+      <td data-x="hide-sm"><span class="small">{{ total.pct }}%</span></td><td class="text-end font-monospace">{{ total.owed|floatformat:2|intcomma }}</td><td class="text-end" data-x="hide-sm">{{ total.no_licence }}</td>
+      <td class="text-end" data-x="hide-sm">{{ total.not_on_app }}</td><td class="text-end font-monospace" data-x="hide-sm">{{ total.collected|floatformat:2|intcomma }}</td></tr></tfoot>
+  </table></div>
+ </div>
+</div>
+{% endblock %}

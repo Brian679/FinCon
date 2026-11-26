@@ -98,6 +98,9 @@ class CouncilSdk(driverFactory: DatabaseDriverFactory, val app: AppKind, default
     fun nowIso(): String = Clock.System.now().toString()
 
     // ---------------------------------------------------- online-only calls
+    /** Needs a connection: the new password is checked against the council's password rules. */
+    suspend fun changePassword(old: String, new: String) = api.changePassword(old, new)
+
     suspend fun postJson(path: String, body: JsonObject) = api.postJson(path, body)
     suspend fun getJson(path: String) = api.getJson(path)
 }

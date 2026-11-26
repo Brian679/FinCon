@@ -1,5 +1,15 @@
 package zw.gov.chipingerdc.client
 
+import kotlinx.datetime.toLocalDateTime
+import androidx.compose.ui.text.font.FontWeight
+import zw.gov.chipingerdc.shared.ui.SecondaryButton
+import zw.gov.chipingerdc.shared.ui.MessageKind
+import zw.gov.chipingerdc.shared.ui.Message
+import zw.gov.chipingerdc.shared.model.licenceWords
+import zw.gov.chipingerdc.shared.model.shopStatus
+import zw.gov.chipingerdc.shared.model.ShopStatus
+import zw.gov.chipingerdc.shared.model.Licence
+import zw.gov.chipingerdc.shared.model.Bill
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +52,9 @@ fun MyStandsScreen(ctx: CCtx) {
     val props by sdk.observe(Entities.PROPERTIES, Property.serializer()).collectAsState(initial = emptyList())
     val claims by sdk.observe(Entities.CLAIMS, AccountClaim.serializer()).collectAsState(initial = emptyList())
     val leases by sdk.observe(Entities.LEASES, Lease.serializer()).collectAsState(initial = emptyList())
+    val bills by sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
+    val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
+    val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
     AppScreen("My stands & shops", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         PrimaryButton("+ Register a stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
         ListScreen {
@@ -51,10 +64,7 @@ fun MyStandsScreen(ctx: CCtx) {
             }
             item { Text("Linked stands", fontSize = 13.sp, color = CrdcColors.Muted) }
             if (props.isEmpty()) item { Empty("No stands linked yet.") }
-            items(props, key = { it.id }) { p ->
-                RowCard("Stand ${p.standNumber} · ${p.areaName.ifBlank { p.location }}", "${p.businessName.ifBlank { p.landUseLabel }} · account ${p.accountNumber}",
-                    "$${money(p.monthlyRates)}/m") { ctx.go(CScreen.Account(p.account)) }
-            }
+            items(props, key = { it.id }) { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills) }
             if (leases.isNotEmpty()) {
                 item { Text("Leases", fontSize = 13.sp, color = CrdcColors.Muted) }
                 items(leases, key = { it.id }) { l ->
@@ -165,5 +175,29 @@ fun NewPlanScreen(ctx: CCtx) {
                 ctx.back()
             })
         }
+    }
+}
+
+
+/** One shop / stand with its paid-up position – updated as soon as the council records a payment. */
+@Composable
+fun ShopCard(ctx: CCtx, r: ShopStatus, bills: List<Bill>) {
+    val p = r.property
+    SectionCard("Stand ${p.standNumber} · ${p.areaName.ifBlank { p.location }}") {
+        Text(p.businessName.ifBlank { p.landUseLabel }, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+        Text("Account ${p.accountNumber}", fontSize = 12.sp, color = CrdcColors.Muted)
+        if (r.ok) Message("Paid up – nothing owing" + (licenceWords[r.licence]?.takeIf { it.isNotBlank() }?.let { ". $it" } ?: ""), MessageKind.SUCCESS)
+        else {
+            if (r.total > 0) Message("Balance remaining: USD ${money(r.total.toString())}", MessageKind.ERROR)
+            if (r.rates > 0) KeyValue("Rates", money(r.rates.toString()))
+            if (r.levies > 0) KeyValue("Levies", money(r.levies.toString()))
+            if (r.rent > 0) KeyValue("Rent / lease", money(r.rent.toString()))
+            if (r.other > 0) KeyValue("Other (licence fee …)", money(r.other.toString()))
+            licenceWords[r.licence]?.takeIf { it.isNotBlank() }?.let { KeyValue("Licence", it) }
+            val bill = bills.filter { it.property == p.id && it.status in listOf("UNPAID", "PART") }.minByOrNull { it.dueDate ?: "" }
+            if (r.total > 0) PrimaryButton("Pay USD ${money(r.total.toString())} now", onClick = { ctx.go(CScreen.Pay(p.account, bill?.id)) })
+            if (r.licence in listOf("NONE", "EXPIRED")) SecondaryButton("Apply / renew shop licence", { ctx.go(CScreen.ApplyLicence) })
+        }
+        Text("Payments made at the council offices or to a revenue collector show here after your phone syncs.", fontSize = 11.sp, color = CrdcColors.Muted)
     }
 }

@@ -9,7 +9,12 @@ import zw.gov.chipingerdc.shared.CouncilSdk
 import zw.gov.chipingerdc.shared.PlatformBackHandler
 import zw.gov.chipingerdc.shared.model.Me
 import zw.gov.chipingerdc.shared.sync.SyncState
+import androidx.compose.runtime.CompositionLocalProvider
+import zw.gov.chipingerdc.shared.ui.ChangePasswordScreen
 import zw.gov.chipingerdc.shared.ui.CouncilTheme
+import zw.gov.chipingerdc.shared.ui.LocalProfile
+import zw.gov.chipingerdc.shared.ui.Profile
+import zw.gov.chipingerdc.shared.ui.ProfileItem
 import zw.gov.chipingerdc.shared.ui.LoginScreen
 import zw.gov.chipingerdc.shared.ui.Navigator
 
@@ -84,6 +89,7 @@ sealed interface Screen {
     data object Memos : Screen
     data class MemoDetail(val id: String) : Screen
     data object NewMemo : Screen
+    data object ChangePassword : Screen
 }
 
 /** Everything a screen needs. */
@@ -116,7 +122,26 @@ fun CouncilApp(sdk: CouncilSdk) {
 
 /** Shows the screen on top of the back stack (also used to render screens for documentation). */
 @Composable
-fun CouncilRouter(ctx: Ctx) {
+fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false) {
+    val unread by ctx.sdk.observe(zw.gov.chipingerdc.shared.model.Entities.NOTIFICATIONS, zw.gov.chipingerdc.shared.model.AppNotification.serializer())
+        .collectAsState(initial = emptyList())
+    val n = unread.count { !it.isRead }
+    val me = ctx.me
+    val profile = Profile(
+        name = me.fullName.ifBlank { me.username }, lines = listOf(me.roleLabel, me.departmentLabel, me.email).filter { it.isNotBlank() },
+        badge = n, startOpen = profileOpen,
+        items = listOf(
+            ProfileItem("Notifications", n) { ctx.go(Screen.Notifications) },
+            ProfileItem("Change password") { ctx.go(Screen.ChangePassword) },
+            ProfileItem("Sync centre", ctx.pending.toInt()) { ctx.go(Screen.SyncCentre) },
+            ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
+        ),
+    )
+    CompositionLocalProvider(LocalProfile provides profile) { CouncilScreens(ctx) }
+}
+
+@Composable
+private fun CouncilScreens(ctx: Ctx) {
     when (val s = ctx.nav.current) {
         Screen.Home -> HomeScreen(ctx)
         Screen.NewReceipt -> ReceiptFormScreen(ctx, null, null)
@@ -185,5 +210,6 @@ fun CouncilRouter(ctx: Ctx) {
         Screen.Memos -> MemosScreen(ctx)
         is Screen.MemoDetail -> MemoDetailScreen(ctx, s.id)
         Screen.NewMemo -> NewMemoScreen(ctx)
+        Screen.ChangePassword -> ChangePasswordScreen(ctx.sdk, ctx::back)
     }
 }

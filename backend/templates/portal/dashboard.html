@@ -1,6 +1,6 @@
 {% extends "base.html" %}{% load humanize %}
 {% block content %}
-<h1 class="h3">Hello, {{ user.first_name }}</h1>
+<h1 class="h3">My council</h1>
 {% if not accounts %}<div class="alert alert-info">You have not linked a council account yet. <a href="{% url 'portal:link' %}">Link your account</a> using the account number on your bill – or visit council offices to open one.</div>{% endif %}
 <div class="row g-3 mb-3">
 {% for a in accounts %}<div class="col-md-6 col-xl-4"><div class="card kpi {% if a.balance > 0 %}bad{% endif %} shadow-sm"><div class="card-body"><div class="small text-muted">{{ a.account_number }} · {{ a.name }}</div><div class="value">${{ a.balance|floatformat:2|intcomma }}</div><div class="small">{% if a.balance > 0 %}amount due{% else %}nothing owed{% endif %}</div><a class="btn btn-sm btn-primary mt-2" href="{% url 'portal:pay' %}">Pay now</a> <a class="btn btn-sm btn-outline-primary mt-2" href="{% url 'portal:account' a.pk %}">Statement</a></div></div></div>{% endfor %}

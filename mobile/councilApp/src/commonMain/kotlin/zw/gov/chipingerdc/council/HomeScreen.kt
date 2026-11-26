@@ -112,11 +112,8 @@ fun HomeScreen(ctx: Ctx) {
         add("This phone" to listOf(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()), Tile("Client Charter", Screen.Charter)))
     }.filter { it.second.isNotEmpty() }
 
-    AppScreen("Site administration", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
-        TextButton(onClick = { ctx.sdk.logout() }) { Text("LOG OUT", color = Color.White, fontSize = 12.sp) }
-    }) {
+    AppScreen("Site administration", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            Text("Welcome, ${me.fullName.ifBlank { me.username }} (${me.roleLabel}, ${me.departmentLabel}).", fontSize = 13.sp, color = CrdcColors.Medium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (me.can("receipt.create")) {
                     val usd = myToday.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }

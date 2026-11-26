@@ -9,7 +9,7 @@ ADD_LINKS = {
     "finance:receipts": ("finance:receipt_new", "receipt.create"), "finance:accounts": ("finance:account_new", "accounts.manage"),
     "finance:licences": ("finance:licence_new", "licence.manage"), "finance:vouchers": ("finance:voucher_new", "voucher.prepare"),
     "finance:suppliers": ("finance:supplier_new", "supplier.manage"), "finance:requisitions": ("finance:requisition_new", None),
-    "finance:cashups": ("finance:cashup_new", "cashup.submit"), "finance:areas": ("finance:area_new", "areas.manage"),
+    "finance:cashups": ("finance:cashup_new", "cashup.submit"), "finance:area_list": ("finance:area_new", "areas.manage"),
     "finance:leases": ("finance:lease_new", "leases.manage"), "finance:messages": ("finance:broadcast", "reminders.send"),
     "workflow:tasks": ("workflow:task_new", ("tasks.assign_any", "tasks.assign_department")), "workflow:complaints": ("workflow:complaint_new", None),
     "workflow:requests": ("workflow:request_new", None), "workflow:correspondence": ("workflow:correspondence_new", "correspondence.manage"),
@@ -103,7 +103,7 @@ def build_nav(user):
         if c("accounts.manage", "finance.view_all"):
             fin += [_item("Client accounts", "finance:accounts"), _item("Bills", "finance:bills")]
         if c("areas.view", "accounts.manage"):
-            fin.append(_item("Shops & stands by area (paid / unpaid)", "finance:areas"))
+            fin.append(_item("Areas overview – shops paid / owing", "finance:areas"))
         if c("claims.review"):
             fin.append(_item("Stand registration requests", "finance:claims"))
         if c("leases.view", "leases.manage"):

@@ -197,15 +197,48 @@ body.login .submit-row { background: none; border: 0; padding: 0; margin-top: 12
     background: var(--close-button-bg) !important; }
 
 
-/* ---- phones: the admin sidebar becomes a "Menu" panel, wide tables stack ---- */
-.mobile-menu-btn { display: none; }
+/* ---- header: one profile icon with a drop-down (desktop and phone) ---- */
+#header { position: relative; }
+#user-tools { display: flex; align-items: center; }
+.profile-menu { position: relative; }
+.profile-menu > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.profile-menu > summary::-webkit-details-marker { display: none; }
+.avatar { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%;
+    background: var(--accent); color: var(--header-bg, #1f7a3a); font-weight: 700; font-size: 13px; letter-spacing: .5px;
+    border: 2px solid rgba(255, 255, 255, .85); text-transform: uppercase; }
+.avatar.big { width: 46px; height: 46px; font-size: 16px; flex: none; border-color: var(--hairline-color); }
+.avatar-badge { position: absolute; top: -4px; left: 24px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px;
+    background: #ba2121; color: #fff; font-size: 11px; line-height: 18px; text-align: center; font-weight: 700; }
+.profile-menu .caret { color: #fff; font-size: 12px; }
+.profile-dropdown { text-align: left; position: absolute; right: 0; top: 44px; z-index: 1000; width: 290px; max-height: 80vh; overflow-y: auto;
+    background: var(--body-bg, #fff); color: var(--body-fg, #333); border: 1px solid var(--hairline-color);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .18); border-radius: 4px; text-transform: none; letter-spacing: normal; font-size: 14px; }
+.profile-card { display: flex; gap: 12px; align-items: center; padding: 14px; background: var(--darkened-bg, #f8f8f8);
+    border-bottom: 1px solid var(--hairline-color); }
+.profile-card .quiet { font-size: 12px; line-height: 1.4; }
+.profile-dropdown > a, .profile-dropdown form button { display: block; width: 100%; text-align: left; padding: 11px 14px;
+    color: var(--link-fg) !important; border: 0; border-bottom: 1px solid var(--hairline-color); background: none; font: inherit;
+    text-decoration: none !important; cursor: pointer; }
+.profile-dropdown > a:hover, .profile-dropdown form button:hover { background: var(--selected-row, #fffcdc); }
+.profile-dropdown form { margin: 0; display: block; }
+.profile-dropdown form button { color: #ba2121 !important; }
+.profile-dropdown .count { background: #ba2121; color: #fff; border-radius: 9px; padding: 0 6px; font-size: 11px; margin-left: 4px; }
+.profile-nav { display: none; }
+.profile-nav-title { text-align: left; background: var(--primary-dark, #1f7a3a); background: var(--header-bg, #1f7a3a); color: #fff; padding: 7px 14px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
+.profile-nav-row { display: flex; justify-content: space-between; border-bottom: 1px solid var(--hairline-color); }
+.profile-nav-row a { padding: 10px 14px; color: var(--link-fg) !important; text-decoration: none !important; }
+.profile-nav-row a.current { font-weight: 600; background: var(--selected-row, #fffcdc); flex: 1; }
+.profile-nav-row a.addlink { white-space: nowrap; align-self: center; flex: none; font-size: 12px; color: var(--primary-dark, #1f7a3a) !important; }
+
+/* ---- phones: the sidebar moves into the profile drop-down; wide tables stack ---- */
 @media (max-width: 767px) {
-    .mobile-menu-btn { display: inline-block; float: right; margin: -2px 0 0 8px; padding: 2px 10px; font-size: 13px; color: #fff;
-        background: transparent; border: 1px solid rgba(255, 255, 255, .6); border-radius: 4px; cursor: pointer; }
+    #header { flex-direction: row !important; align-items: center !important; justify-content: space-between; padding: 10px 14px !important; }
+    #site-name { font-size: 1.15rem !important; }
+    #user-tools { margin: 0 !important; text-align: right; }
+    .profile-dropdown { position: fixed; top: 58px; right: 8px; left: 8px; width: auto; max-height: calc(100vh - 70px); }
+    .profile-nav { display: block; }
     #main { flex-direction: column; }
-    body.mobile-nav-open #nav-sidebar { display: block !important; position: static; width: auto; max-height: none; flex: none;
-        margin: 0 0 12px; border-right: 0; border-bottom: 1px solid var(--hairline-color); visibility: visible; }
-    body.mobile-nav-open #nav-sidebar .module th { width: 100%; }
     ul.object-tools { float: none; margin: 4px 0 12px; display: flex; flex-wrap: wrap; gap: 6px; }
     ul.object-tools li { margin-left: 0; }
     #content h1 { font-size: 1.35rem; }
@@ -214,6 +247,15 @@ body.login .submit-row { background: none; border: 0; padding: 0; margin-top: 12
     table.route td { display: inline-block; border: 0 !important; padding: 2px 8px !important; }
     table.route td:first-child { display: block; font-weight: 600; }
     #content .module table, #content fieldset { max-width: 100%; }
-    #content td, #content th { overflow-wrap: anywhere; }
+    #content td, #content th { overflow-wrap: break-word; }
     #content td.text-end, #content th.text-end { white-space: nowrap; overflow-wrap: normal; }
+    [data-x="hide-sm"] { display: none !important; }
+    table.areas-overview th.field-first { min-width: 0; width: 46%; }
+    table.areas-overview thead th { white-space: normal !important; font-size: 10px; padding: 6px 4px !important; }
+    table.areas-overview td, table.areas-overview th { padding-left: 4px !important; padding-right: 4px !important; }
+    table.areas-overview td.font-monospace { font-size: 12px; }
+    table.areas-overview { width: 100%; table-layout: auto; }
 }
+.show-sm { display: none; }
+@media (max-width: 767px) { .show-sm { display: block; } }
+table.areas-overview tfoot th, table.areas-overview tfoot td { border-top: 2px solid var(--hairline-color); font-weight: 700; padding: 8px; }
