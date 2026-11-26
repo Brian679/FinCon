@@ -47,6 +47,8 @@ import zw.gov.chipingerdc.shared.ui.ChoicePicker
 import zw.gov.chipingerdc.shared.ui.CrdcColors
 import zw.gov.chipingerdc.shared.ui.Empty
 import zw.gov.chipingerdc.shared.ui.Field
+import zw.gov.chipingerdc.shared.ui.IndexModule
+import zw.gov.chipingerdc.shared.ui.IndexRow
 import zw.gov.chipingerdc.shared.ui.InfoBox
 import zw.gov.chipingerdc.shared.ui.KeyValue
 import zw.gov.chipingerdc.shared.ui.Kpi
@@ -114,11 +116,11 @@ fun ClientHome(ctx: CCtx) {
     val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
     val unpaid = bills.filter { it.status in listOf("UNPAID", "PART") }
     val total = accounts.sumOf { it.balance.toDoubleOrNull() ?: 0.0 }
-    AppScreen("Chipinge RDC", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
-        TextButton(onClick = { sdk.logout() }) { Text("Log out", color = Color.White) }
+    AppScreen("My council", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
+        TextButton(onClick = { sdk.logout() }) { Text("LOG OUT", color = Color.White, fontSize = 12.sp) }
     }) {
         ScrollColumn {
-            Text("Hello, ${ctx.me.fullName.ifBlank { ctx.me.username }}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text("Welcome, ${ctx.me.fullName.ifBlank { ctx.me.username }}.", fontSize = 13.sp, color = CrdcColors.Medium)
             if (accounts.isEmpty()) {
                 InfoBox("Register your stand or shop, or link your council account using the account number on your bill.")
                 PrimaryButton("Register my stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
@@ -130,19 +132,23 @@ fun ClientHome(ctx: CCtx) {
                     RowCard(a.name, a.accountNumber, "$${money(a.balance)}", a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
                 }
             }
-            val tiles = listOf(
-                "My stands & shops" to CScreen.MyStands, "Building plans" to CScreen.Plans,
-                "Payment history" to CScreen.Receipts, "Licences" to CScreen.Licences, "Report a problem" to CScreen.Problems,
-                "Complaints & feedback" to CScreen.Feedback, "Stand applications" to CScreen.Stands,
-                "Notifications (${notes.count { !it.isRead }})" to CScreen.Notifications, "Link another account" to CScreen.LinkAccount,
-                "Client Charter" to CScreen.Charter, "Sync status" to CScreen.SyncCentre,
-            )
-            tiles.chunked(2).forEach { pair ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    pair.forEach { (label, screen) -> Kpi(label, "›", null, CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(screen) } }
-                    if (pair.size == 1) Spacer(Modifier.weight(1f))
-                }
-            }
+            IndexModule("My council", listOf(
+                IndexRow("My stands & shops", 0, { ctx.go(CScreen.MyStands) }, { ctx.go(CScreen.RegisterStand) }),
+                IndexRow("Payment history", 0, { ctx.go(CScreen.Receipts) }),
+                IndexRow("Licences", 0, { ctx.go(CScreen.Licences) }, { ctx.go(CScreen.ApplyLicence) }),
+                IndexRow("Building plans", 0, { ctx.go(CScreen.Plans) }, { ctx.go(CScreen.NewPlan) }),
+                IndexRow("Stand applications", 0, { ctx.go(CScreen.Stands) }, { ctx.go(CScreen.ApplyStand) }),
+                IndexRow("Link another account", 0, { ctx.go(CScreen.LinkAccount) }),
+            ))
+            IndexModule("Report & feedback", listOf(
+                IndexRow("Problems I reported", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
+                IndexRow("Complaints & feedback", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
+                IndexRow("Notifications", notes.count { !it.isRead }, { ctx.go(CScreen.Notifications) }),
+            ))
+            IndexModule("About", listOf(
+                IndexRow("Client Charter", 0, { ctx.go(CScreen.Charter) }),
+                IndexRow("Sync status", 0, { ctx.go(CScreen.SyncCentre) }),
+            ))
         }
     }
 }

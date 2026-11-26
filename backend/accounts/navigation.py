@@ -2,14 +2,49 @@
 from django.urls import NoReverseMatch, reverse
 
 
+# Django-admin style "Add" links next to sidebar entries (list url name -> add url name)
+ADD_LINKS = {
+    "finance:receipts": ("finance:receipt_new", "receipt.create"), "finance:accounts": ("finance:account_new", "accounts.manage"),
+    "finance:licences": ("finance:licence_new", "licence.manage"), "finance:vouchers": ("finance:voucher_new", "voucher.prepare"),
+    "finance:suppliers": ("finance:supplier_new", "supplier.manage"), "finance:requisitions": ("finance:requisition_new", None),
+    "finance:cashups": ("finance:cashup_new", "cashup.submit"), "finance:areas": ("finance:area_new", "areas.manage"),
+    "finance:leases": ("finance:lease_new", "leases.manage"), "finance:messages": ("finance:broadcast", "reminders.send"),
+    "workflow:tasks": ("workflow:task_new", ("tasks.assign_any", "tasks.assign_department")), "workflow:complaints": ("workflow:complaint_new", None),
+    "workflow:requests": ("workflow:request_new", None), "workflow:correspondence": ("workflow:correspondence_new", "correspondence.manage"),
+    "departments:leave": ("departments:leave_new", None), "departments:stands": ("departments:stand_new", "stands.manage"),
+    "departments:projects": ("departments:project_new", "projects.manage"), "departments:findings": ("departments:finding_new", "audit.findings_manage"),
+    "departments:incidents": ("departments:incident_new", "incidents.manage"), "departments:activities": ("departments:activity_new", "activities.manage"),
+    "departments:plans": ("departments:plan_new", "plans.review"), "departments:assets": ("departments:asset_new", "assets.manage"),
+    "departments:risks": ("departments:risk_new", "risks.manage"), "departments:meetings": ("departments:meeting_new", "meetings.manage"),
+    "departments:tickets": ("departments:ticket_new", None), "departments:policies": ("departments:policy_new", "policies.manage"),
+    "accounts:users": ("accounts:user_new", "users.manage"),
+    "portal:complaints": ("portal:complaint_new", None), "portal:requests": ("portal:request_new", None), "portal:licences": ("portal:licence_apply", None),
+    "portal:claims": ("portal:claim_new", None), "portal:plans": ("portal:plan_new", None), "portal:stands": ("portal:stand_new", None),
+    "portal:accounts": ("portal:link", None),
+}
+
+_current_user = None
+
+
 def _item(label, name, *args):
     try:
-        return {"label": label, "url": reverse(name, args=args)}
+        item = {"label": label, "url": reverse(name, args=args)}
     except NoReverseMatch:
         return None
+    add = ADD_LINKS.get(name)
+    if add:
+        caps = add[1]
+        if caps is None or (_current_user is not None and _current_user.has_cap(*((caps,) if isinstance(caps, str) else caps))):
+            try:
+                item["add"] = reverse(add[0])
+            except NoReverseMatch:
+                pass
+    return item
 
 
 def build_nav(user):
+    global _current_user
+    _current_user = user
     if user.is_client:
         return [
             {"title": "My council", "items": [

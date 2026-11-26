@@ -48,7 +48,7 @@ class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val syn
 
 @Composable
 fun ClientApp(sdk: CouncilSdk) {
-    CouncilTheme {
+    CouncilTheme(siteName = "Chipinge RDC online services") {
         val me by sdk.user.collectAsState()
         val user = me
         var registering by remember { mutableStateOf(false) }

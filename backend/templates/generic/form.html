@@ -1,14 +1,17 @@
 {% extends "base.html" %}
 {% block content %}
-<h1 class="h3 mb-3">{{ title }}</h1>
-<div class="card shadow-sm"><div class="card-body">
-<form method="post" enctype="multipart/form-data" {% if offline_capable %}data-offline="true"{% endif %}>
+<h1>{{ title }}</h1>
+<div id="content-main">
+<form method="post" enctype="multipart/form-data" {% if offline_capable %}data-offline="true"{% endif %} novalidate>
   {% csrf_token %}
-  {% if offline_capable %}<input type="hidden" name="idempotency_key" class="idem-key"><div class="small text-success mb-2">✓ Offline ready – can be captured without internet.</div>{% endif %}
+  {% if offline_capable %}<input type="hidden" name="idempotency_key" class="idem-key"><p class="help">This form can be filled in offline – it is sent automatically when the connection returns.</p>{% endif %}
   {% block form_intro %}{% endblock %}
   {% include "generic/_form_fields.html" %}
   {% block form_extra %}{% endblock %}
-  <div class="mt-4 d-flex gap-2"><button class="btn btn-primary" type="submit">Save</button><a class="btn btn-outline-secondary" href="javascript:history.back()">Cancel</a></div>
+  <div class="submit-row">
+    <input type="submit" value="Save" class="default">
+    <a href="javascript:history.back()" class="closelink">Cancel</a>
+  </div>
 </form>
-</div></div>
+</div>
 {% endblock %}

@@ -26,11 +26,12 @@ import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.CrdcColors
 import zw.gov.chipingerdc.shared.ui.Kpi
 import zw.gov.chipingerdc.shared.ui.ScrollColumn
-import zw.gov.chipingerdc.shared.ui.SectionCard
+import zw.gov.chipingerdc.shared.ui.IndexModule
+import zw.gov.chipingerdc.shared.ui.IndexRow
 import zw.gov.chipingerdc.shared.ui.isPast
 import zw.gov.chipingerdc.shared.ui.money
 
-private data class Tile(val label: String, val screen: Screen, val badge: Int = 0)
+private data class Tile(val label: String, val screen: Screen, val badge: Int = 0, val add: Screen? = null)
 
 @Composable
 fun HomeScreen(ctx: Ctx) {
@@ -55,14 +56,12 @@ fun HomeScreen(ctx: Ctx) {
         add("General" to buildList {
             if (me.can("dept.overview", "dept.overview_all")) add(Tile("My department (overview)", Screen.Department()))
             add(Tile("Approvals", Screen.Approvals, approvals.size))
-            add(Tile("Tasks", Screen.Tasks, myTasks.size))
-            if (me.can("tasks.assign_any", "tasks.assign_department")) add(Tile("Assign a task", Screen.NewTask))
-            add(Tile("Requisitions", Screen.Requisitions))
+            add(Tile("Tasks", Screen.Tasks, myTasks.size, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
+                add(Tile("Requisitions", Screen.Requisitions, add = Screen.NewRequisition))
             add(Tile("Notifications", Screen.Notifications, unread))
         })
         add("Finance" to buildList {
-            if (me.can("receipt.create")) add(Tile("Issue receipt", Screen.NewReceipt))
-            if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts))
+            if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts, add = if (me.can("receipt.create")) Screen.NewReceipt else null))
             if (me.can("accounts.manage", "finance.view_all", "receipt.create")) add(Tile("Client accounts", Screen.Accounts))
             if (me.can("areas.view", "accounts.manage")) add(Tile("Shops by area (paid/unpaid)", Screen.Areas))
             if (me.can("claims.review")) add(Tile("Stand registrations", Screen.Claims))
@@ -71,13 +70,13 @@ fun HomeScreen(ctx: Ctx) {
             if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
         })
         add("Client service (Charter)" to listOf(
-            Tile("Complaints", Screen.Complaints, unacked),
-            Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }),
+            Tile("Complaints", Screen.Complaints, unacked, Screen.NewComplaint),
+            Tile("Service requests", Screen.Requests, openRequests.count { isPast(it.dueAt) }, Screen.NewRequest),
         ))
         add("Social services" to buildList {
-            if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands))
-            if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents))
-            if (me.can("activities.manage", "activities.verify", "dept.overview")) add(Tile("Community programmes", Screen.Activities))
+            if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands, add = if (me.can("stands.manage")) Screen.NewStand else null))
+            if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
+            if (me.can("activities.manage", "activities.verify", "dept.overview")) add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
         })
         add("Technical services" to buildList {
             if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
@@ -89,17 +88,16 @@ fun HomeScreen(ctx: Ctx) {
         })
         add("Administration" to listOf(
             Tile("Council meetings", Screen.Meetings), Tile("Resolutions", Screen.Resolutions), Tile("Policies & by-laws", Screen.Policies),
-            Tile("Assets & infrastructure", Screen.Assets), Tile("ICT helpdesk", Screen.Tickets), Tile("Leave", Screen.Leave),
+            Tile("Assets & infrastructure", Screen.Assets), Tile("ICT helpdesk", Screen.Tickets, add = Screen.NewTicket), Tile("Leave", Screen.Leave, add = Screen.NewLeave),
         ))
         add("This phone" to listOf(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()), Tile("Client Charter", Screen.Charter)))
     }.filter { it.second.isNotEmpty() }
 
-    AppScreen("Chipinge RDC", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
-        TextButton(onClick = { ctx.sdk.logout() }) { Text("Log out", color = Color.White) }
+    AppScreen("Site administration", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow, actions = {
+        TextButton(onClick = { ctx.sdk.logout() }) { Text("LOG OUT", color = Color.White, fontSize = 12.sp) }
     }) {
         ScrollColumn {
-            Text("Welcome, ${me.fullName.ifBlank { me.username }}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("${me.roleLabel} · ${me.departmentLabel}", color = CrdcColors.Muted)
+            Text("Welcome, ${me.fullName.ifBlank { me.username }} (${me.roleLabel}, ${me.departmentLabel}).", fontSize = 13.sp, color = CrdcColors.Medium)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (me.can("receipt.create")) {
                     val usd = myToday.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
@@ -111,17 +109,9 @@ fun HomeScreen(ctx: Ctx) {
                 Kpi("Open complaints", openComplaints.size.toString(), "$unacked not acknowledged (48h)", if (unacked > 0) CrdcColors.Danger else CrdcColors.Green, Modifier.weight(1f)) { ctx.go(Screen.Complaints) }
                 Kpi("Service requests", openRequests.size.toString(), "${openRequests.count { isPast(it.dueAt) }} overdue", CrdcColors.Blue, Modifier.weight(1f)) { ctx.go(Screen.Requests) }
             }
-            sections.forEach { (title, tiles) -> SectionCard(title) {
-                tiles.chunked(2).forEach { pair ->
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        pair.forEach { t ->
-                            Kpi(t.label, if (t.badge > 0) t.badge.toString() else "›", null,
-                                if (t.badge > 0) CrdcColors.Warning else CrdcColors.Green, Modifier.weight(1f)) { ctx.go(t.screen) }
-                        }
-                        if (pair.size == 1) androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                    }
-                }
-            } }
+            sections.forEach { (title, tiles) ->
+                IndexModule(title, tiles.map { t -> IndexRow(t.label, t.badge, { ctx.go(t.screen) }, t.add?.let { a -> { ctx.go(a) } }) })
+            }
         }
     }
 }

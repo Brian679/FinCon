@@ -1,40 +1,61 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-  <h1 class="h3 mb-0">{{ title }}</h1>
-  <div class="d-flex gap-2">
-    {% for label, url in extra_buttons %}<a class="btn btn-outline-primary" href="{{ url }}">{{ label }}</a>{% endfor %}
-    {% if create_url %}<a class="btn btn-primary" href="{{ create_url }}">+ New</a>{% endif %}
-  </div>
-</div>
-{% block above_table %}{% endblock %}
-<form class="row g-2 mb-3" method="get">
-  {% if searchable %}<div class="col-md-5"><input class="form-control" type="search" name="q" value="{{ q }}" placeholder="Search…"></div>{% endif %}
-  {% if filter_choices %}
-  <div class="col-md-3"><select class="form-select" name="{{ filter_field }}" onchange="this.form.submit()">
-    <option value="">All statuses</option>
-    {% for val, label in filter_choices %}<option value="{{ val }}" {% if val == current_filter %}selected{% endif %}>{{ label }}</option>{% endfor %}
-  </select></div>{% endif %}
-  {% if searchable %}<div class="col-auto"><button class="btn btn-outline-secondary">Search</button></div>{% endif %}
-</form>
-<div class="card shadow-sm"><div class="table-responsive">
-<table class="table table-hover align-middle mb-0">
-  <thead class="table-light"><tr>{% for h in headers %}<th>{{ h }}</th>{% endfor %}</tr></thead>
-  <tbody>
-  {% for row in rows %}
-    <tr {% if row.url %}class="clickable" onclick="location.href='{{ row.url }}'"{% endif %}>
-      {% for c in row.cells %}<td class="{% if c.num %}text-end font-monospace{% endif %}">{% if c.badge %}<span class="badge text-bg-{{ c.badge }}">{{ c.text }}</span>{% elif forloop.first and row.url %}<a href="{{ row.url }}">{{ c.text }}</a>{% else %}{{ c.text }}{% endif %}</td>{% endfor %}
-    </tr>
-  {% empty %}
-    <tr><td colspan="{{ headers|length }}" class="text-center text-muted py-4">No records found.</td></tr>
-  {% endfor %}
-  </tbody>
-</table></div></div>
-{% if is_paginated %}
-<nav class="mt-3"><ul class="pagination">
-  {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}">Previous</a></li>{% endif %}
-  <li class="page-item disabled"><span class="page-link">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span></li>
-  {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}">Next</a></li>{% endif %}
-</ul></nav>
+<h1>{{ title }}</h1>
+{% if create_url or extra_buttons %}
+<ul class="object-tools">
+  {% for label, url in extra_buttons %}<li><a href="{{ url }}">{{ label }}</a></li>{% endfor %}
+  {% if create_url %}<li><a href="{{ create_url }}" class="addlink">Add</a></li>{% endif %}
+</ul>
 {% endif %}
+{% block above_table %}{% endblock %}
+<div class="module{% if filter_choices %} filtered{% endif %}" id="changelist">
+  <div class="changelist-form-container">
+    {% if searchable %}
+    <div id="toolbar"><form id="changelist-search" method="get" role="search">
+      <div>
+        <label for="searchbar"><img src="/static/admin/img/search.svg" alt="Search"></label>
+        <input type="text" size="40" name="q" value="{{ q }}" id="searchbar">
+        {% if current_filter %}<input type="hidden" name="{{ filter_field }}" value="{{ current_filter }}">{% endif %}
+        <input type="submit" value="Search">
+        {% if q %}<span class="small quiet">{{ page_obj.paginator.count|default:rows|length }} result(s) (<a href="?{% if current_filter %}{{ filter_field }}={{ current_filter }}{% endif %}">clear search</a>)</span>{% endif %}
+      </div>
+    </form></div>
+    {% endif %}
+    <div class="results">
+      <table id="result_list">
+        <thead><tr>{% for h in headers %}<th scope="col"><div class="text"><span>{{ h }}</span></div><div class="clear"></div></th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for row in rows %}
+          <tr>
+            {% for c in row.cells %}{% if forloop.first %}<th class="field-first">{% if row.url %}<a href="{{ row.url }}">{{ c.text }}</a>{% else %}{{ c.text }}{% endif %}</th>{% else %}<td class="{% if c.num %}text-end font-monospace{% endif %}">{% if c.badge %}<span class="badge text-bg-{{ c.badge }}">{{ c.text }}</span>{% else %}{{ c.text }}{% endif %}</td>{% endif %}{% endfor %}
+          </tr>
+        {% empty %}
+          <tr><td colspan="{{ headers|length }}" class="quiet">0 records.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="paginator">
+      {% if is_paginated %}
+        {% if page_obj.has_previous %}<a href="?page={{ page_obj.previous_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}">&lsaquo; previous</a>{% endif %}
+        <span class="this-page">{{ page_obj.number }}</span> of {{ page_obj.paginator.num_pages }}
+        {% if page_obj.has_next %}<a href="?page={{ page_obj.next_page_number }}&q={{ q }}&{{ filter_field }}={{ current_filter }}">next &rsaquo;</a>{% endif %}
+        &nbsp;·&nbsp; {{ page_obj.paginator.count }} records
+      {% else %}{{ rows|length }} record{{ rows|length|pluralize }}{% endif %}
+    </p>
+  </div>
+  {% if filter_choices %}
+  <nav id="changelist-filter" aria-labelledby="changelist-filter-header">
+    <h2 id="changelist-filter-header">Filter</h2>
+    {% if current_filter %}<div id="changelist-filter-extra-actions"><h3><a href="?q={{ q }}">&#10006; Clear all filters</a></h3></div>{% endif %}
+    <details open>
+      <summary>By {{ filter_field|default:"status" }}</summary>
+      <ul>
+        <li{% if not current_filter %} class="selected"{% endif %}><a href="?q={{ q }}">All</a></li>
+        {% for val, label in filter_choices %}<li{% if val == current_filter %} class="selected"{% endif %}><a href="?{{ filter_field }}={{ val }}&q={{ q }}">{{ label }}</a></li>{% endfor %}
+      </ul>
+    </details>
+  </nav>
+  {% endif %}
+</div>
 {% endblock %}

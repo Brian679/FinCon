@@ -1,6 +1,7 @@
 package zw.gov.chipingerdc.shared.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,48 +13,60 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import zw.gov.chipingerdc.shared.sync.SyncState
 
+private val Square = RoundedCornerShape(0.dp)
+private val Radius4 = RoundedCornerShape(4.dp)
+
+/** Draws a 1dp hairline along the bottom edge (Django admin table rows). */
+fun Modifier.bottomRule(color: Color = CrdcColors.Hairline, width: Dp = 1.dp) = drawBehind {
+    val y = size.height - width.toPx() / 2
+    drawLine(color, Offset(0f, y), Offset(size.width, y), width.toPx())
+}
+
+/**
+ * Screen frame in the Django-admin layout:
+ *  header (site name in gold, user links) · breadcrumbs bar (with sync status) · page title · content.
+ */
 @Composable
 fun AppScreen(
     title: String,
@@ -64,66 +77,86 @@ fun AppScreen(
     actions: @Composable () -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Scaffold(
-        topBar = {
-            Column {
-                TopAppBar(
-                    title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    navigationIcon = {
-                        if (onBack != null) TextButton(onClick = onBack) { Text("‹ Back", color = Color.White) }
-                    },
-                    actions = { actions() },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = CrdcColors.Green, titleContentColor = Color.White, actionIconContentColor = Color.White,
-                    ),
-                )
-                if (sync != null) SyncBar(sync, pending, onSync)
-            }
-        },
-        containerColor = CrdcColors.Background,
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize(), content = content)
+    Column(Modifier.fillMaxSize().background(Color.White)) {
+        // #header
+        Row(
+            Modifier.fillMaxWidth().background(CrdcColors.Green).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(LocalSiteName.current, color = CrdcColors.Gold, fontSize = 19.sp, fontWeight = FontWeight.Light, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            actions()
+        }
+        Box(Modifier.fillMaxWidth().height(3.dp).background(CrdcColors.Gold))
+        // div.breadcrumbs
+        Row(
+            Modifier.fillMaxWidth().background(CrdcColors.GreenDark).padding(horizontal = 16.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(if (onBack != null) "‹ Back" else "Home", color = Color.White, fontSize = 13.sp,
+                modifier = if (onBack != null) Modifier.clickable { onBack() } else Modifier)
+            if (onBack != null) {
+                Text("  ›  $title", color = CrdcColors.BreadcrumbsText, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f))
+            } else Spacer(Modifier.weight(1f))
+            if (sync != null) SyncStatus(sync, pending, onSync)
+        }
+        if (sync?.online == false || sync?.needsLogin == true) {
+            val text = if (sync.needsLogin) "Session expired – log in again to sync your work."
+            else "You are offline. Showing data saved on this phone" + if (pending > 0) "; $pending change(s) will be sent when you reconnect." else "."
+            Message(text, MessageKind.WARNING, Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp))
+        }
+        // h1 (light, quiet)
+        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Light, color = CrdcColors.Muted,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+        Column(Modifier.fillMaxSize(), content = content)
     }
 }
 
 @Composable
-fun SyncBar(state: SyncState, pending: Long, onSync: (() -> Unit)?) {
-    val (bg, text) = when {
-        state.running -> CrdcColors.Blue to "Syncing…"
-        state.needsLogin -> CrdcColors.Danger to "Session expired – log in again to sync"
-        state.online == false -> CrdcColors.Warning to if (pending > 0) "Offline · $pending change(s) waiting to sync" else "Offline · showing saved data"
-        pending > 0 -> CrdcColors.Blue to "$pending change(s) waiting to sync"
-        else -> CrdcColors.GreenDark to ("Up to date" + (state.lastSync?.let { " · ${prettyDate(it)}" } ?: ""))
+private fun SyncStatus(state: SyncState, pending: Long, onSync: (() -> Unit)?) {
+    val text = when {
+        state.running -> "Syncing…"
+        state.online == false -> "Offline" + if (pending > 0) " · $pending waiting" else ""
+        pending > 0 -> "$pending waiting · Sync"
+        state.lastSync != null -> "Synced ${prettyDate(state.lastSync).takeLast(5)}"
+        else -> "Sync"
     }
-    Row(
-        Modifier.fillMaxWidth().background(bg).clickable(enabled = onSync != null && !state.running) { onSync?.invoke() }.padding(horizontal = 16.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
-        if (onSync != null && !state.running) Text("Sync now ⟳", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
-    }
+    Text(text, color = if (state.online == false || pending > 0) CrdcColors.Gold else CrdcColors.BreadcrumbsText, fontSize = 12.sp,
+        modifier = if (onSync != null && !state.running) Modifier.clickable { onSync() } else Modifier)
 }
+
+/** Kept for callers that show sync status on their own. */
+@Composable
+fun SyncBar(state: SyncState, pending: Long, onSync: (() -> Unit)?) = SyncStatus(state, pending, onSync)
 
 @Composable
 fun ScrollColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp), content = content)
 }
 
 @Composable
 fun ListScreen(content: LazyListScope.() -> Unit) {
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp), content = content)
 }
 
+/** div.module with an <h2>/<caption> bar. */
 @Composable
 fun SectionCard(title: String? = null, modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Card(modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(1.dp)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (title != null) Text(title, style = MaterialTheme.typography.titleSmall, color = CrdcColors.GreenDark, fontWeight = FontWeight.SemiBold)
-            content()
-        }
+    Column(modifier.fillMaxWidth().border(1.dp, CrdcColors.Hairline, Square).background(Color.White)) {
+        if (title != null) Caption(title)
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp), content = content)
     }
 }
 
+@Composable
+fun Caption(title: String, color: Color = CrdcColors.Green) {
+    Text(title.uppercase(), color = Color.White, fontSize = 12.sp, letterSpacing = 0.5.sp,
+        modifier = Modifier.fillMaxWidth().background(color).padding(horizontal = 8.dp, vertical = 8.dp))
+}
+
+/** One row of a Django admin results table. */
 @Composable
 fun RowCard(
     title: String,
@@ -134,65 +167,75 @@ fun RowCard(
     note: String? = null,
     onClick: (() -> Unit)? = null,
 ) {
-    Card(
-        Modifier.fillMaxWidth().then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(1.dp),
+    Row(
+        Modifier.fillMaxWidth().background(Color.White).then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+            .bottomRule().padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.Top,
     ) {
-        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                if (!subtitle.isNullOrBlank()) Text(subtitle, fontSize = 13.sp, color = CrdcColors.Muted, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                if (!note.isNullOrBlank()) Text("⏳ $note", fontSize = 12.sp, color = CrdcColors.Blue)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                if (trailing != null) Text(trailing, fontWeight = FontWeight.Bold)
-                if (status != null) StatusChip(status, statusCode ?: status)
-            }
+        Column(Modifier.weight(1f)) {
+            Text(title, color = if (onClick != null) CrdcColors.Blue else CrdcColors.Body, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (!subtitle.isNullOrBlank()) Text(subtitle, fontSize = 12.sp, color = CrdcColors.Muted, maxLines = 3, overflow = TextOverflow.Ellipsis,
+                lineHeight = 16.sp)
+            if (!note.isNullOrBlank()) Text("⏳ $note", fontSize = 12.sp, color = CrdcColors.Warning)
+        }
+        Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp)) {
+            if (trailing != null) Text(trailing, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CrdcColors.Body)
+            if (status != null) StatusChip(status, statusCode ?: status)
         }
     }
 }
 
-fun statusColor(code: String): Color = when (code.uppercase()) {
+private enum class Tone { GOOD, BAD, ATTENTION, NEUTRAL }
+
+private fun tone(code: String): Tone = when (code.uppercase()) {
     "VALID", "PAID", "ISSUED", "APPROVED", "AUTHORISED", "VERIFIED", "RESOLVED", "CLOSED", "COMPLETED", "DONE", "ALLOCATED", "ACTIVE",
-    "ORDERED", "INSPECTED", "RESPONDED" -> CrdcColors.Success
-    "VOIDED", "REJECTED", "FAILED", "CANCELLED", "EXPIRED", "URGENT", "CRITICAL", "QUERIED" -> CrdcColors.Danger
-    "PENDING", "LOCAL" -> CrdcColors.Blue
-    else -> CrdcColors.Warning
+    "ORDERED", "INSPECTED", "RESPONDED", "GOOD" -> Tone.GOOD
+    "VOIDED", "REJECTED", "FAILED", "CANCELLED", "EXPIRED", "URGENT", "CRITICAL", "QUERIED", "BROKEN" -> Tone.BAD
+    "LOCAL", "SECONDARY" -> Tone.NEUTRAL
+    else -> Tone.ATTENTION
 }
 
+fun statusColor(code: String): Color = when (tone(code)) {
+    Tone.GOOD -> CrdcColors.Success
+    Tone.BAD -> CrdcColors.Danger
+    Tone.ATTENTION -> CrdcColors.Warning
+    Tone.NEUTRAL -> CrdcColors.Muted
+}
+
+/** Status text with Django admin's yes / no / alert icon. */
 @Composable
 fun StatusChip(text: String, code: String = text) {
-    Box(Modifier.background(statusColor(code), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp)) {
-        Text(text, color = Color.White, fontSize = 11.sp, maxLines = 1)
-    }
+    val t = tone(code)
+    val icon = when (t) { Tone.GOOD -> "✔ "; Tone.BAD -> "✖ "; Tone.ATTENTION -> "⚠ "; Tone.NEUTRAL -> "" }
+    Text(icon + text, color = statusColor(code), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
 }
 
 @Composable
 fun KeyValue(label: String, value: String?) {
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
-        Text(label, color = CrdcColors.Muted, fontSize = 13.sp, modifier = Modifier.width(130.dp))
-        Text(value?.ifBlank { "—" } ?: "—", fontSize = 14.sp, modifier = Modifier.weight(1f))
+    Row(Modifier.fillMaxWidth().bottomRule().padding(vertical = 6.dp)) {
+        Text("$label:", color = CrdcColors.Medium, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
+        Text(value?.ifBlank { "—" } ?: "—", fontSize = 13.sp, color = CrdcColors.Body, modifier = Modifier.weight(1f))
     }
 }
 
+/** Flat summary box (top rule in the council colour). */
 @Composable
 fun Kpi(label: String, value: String, sub: String? = null, color: Color = CrdcColors.Green, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
-    Card(
-        modifier.then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
-        colors = CardDefaults.cardColors(containerColor = Color.White), elevation = CardDefaults.cardElevation(1.dp),
+    val rule = when (color) { CrdcColors.Warning -> CrdcColors.Gold; else -> color }
+    Column(
+        modifier.border(1.dp, CrdcColors.Hairline, Square).background(Color.White)
+            .then(if (onClick != null) Modifier.clickable { onClick() } else Modifier),
     ) {
-        Row {
-            Box(Modifier.width(4.dp).height(72.dp).background(color))
-            Column(Modifier.padding(10.dp)) {
-                Text(label, fontSize = 12.sp, color = CrdcColors.Muted, maxLines = 2)
-                Text(value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                if (sub != null) Text(sub, fontSize = 11.sp, color = CrdcColors.Muted, maxLines = 1)
-            }
+        Box(Modifier.fillMaxWidth().height(3.dp).background(rule))
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            Text(label.uppercase(), fontSize = 10.sp, letterSpacing = 0.3.sp, color = CrdcColors.Muted, maxLines = 2, lineHeight = 13.sp)
+            Text(value, fontSize = 21.sp, color = if (color == CrdcColors.Danger) CrdcColors.Danger else CrdcColors.Body)
+            if (sub != null) Text(sub, fontSize = 11.sp, color = CrdcColors.Muted, maxLines = 1)
         }
     }
 }
 
+/** Django admin form row: bold label, bordered input. */
 @Composable
 fun Field(
     label: String,
@@ -205,39 +248,47 @@ fun Field(
     minLines: Int = 1,
     error: String? = null,
 ) {
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        label = { Text(label) },
-        modifier = modifier.fillMaxWidth(),
-        singleLine = singleLine && minLines == 1,
-        minLines = minLines,
-        isError = error != null,
-        supportingText = error?.let { { Text(it) } },
-        visualTransformation = if (password) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-        keyboardOptions = KeyboardOptions(keyboardType = when {
-            password -> KeyboardType.Password
-            number -> KeyboardType.Decimal
-            else -> KeyboardType.Text
-        }),
-    )
+    Column(modifier.fillMaxWidth()) {
+        Text("$label:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CrdcColors.Medium, modifier = Modifier.padding(bottom = 4.dp))
+        BasicTextField(
+            value = value,
+            onValueChange = onChange,
+            singleLine = singleLine && minLines == 1,
+            minLines = minLines,
+            textStyle = TextStyle(fontSize = 15.sp, color = CrdcColors.Body),
+            visualTransformation = if (password) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(keyboardType = when {
+                password -> KeyboardType.Password
+                number -> KeyboardType.Decimal
+                else -> KeyboardType.Text
+            }),
+            decorationBox = { inner ->
+                Box(Modifier.fillMaxWidth().heightIn(min = 40.dp).border(1.dp, if (error != null) CrdcColors.Danger else CrdcColors.Border, Radius4)
+                    .background(Color.White, Radius4).padding(horizontal = 8.dp, vertical = 9.dp)) { inner() }
+            },
+        )
+        if (error != null) Text(error, color = CrdcColors.Danger, fontSize = 12.sp)
+    }
 }
 
-/** A simple, stable dropdown: button + menu. */
+/** Select box. */
 @Composable
 fun <T> Picker(label: String, options: List<T>, selected: T?, toLabel: (T) -> String, onSelect: (T) -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
     Column(modifier.fillMaxWidth()) {
-        Text(label, fontSize = 12.sp, color = CrdcColors.Muted)
+        Text("$label:", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CrdcColors.Medium, modifier = Modifier.padding(bottom = 4.dp))
         Box {
-            OutlinedButton(onClick = { open = true }, modifier = Modifier.fillMaxWidth()) {
-                Text(selected?.let(toLabel) ?: "Select…", modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("▾")
+            Row(
+                Modifier.fillMaxWidth().heightIn(min = 40.dp).border(1.dp, CrdcColors.Border, Radius4).clickable { open = true }
+                    .padding(horizontal = 8.dp, vertical = 9.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(selected?.let(toLabel) ?: "---------", fontSize = 15.sp, color = CrdcColors.Body, modifier = Modifier.weight(1f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("▾", color = CrdcColors.Muted)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                options.forEach { opt ->
-                    DropdownMenuItem(text = { Text(toLabel(opt)) }, onClick = { onSelect(opt); open = false })
-                }
+                options.forEach { opt -> DropdownMenuItem(text = { Text(toLabel(opt)) }, onClick = { onSelect(opt); open = false }) }
             }
         }
     }
@@ -247,38 +298,72 @@ fun <T> Picker(label: String, options: List<T>, selected: T?, toLabel: (T) -> St
 fun ChoicePicker(label: String, choices: List<Pair<String, String>>, selected: String, onSelect: (String) -> Unit) =
     Picker(label, choices, choices.firstOrNull { it.first == selected }, { it.second }, { onSelect(it.first) })
 
+/** Square admin button. Danger -> red, Blue (secondary) -> grey, everything else -> council green. */
 @Composable
 fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true, busy: Boolean = false, color: Color = CrdcColors.Green) {
-    Button(onClick = onClick, enabled = enabled && !busy, modifier = Modifier.fillMaxWidth().height(48.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = color)) {
-        if (busy) CircularProgressIndicator(Modifier.width(20.dp).height(20.dp), color = Color.White, strokeWidth = 2.dp) else Text(text)
+    val bg = when (color) {
+        CrdcColors.Danger -> CrdcColors.Danger
+        CrdcColors.Blue -> CrdcColors.CloseButton
+        CrdcColors.Success, CrdcColors.GreenDark -> CrdcColors.GreenDark
+        else -> CrdcColors.Green
+    }
+    AdminButton(text, onClick, bg, enabled && !busy, busy, Modifier.fillMaxWidth())
+}
+
+@Composable
+fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) =
+    AdminButton(text, onClick, CrdcColors.CloseButton, true, false, modifier)
+
+@Composable
+fun AdminButton(text: String, onClick: () -> Unit, bg: Color, enabled: Boolean, busy: Boolean, modifier: Modifier) {
+    Box(
+        modifier.heightIn(min = 40.dp).background(if (enabled) bg else bg.copy(alpha = 0.45f), Radius4)
+            .then(if (enabled) Modifier.clickable { onClick() } else Modifier).padding(horizontal = 15.dp, vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (busy) CircularProgressIndicator(Modifier.width(18.dp).height(18.dp), color = Color.White, strokeWidth = 2.dp)
+        else Text(text, color = Color.White, fontSize = 14.sp)
+    }
+}
+
+enum class MessageKind { SUCCESS, WARNING, ERROR, INFO }
+
+/** ul.messagelist li */
+@Composable
+fun Message(text: String, kind: MessageKind, modifier: Modifier = Modifier) {
+    val (bg, icon, iconColor) = when (kind) {
+        MessageKind.SUCCESS -> Triple(CrdcColors.MsgSuccess, "✔", CrdcColors.Success)
+        MessageKind.WARNING -> Triple(CrdcColors.MsgWarning, "⚠", CrdcColors.Warning)
+        MessageKind.ERROR -> Triple(CrdcColors.MsgError, "✖", CrdcColors.Danger)
+        MessageKind.INFO -> Triple(CrdcColors.MsgInfo, "ℹ", CrdcColors.Blue)
+    }
+    Row(modifier.fillMaxWidth().background(bg).padding(horizontal = 10.dp, vertical = 9.dp)) {
+        Text(icon, color = iconColor, fontSize = 13.sp, modifier = Modifier.padding(end = 8.dp))
+        Text(text, color = CrdcColors.Body, fontSize = 13.sp)
     }
 }
 
 @Composable
-fun SecondaryButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier.fillMaxWidth()) {
-    OutlinedButton(onClick = onClick, modifier = modifier) { Text(text) }
-}
-
-@Composable
-fun InfoBox(text: String, color: Color = CrdcColors.Blue) {
-    Box(Modifier.fillMaxWidth().background(color.copy(alpha = 0.1f), RoundedCornerShape(8.dp)).padding(12.dp)) {
-        Text(text, color = color, fontSize = 13.sp)
-    }
-}
+fun InfoBox(text: String, color: Color = CrdcColors.Blue) = Message(text, when (color) {
+    CrdcColors.Danger -> MessageKind.ERROR
+    CrdcColors.Warning, CrdcColors.Gold -> MessageKind.WARNING
+    CrdcColors.Success, CrdcColors.Green -> MessageKind.SUCCESS
+    else -> MessageKind.INFO
+})
 
 @Composable
 fun Empty(text: String) {
-    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { Text(text, color = CrdcColors.Muted) }
+    Text(text, color = CrdcColors.Muted, fontSize = 13.sp, modifier = Modifier.fillMaxWidth().bottomRule().padding(8.dp))
 }
 
 @Composable
 fun Progress(percent: Int) {
-    LinearProgressIndicator(progress = { percent.coerceIn(0, 100) / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp), color = CrdcColors.Success)
+    LinearProgressIndicator(progress = { percent.coerceIn(0, 100) / 100f }, modifier = Modifier.fillMaxWidth().height(6.dp),
+        color = CrdcColors.Green, trackColor = CrdcColors.Hairline)
 }
 
 @Composable
-fun Divider() = HorizontalDivider(Modifier.padding(vertical = 4.dp))
+fun Divider() = HorizontalDivider(Modifier.padding(vertical = 4.dp), color = CrdcColors.Hairline)
 
 @Composable
 fun Gap(h: Int = 8) = Spacer(Modifier.height(h.dp))
@@ -294,18 +379,46 @@ fun ConfirmDialog(title: String, text: String, confirm: String = "Confirm", onCo
     )
 }
 
-/** Decision panel used for approvals: comment box + approve / reject. */
+/** Approve / reject panel (submit-row with a default and a delete-style button). */
 @Composable
 fun DecisionPanel(title: String, approveText: String = "Approve", rejectText: String = "Reject", onDecide: (approve: Boolean, comment: String) -> Unit) {
     var comment by remember { mutableStateOf("") }
     SectionCard(title) {
         Field("Comment", comment, { comment = it }, singleLine = false, minLines = 2)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onDecide(true, comment) }, colors = ButtonDefaults.buttonColors(containerColor = CrdcColors.Success), modifier = Modifier.weight(1f)) { Text(approveText) }
-            OutlinedButton(onClick = { onDecide(false, comment) }, modifier = Modifier.weight(1f)) { Text(rejectText, color = CrdcColors.Danger) }
+        SubmitRow {
+            AdminButton(approveText, { onDecide(true, comment) }, CrdcColors.GreenDark, true, false, Modifier.weight(1f))
+            AdminButton(rejectText, { onDecide(false, comment) }, CrdcColors.Danger, true, false, Modifier.weight(1f))
         }
         Text("Decisions are queued if you are offline and applied when the phone syncs. Segregation-of-duties rules are checked by the server.",
             fontSize = 11.sp, color = CrdcColors.Muted)
+    }
+}
+
+/** div.submit-row */
+@Composable
+fun SubmitRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Row(Modifier.fillMaxWidth().background(CrdcColors.Darkened).border(1.dp, CrdcColors.Hairline).padding(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp), content = content)
+}
+
+/** Django admin index: a module whose rows are links with optional count and "+ Add" link. */
+data class IndexRow(val label: String, val count: Int = 0, val onOpen: () -> Unit, val onAdd: (() -> Unit)? = null)
+
+@Composable
+fun IndexModule(title: String, rows: List<IndexRow>) {
+    Column(Modifier.fillMaxWidth().border(1.dp, CrdcColors.Hairline, Square)) {
+        Caption(title)
+        rows.forEachIndexed { i, r ->
+            Row(
+                Modifier.fillMaxWidth().background(if (i % 2 == 1) CrdcColors.Darkened else Color.White).bottomRule()
+                    .padding(horizontal = 10.dp, vertical = 11.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(r.label + if (r.count > 0) " (${r.count})" else "", color = CrdcColors.Blue, fontSize = 15.sp,
+                    modifier = Modifier.weight(1f).clickable { r.onOpen() })
+                if (r.onAdd != null) Text("✚ Add", color = CrdcColors.Green, fontSize = 13.sp, modifier = Modifier.clickable { r.onAdd.invoke() })
+            }
+        }
     }
 }
 
@@ -322,11 +435,13 @@ class Navigator<S>(start: S) {
 /** One input in an [ActionPanel]. kind: text, number, multiline, choice. */
 data class FieldSpec(val key: String, val label: String, val kind: String = "text", val choices: List<Pair<String, String>> = emptyList(), val initial: String = "")
 
-/** A small form with several buttons (stage actions such as recommend / approve / reject). */
+private val NEGATIVE_ACTIONS = setOf("reject", "return", "fail", "cancel")
+
+/** A small form with stage buttons (recommend / approve / reject …) in a submit row. */
 @Composable
 fun ActionPanel(title: String, fields: List<FieldSpec>, buttons: List<Pair<String, String>>, note: String? = null,
                 onAction: (action: String, values: Map<String, String>) -> Unit) {
-    val values = remember(title) { androidx.compose.runtime.mutableStateMapOf<String, String>().apply { fields.forEach { put(it.key, it.initial.ifBlank { it.choices.firstOrNull()?.first ?: "" }) } } }
+    val values = remember(title) { mutableStateMapOf<String, String>().apply { fields.forEach { put(it.key, it.initial.ifBlank { it.choices.firstOrNull()?.first ?: "" }) } } }
     SectionCard(title) {
         fields.forEach { f ->
             when (f.kind) {
@@ -336,9 +451,16 @@ fun ActionPanel(title: String, fields: List<FieldSpec>, buttons: List<Pair<Strin
                 else -> Field(f.label, values[f.key] ?: "", { values[f.key] = it })
             }
         }
-        buttons.forEachIndexed { i, (action, label) ->
-            if (i == 0) PrimaryButton(label, onClick = { onAction(action, values.toMap()) })
-            else SecondaryButton(label, { onAction(action, values.toMap()) })
+        Column(Modifier.fillMaxWidth().background(CrdcColors.Darkened).border(1.dp, CrdcColors.Hairline).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            buttons.forEachIndexed { i, (action, label) ->
+                val bg = when {
+                    action in NEGATIVE_ACTIONS -> CrdcColors.Danger
+                    i == 0 -> CrdcColors.GreenDark
+                    else -> CrdcColors.Green
+                }
+                AdminButton(label, { onAction(action, values.toMap()) }, bg, true, false, Modifier.fillMaxWidth())
+            }
         }
         if (note != null) Text(note, fontSize = 11.sp, color = CrdcColors.Muted)
     }

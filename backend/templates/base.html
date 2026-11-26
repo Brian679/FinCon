@@ -1,66 +1,78 @@
-{% load static %}<!doctype html>
+{% load static %}<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#1f7a3a">
-  <title>{% block title %}{{ title|default:"Council System" }}{% endblock %} · {{ COUNCIL.SHORT_NAME }}</title>
-  <link rel="manifest" href="{% url 'core:manifest' %}">
-  <link rel="icon" href="{% static 'img/logo.svg' %}">
-  <link rel="stylesheet" href="{% static 'vendor/bootstrap.min.css' %}">
-  <link rel="stylesheet" href="{% static 'css/app.css' %}">
-  {% block head %}{% endblock %}
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#417690">
+<title>{% block title %}{{ title|default:"Home" }}{% endblock %} | {% if SITE_KIND == 'staff' %}Chipinge RDC staff{% else %}Chipinge RDC online services{% endif %}</title>
+<link rel="manifest" href="{% url 'core:manifest' %}">
+<link rel="icon" href="{% static 'img/logo.svg' %}">
+<link rel="stylesheet" href="{% static 'vendor/bootstrap.min.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/base.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/nav_sidebar.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/changelists.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+<link rel="stylesheet" href="{% static 'admin/css/responsive.css' %}">
+<link rel="stylesheet" href="{% static 'css/app.css' %}">
+{% if user.is_authenticated and nav_items %}<script src="{% static 'admin/js/nav_sidebar.js' %}" defer></script>{% endif %}
+{% block head %}{% endblock %}
 </head>
 <body class="{% block body_class %}{% endblock %}">
-<div id="offline-banner" class="offline-banner d-none">You are offline – showing saved pages. Forms marked “offline ready” will be sent automatically when you reconnect. <span id="queue-count"></span></div>
-<nav class="navbar navbar-expand-lg navbar-dark topbar {% if SITE_KIND == 'staff' %}topbar-staff{% endif %} no-print">
-  <div class="container-fluid">
-    {% if user.is_authenticated %}<button class="btn btn-sm btn-outline-light d-lg-none me-2" type="button" data-bs-toggle="offcanvas" data-bs-target="#sidebar">☰</button>{% endif %}
-    <a class="navbar-brand d-flex align-items-center gap-2" href="{% url 'accounts:home' %}">
-      <img src="{% static 'img/logo.svg' %}" alt="" width="34" height="34">
-      <span><strong>{{ COUNCIL.SHORT_NAME }}</strong> <small class="d-none d-md-inline opacity-75">· {% if SITE_KIND == 'staff' %}Council Staff System{% else %}Online Services{% endif %}</small></span>
-    </a>
-    <div class="ms-auto d-flex align-items-center gap-3 text-white">
-      {% if user.is_authenticated %}
-        <a class="text-white text-decoration-none position-relative" href="{% if user.is_client %}{% url 'portal:notifications' %}{% else %}{% url 'core:notifications' %}{% endif %}" title="Notifications">🔔{% if unread_notifications %}<span class="badge rounded-pill bg-danger notif-badge">{{ unread_notifications }}</span>{% endif %}</a>
-        <span class="d-none d-md-inline small">{{ user.get_full_name|default:user.username }}{% if user.is_staff_member %} · <span class="opacity-75">{{ user.role_label }}</span>{% endif %}</span>
-        <a class="btn btn-sm btn-outline-light" href="{% url 'accounts:password_change' %}">Password</a>
-        <form method="post" action="{% url 'accounts:logout' %}" class="d-inline">{% csrf_token %}<button class="btn btn-sm btn-light">Log out</button></form>
-      {% else %}
-        {% if SITE_KIND == 'staff' %}<a class="btn btn-sm btn-light" href="{% url 'accounts:login' %}">Staff log in</a>{% else %}<a class="btn btn-sm btn-outline-light" href="{% url 'portal:register' %}">Create account</a> <a class="btn btn-sm btn-light" href="{% url 'portal:login' %}">Log in</a>{% endif %}
-      {% endif %}
+<a href="#content-start" class="skip-to-content-link">Skip to main content</a>
+<div id="offline-banner" class="offline-banner d-none">You are offline – showing saved pages. Forms marked “offline ready” are sent automatically when you reconnect. <span id="queue-count"></span></div>
+<div id="container">
+  <header id="header" class="no-print">
+    <div id="branding">
+      <div id="site-name"><a href="{% if user.is_authenticated %}{% url 'accounts:home' %}{% else %}/{% endif %}">{% if SITE_KIND == 'staff' %}Chipinge RDC administration{% else %}Chipinge RDC online services{% endif %}</a></div>
     </div>
-  </div>
-</nav>
-<div class="container-fluid">
-  <div class="row">
+    {% block usertools %}<div id="user-tools">
+      {% if user.is_authenticated %}
+        Welcome, <strong>{{ user.first_name|default:user.username }}</strong>{% if user.is_staff_member %} ({{ user.role_label }}){% endif %}.
+        <a href="{% if user.is_client %}{% url 'portal:notifications' %}{% else %}{% url 'core:notifications' %}{% endif %}">Notifications{% if unread_notifications %} ({{ unread_notifications }}){% endif %}</a> /
+        <a href="{% url 'accounts:password_change' %}">Change password</a> /
+        <form id="logout-form" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Log out</button></form>
+      {% elif SITE_KIND == 'staff' %}
+        <a href="{% url 'accounts:login' %}">Staff log in</a>
+      {% else %}
+        <a href="{% url 'portal:register' %}">Create account</a> / <a href="{% url 'portal:login' %}">Log in</a>
+      {% endif %}
+    </div>{% endblock %}
+  </header>
+  {% block nav_breadcrumbs %}<nav aria-label="Breadcrumbs" class="no-print">
+    <div class="breadcrumbs">
+      <a href="{% if user.is_authenticated %}{% url 'accounts:home' %}{% else %}/{% endif %}">Home</a>{% block breadcrumbs %}{% if title and title != 'Home' %} &rsaquo; {{ title }}{% endif %}{% endblock %}
+    </div>
+  </nav>{% endblock %}
+  <div class="main{% if user.is_authenticated and nav_items %} shifted{% endif %}" id="main">
     {% if user.is_authenticated and nav_items %}
-    <aside class="col-lg-2 p-0 no-print">
-      <div class="offcanvas-lg offcanvas-start sidebar" tabindex="-1" id="sidebar">
-        <div class="offcanvas-header d-lg-none"><h5 class="offcanvas-title">Menu</h5><button type="button" class="btn-close" data-bs-dismiss="offcanvas" data-bs-target="#sidebar"></button></div>
-        <div class="offcanvas-body d-block p-2">
-          {% if user.is_staff_member %}<div class="px-2 pt-2 pb-1 small text-muted">{{ user.get_department_display }}</div>{% endif %}
-          {% for section in nav_items %}
-            <div class="nav-section">{{ section.title }}</div>
-            <ul class="nav flex-column">
-            {% for item in section.items %}<li class="nav-item"><a class="nav-link {% if request.path == item.url %}active{% endif %}" href="{{ item.url }}">{{ item.label }}</a></li>{% endfor %}
-            </ul>
+    <button class="sticky toggle-nav-sidebar no-print" id="toggle-nav-sidebar" aria-label="Toggle navigation"></button>
+    <nav class="sticky no-print" id="nav-sidebar" aria-label="Sidebar">
+      <input type="search" id="nav-filter" placeholder="Start typing to filter…" aria-label="Filter navigation items">
+      {% for section in nav_items %}
+      <div class="module{% for item in section.items %}{% if request.path == item.url %} current-app{% endif %}{% endfor %}">
+        <table>
+          <caption><span class="section">{{ section.title }}</span></caption>
+          {% for item in section.items %}
+          <tr class="{% if request.path == item.url %}current-model{% endif %}">
+            <th scope="row"><a href="{{ item.url }}"{% if request.path == item.url %} aria-current="page"{% endif %}>{{ item.label }}</a></th>
+            <td>{% if item.add %}<a href="{{ item.add }}" class="addlink">Add</a>{% endif %}</td>
+          </tr>
           {% endfor %}
-        </div>
+        </table>
       </div>
-    </aside>
-    <main class="col-lg-10 py-3 px-lg-4">
-    {% else %}
-    <main class="col-12 py-3">
-    {% endif %}
-      {% for message in messages %}
-        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show no-print" role="alert">{{ message }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
       {% endfor %}
-      {% block content %}{% endblock %}
+    </nav>
+    {% endif %}
+    <main id="content-start" class="content" tabindex="-1">
+      {% if messages %}<ul class="messagelist no-print">{% for message in messages %}<li class="{% if message.tags == 'info' %}info{% else %}{{ message.tags }}{% endif %}">{{ message|capfirst }}</li>{% endfor %}</ul>{% endif %}
+      <div id="content" class="colM">
+        {% block content %}{% endblock %}
+        <br class="clear">
+      </div>
     </main>
   </div>
+  <footer id="footer" class="no-print">{{ COUNCIL.NAME }} · {{ COUNCIL.ADDRESS }} · {{ COUNCIL.PHONE }} · {{ COUNCIL.EMAIL }}</footer>
 </div>
-<footer class="text-center small text-muted py-3 no-print">{{ COUNCIL.NAME }} · {{ COUNCIL.ADDRESS }} · {{ COUNCIL.PHONE }} · {{ COUNCIL.EMAIL }}</footer>
 <script src="{% static 'vendor/bootstrap.bundle.min.js' %}"></script>
 <script src="{% static 'js/offline.js' %}"></script>
 {% block scripts %}{% endblock %}

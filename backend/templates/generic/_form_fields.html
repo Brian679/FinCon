@@ -1,12 +1,20 @@
-{% if form.non_field_errors %}<div class="alert alert-danger">{% for e in form.non_field_errors %}{{ e }}<br>{% endfor %}</div>{% endif %}
-<div class="row g-3">
+{% if form.non_field_errors %}<p class="errornote">{% for e in form.non_field_errors %}{{ e }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</p>{% endif %}
+<fieldset class="module aligned">
 {% for field in form.visible_fields %}
-  <div class="{% if field.field.widget.input_type == 'checkbox' %}col-12 form-check ms-2{% elif field.field.widget.attrs.rows %}col-12{% else %}col-md-6{% endif %}">
-    {% if field.field.widget.input_type == 'checkbox' %}{{ field }} <label class="form-check-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
-    {% else %}<label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}{% if field.field.required %} <span class="text-danger">*</span>{% endif %}</label>{{ field }}{% endif %}
-    {% if field.help_text %}<div class="form-text">{{ field.help_text }}</div>{% endif %}
-    {% for e in field.errors %}<div class="text-danger small">{{ e }}</div>{% endfor %}
+  <div class="form-row field-{{ field.name }}{% if field.errors %} errors{% endif %}">
+    {% if field.errors %}<ul class="errorlist">{% for e in field.errors %}<li>{{ e }}</li>{% endfor %}</ul>{% endif %}
+    <div>
+      {% if field.field.widget.input_type == 'checkbox' %}
+      <div class="flex-container checkbox-row">{{ field }}<label class="vCheckboxLabel" for="{{ field.id_for_label }}">{{ field.label }}</label></div>
+      {% else %}
+      <div class="flex-container">
+        <label{% if field.field.required %} class="required"{% endif %} for="{{ field.id_for_label }}">{{ field.label }}:</label>
+        {{ field }}
+      </div>
+      {% endif %}
+      {% if field.help_text %}<div class="help">{{ field.help_text }}</div>{% endif %}
+    </div>
   </div>
 {% endfor %}
 {% for field in form.hidden_fields %}{{ field }}{% endfor %}
-</div>
+</fieldset>

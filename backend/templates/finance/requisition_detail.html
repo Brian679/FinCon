@@ -1,5 +1,5 @@
 {% extends "generic/detail.html" %}
-{% block header_buttons %}{% if can_submit %}<a class="btn btn-outline-primary" href="{% url 'finance:requisition_edit' object.pk %}">Edit draft</a>{% endif %}{% endblock %}
+{% block header_buttons %}{% if can_submit %}<li><a class="changelink" href="{% url "finance:requisition_edit" object.pk %}">Edit draft</a></li>{% endif %}{% endblock %}
 {% block below_details %}
 <div class="card shadow-sm mt-3"><div class="card-header">Items</div><table class="table table-sm mb-0"><thead><tr><th>Description</th><th class="text-end">Qty</th><th class="text-end">Unit cost</th><th class="text-end">Total</th></tr></thead>
 {% for i in object.items.all %}<tr><td>{{ i.description }}</td><td class="text-end">{{ i.quantity }}</td><td class="text-end">{{ i.unit_cost }}</td><td class="text-end">{{ i.total }}</td></tr>{% endfor %}

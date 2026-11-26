@@ -8,7 +8,7 @@
       <h1 class="display-6 fw-bold">{{ COUNCIL.NAME }}</h1>
       <p class="lead mb-1">{{ COUNCIL.CHARTER }}</p>
       <p class="mb-4"><em>{{ COUNCIL.VISION }}</em></p>
-      <a class="btn btn-light btn-lg me-2" href="{% url 'portal:register' %}">Create your free account</a>
+      <a class="btn btn-primary btn-lg me-2" href="{% url "portal:register" %}">Create your free account</a>
       <a class="btn btn-outline-light btn-lg" href="{% url 'portal:login' %}">Log in</a>
     </div>
     <div class="col-md-4 text-center"><img src="{% static 'img/logo.svg' %}" width="150" alt="Council logo"></div>
