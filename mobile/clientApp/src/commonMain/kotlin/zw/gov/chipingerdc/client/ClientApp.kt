@@ -64,29 +64,36 @@ fun ClientApp(sdk: CouncilSdk) {
         LaunchedEffect(user.username) { sdk.sync.startAuto(sdk.scope) }
         PlatformBackHandler(nav.canGoBack) { nav.pop() }
         val ctx = CCtx(sdk, nav, user, sync, pending)
-        when (val s = nav.current) {
-            CScreen.Home -> ClientHome(ctx)
-            CScreen.LinkAccount -> LinkAccountScreen(ctx)
-            is CScreen.Account -> AccountScreen(ctx, s.id)
-            is CScreen.Pay -> PayScreen(ctx, s.accountId, s.billId)
-            is CScreen.Payment -> PaymentScreen(ctx, s.reference)
-            CScreen.Receipts -> ReceiptsScreen(ctx)
-            is CScreen.Receipt -> ReceiptScreen(ctx, s.id)
-            CScreen.Licences -> LicencesScreen(ctx)
-            CScreen.ApplyLicence -> ApplyLicenceScreen(ctx)
-            CScreen.Problems -> ProblemsScreen(ctx)
-            CScreen.ReportProblem -> ReportProblemScreen(ctx)
-            CScreen.Feedback -> FeedbackScreen(ctx)
-            CScreen.NewFeedback -> NewFeedbackScreen(ctx)
-            CScreen.Stands -> StandsScreen(ctx)
-            CScreen.ApplyStand -> ApplyStandScreen(ctx)
-            CScreen.Notifications -> NotificationsScreen(ctx)
-            CScreen.Charter -> CharterScreen(ctx)
-            CScreen.SyncCentre -> SyncCentreScreen(ctx)
-            CScreen.MyStands -> MyStandsScreen(ctx)
-            CScreen.RegisterStand -> RegisterStandScreen(ctx)
-            CScreen.Plans -> PlansScreen(ctx)
-            CScreen.NewPlan -> NewPlanScreen(ctx)
-        }
+        ClientRouter(ctx)
+    }
+}
+
+
+/** Shows the screen on top of the back stack (also used to render screens for documentation). */
+@Composable
+fun ClientRouter(ctx: CCtx) {
+    when (val s = ctx.nav.current) {
+        CScreen.Home -> ClientHome(ctx)
+        CScreen.LinkAccount -> LinkAccountScreen(ctx)
+        is CScreen.Account -> AccountScreen(ctx, s.id)
+        is CScreen.Pay -> PayScreen(ctx, s.accountId, s.billId)
+        is CScreen.Payment -> PaymentScreen(ctx, s.reference)
+        CScreen.Receipts -> ReceiptsScreen(ctx)
+        is CScreen.Receipt -> ReceiptScreen(ctx, s.id)
+        CScreen.Licences -> LicencesScreen(ctx)
+        CScreen.ApplyLicence -> ApplyLicenceScreen(ctx)
+        CScreen.Problems -> ProblemsScreen(ctx)
+        CScreen.ReportProblem -> ReportProblemScreen(ctx)
+        CScreen.Feedback -> FeedbackScreen(ctx)
+        CScreen.NewFeedback -> NewFeedbackScreen(ctx)
+        CScreen.Stands -> StandsScreen(ctx)
+        CScreen.ApplyStand -> ApplyStandScreen(ctx)
+        CScreen.Notifications -> NotificationsScreen(ctx)
+        CScreen.Charter -> CharterScreen(ctx)
+        CScreen.SyncCentre -> SyncCentreScreen(ctx)
+        CScreen.MyStands -> MyStandsScreen(ctx)
+        CScreen.RegisterStand -> RegisterStandScreen(ctx)
+        CScreen.Plans -> PlansScreen(ctx)
+        CScreen.NewPlan -> NewPlanScreen(ctx)
     }
 }
