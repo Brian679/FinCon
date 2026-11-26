@@ -4,6 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
+from core.validators import validate_document
 from core.models import Department, SequenceCounter, SyncModel
 
 
@@ -600,7 +601,7 @@ class Policy(SyncModel):
     status = models.CharField(max_length=8, choices=Status.choices, default=Status.DRAFT)
     adopted_on = models.DateField(null=True, blank=True)
     review_date = models.DateField(null=True, blank=True)
-    document = models.FileField(upload_to="policies/", blank=True)
+    document = models.FileField(upload_to="policies/", blank=True, validators=[validate_document])
 
     class Meta:
         ordering = ["department", "title"]

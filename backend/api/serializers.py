@@ -16,7 +16,8 @@ class AppTokenSerializer(TokenObtainPairSerializer):
     """JWT login. The ``app`` field stops staff from logging into the client app
     and clients from logging into the council app."""
 
-    app = serializers.ChoiceField(choices=["council", "client"], required=False, write_only=True)
+    app = serializers.ChoiceField(choices=["council", "client"], write_only=True,
+                                  error_messages={"required": "Update the app: it must say whether it is the council or the client app."})
 
     def validate(self, attrs):
         app = attrs.pop("app", None)
@@ -425,6 +426,7 @@ class FundsRequestSerializer(SyncSerializer):
     where_now = serializers.SerializerMethodField()
     days_waiting = serializers.IntegerField(read_only=True)
     deciders = serializers.SerializerMethodField()
+    payee_differs = serializers.BooleanField(read_only=True)
     voucher_number = serializers.CharField(source="voucher.number", read_only=True, default="")
     voucher_status = serializers.CharField(source="voucher.get_status_display", read_only=True, default="")
     vote = serializers.CharField(source="budget_line.vote_code", read_only=True, default="")
@@ -435,7 +437,7 @@ class FundsRequestSerializer(SyncSerializer):
                                              "destination", "depart_date", "return_date", "travellers", "currency", "total", "needed_by",
                                              "requires_payment", "payee_name", "payment_method", "payment_details", "vote", "status", "submitted_at",
                                              "stage_since", "last_reminder_at", "decision_note", "voucher_number", "voucher_status", "completed_at",
-                                             "lines", "route", "history", "where_now", "days_waiting", "deciders"])
+                                             "lines", "route", "history", "where_now", "days_waiting", "deciders", "payee_differs"])
 
     def get_lines(self, obj):
         return [{"description": ln.description, "quantity": str(ln.quantity), "unit_cost": str(ln.unit_cost), "total": str(ln.total)}
@@ -474,3 +476,57 @@ class MemoSerializer(SyncSerializer):
     def get_replies(self, obj):
         return [{"author": _s(r.author), "department": r.author.get_department_display(), "body": r.body, "when": _s(r.created_at)}
                 for r in obj.replies.all() if not r.is_deleted]
+
+
+# ------------------------------------------- finance & admin registers for the apps
+from finance.models import BankAccount, CashUp, PurchaseOrder, Supplier  # noqa: E402
+from workflow.models import Correspondence  # noqa: E402
+
+
+class CashUpSerializer(SyncSerializer):
+    cashier_id = serializers.IntegerField(source="cashier.pk", read_only=True)
+    cashier_name = serializers.CharField(source="cashier.get_full_name", read_only=True)
+    verified_by_name = serializers.CharField(source="verified_by.get_full_name", read_only=True, default="")
+
+    class Meta:
+        model = CashUp
+        fields = _sync_fields(CashUp, ["cashier_id", "cashier_name", "date", "currency", "expected_cash", "declared_cash", "expected_other",
+                                       "variance", "status", "notes", "verified_by_name", "verified_at"])
+
+
+class SupplierSerializer(SyncSerializer):
+    class Meta:
+        model = Supplier
+        fields = _sync_fields(Supplier, ["code", "name", "category", "contact_person", "phone", "email", "status"])
+
+
+class PurchaseOrderSerializer(SyncSerializer):
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    requisition_number = serializers.CharField(source="requisition.number", read_only=True)
+    requisition_purpose = serializers.CharField(source="requisition.purpose", read_only=True)
+    department = serializers.CharField(source="requisition.department", read_only=True)
+
+    class Meta:
+        model = PurchaseOrder
+        fields = _sync_fields(PurchaseOrder, ["number", "requisition", "requisition_number", "requisition_purpose", "department", "supplier",
+                                              "supplier_name", "amount", "currency", "status", "expected_delivery", "delivered_at", "notes"])
+
+
+class BankAccountSerializer(SyncSerializer):
+    balance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = BankAccount
+        fields = _sync_fields(BankAccount, ["name", "bank", "account_number", "currency", "is_active", "balance"])
+
+    def get_balance(self, obj):
+        return str(obj.balance())
+
+
+class CorrespondenceSerializer(SyncSerializer):
+    assigned_to_name = serializers.CharField(source="assigned_to.get_full_name", read_only=True, default="")
+
+    class Meta:
+        model = Correspondence
+        fields = _sync_fields(Correspondence, ["reference", "sender", "sender_contact", "subject", "date_received", "department", "assigned_to",
+                                               "assigned_to_name", "status", "response_due", "responded_at", "response_summary", "file_reference"])

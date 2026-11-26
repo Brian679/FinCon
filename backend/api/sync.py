@@ -135,6 +135,16 @@ def staff_entities(user):
         "funds_requests": (wf.funds_scope(user, FundsRequest.objects.select_related("requested_by", "voucher").prefetch_related("lines")),
                            s.FundsRequestSerializer),
         "memos": (wf.memo_scope(user, Memo.objects.select_related("sender", "to_user").prefetch_related("replies__author")), s.MemoSerializer),
+        "cashups": ((s.CashUp.objects.select_related("cashier", "verified_by") if c("cashup.verify")
+                     else s.CashUp.objects.filter(cashier=user).select_related("cashier", "verified_by")), s.CashUpSerializer)
+        if c("cashup.submit", "cashup.verify") else None,
+        "suppliers": (s.Supplier.objects.all(), s.SupplierSerializer) if c("supplier.manage", "procurement.order", "voucher.prepare") else None,
+        "purchase_orders": (s.PurchaseOrder.objects.select_related("supplier", "requisition"), s.PurchaseOrderSerializer)
+        if c("procurement.order", "finance.view_all", "voucher.prepare") else None,
+        "bank_accounts": (s.BankAccount.objects.filter(is_active=True), s.BankAccountSerializer) if c("voucher.pay", "bank.manage", "finance.view_all") else None,
+        "correspondence": ((s.Correspondence.objects.select_related("assigned_to") if c("correspondence.manage") or user.sees_all_departments()
+                            else s.Correspondence.objects.filter(Q(department=user.department) | Q(assigned_to=user)).select_related("assigned_to")),
+                           s.CorrespondenceSerializer) if (c("correspondence.manage") or user.is_head) else None,
     }
 
 
@@ -595,7 +605,76 @@ def op_memo_reply(user, p):
     return "memos", s.MemoSerializer(memo).data
 
 
+# --------------------------------------------- vouchers, cash-ups, orders, correspondence
+def op_voucher_prepare(user, p):
+    data = {"category": p.get("category", "SUPPLIER"), "description": p["description"],
+            "amount": Decimal(str(p["amount"])), "currency": p.get("currency", "USD"), "method": p.get("method", "EFT"),
+            "invoice_number": p.get("invoice_number", ""), "department": p.get("department") or user.department}
+    if p.get("payee_name"):
+        data["payee_name"] = p["payee_name"]
+    if p.get("supplier"):
+        data["supplier"] = _get(s.Supplier, p["supplier"])
+    if p.get("budget_line"):
+        data["budget_line"] = _get(BudgetLine, p["budget_line"])
+    if p.get("purchase_order"):
+        data["purchase_order"] = _get(s.PurchaseOrder, p["purchase_order"])
+    if p.get("id"):
+        data["id"] = p["id"]
+    v = fin.prepare_voucher(user, **data)
+    return "vouchers", s.VoucherSerializer(v).data
+
+
+def op_voucher_pay(user, p):
+    v = fin.pay_voucher(user, _get(PaymentVoucher, p["voucher"]), bank_account=_get(s.BankAccount, p["bank_account"]),
+                        payment_reference=p.get("payment_reference", ""))
+    return "vouchers", s.VoucherSerializer(v).data
+
+
+def op_cashup_submit(user, p):
+    cu = fin.submit_cashup(user, currency=p.get("currency", "USD"), declared_cash=Decimal(str(p["declared_cash"])), notes=p.get("notes", ""))
+    return "cashups", s.CashUpSerializer(cu).data
+
+
+def op_cashup_verify(user, p):
+    cu = fin.verify_cashup(user, _get(s.CashUp, p["cashup"]), bool(p.get("ok")), p.get("notes", ""))
+    return "cashups", s.CashUpSerializer(cu).data
+
+
+def op_po_create(user, p):
+    po = fin.raise_purchase_order(user, _get(Requisition, p["requisition"]), _get(s.Supplier, p["supplier"]),
+                                  Decimal(str(p["amount"])) if p.get("amount") else None,
+                                  parse_date(p["expected_delivery"]) if p.get("expected_delivery") else None, p.get("notes", ""))
+    return "purchase_orders", s.PurchaseOrderSerializer(po).data
+
+
+def op_po_receive(user, p):
+    po = fin.receive_goods(user, _get(s.PurchaseOrder, p["po"]), p.get("notes", ""))
+    return "purchase_orders", s.PurchaseOrderSerializer(po).data
+
+
+def op_correspondence_create(user, p):
+    from accounts.models import User
+
+    c = wf.log_correspondence(user, sender=p["sender"], sender_contact=p.get("sender_contact", ""), subject=p["subject"],
+                              department=p["department"], assigned_to=User.objects.filter(pk=p.get("assigned_to") or 0).first(),
+                              file_reference=p.get("file_reference", ""), corr_id=p.get("id"))
+    return "correspondence", s.CorrespondenceSerializer(c).data
+
+
+def op_correspondence_update(user, p):
+    c = wf.update_correspondence(user, _get(s.Correspondence, p["id"]), status=p.get("status", ""), response_summary=p.get("response_summary", ""))
+    return "correspondence", s.CorrespondenceSerializer(c).data
+
+
 STAFF_OPS = {
+    "voucher.prepare": op_voucher_prepare,
+    "voucher.pay": op_voucher_pay,
+    "cashup.submit": op_cashup_submit,
+    "cashup.verify": op_cashup_verify,
+    "po.create": op_po_create,
+    "po.receive": op_po_receive,
+    "correspondence.create": op_correspondence_create,
+    "correspondence.update": op_correspondence_update,
     "funds.create": op_funds_create,
     "funds.action": op_funds_action,
     "memo.create": op_memo_create,

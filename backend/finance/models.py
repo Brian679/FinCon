@@ -241,11 +241,25 @@ class ClientAccount(SyncModel):
     def recalculate(self):
         """Recompute the balance and allocate payments to bills (oldest first)."""
         bills = list(self.bills.alive().exclude(status=Bill.Status.CANCELLED).order_by("due_date", "created_at"))
-        paid = q2(self.receipts.alive().filter(status__in=Receipt.COUNTABLE).aggregate(t=Sum("base_amount"))["t"])
-        remaining = paid
+        countable = self.receipts.alive().filter(status__in=Receipt.COUNTABLE)
+        paid = q2(countable.aggregate(t=Sum("base_amount"))["t"])
+        # 1) a payment made against a particular bill (e.g. the licence fee) goes to that bill first …
+        earmarked = {row["bill"]: q2(row["t"]) for row in countable.filter(bill__isnull=False).values("bill").annotate(t=Sum("base_amount"))}
+        allocation = {}
+        live = {b.pk for b in bills}
+        pool = paid - sum((v for k, v in earmarked.items() if k in live), ZERO)   # money on cancelled bills stays in the pool
         for bill in bills:
-            alloc = min(remaining, bill.amount)
-            remaining -= alloc
+            own = earmarked.get(bill.pk, ZERO)
+            allocation[bill.pk] = min(own, bill.amount)
+            pool += own - allocation[bill.pk]          # overpayment of a bill joins the general pool
+        # 2) … and everything else pays the oldest bills first.
+        for bill in bills:
+            gap = bill.amount - allocation[bill.pk]
+            take = min(max(pool, ZERO), gap)
+            allocation[bill.pk] += take
+            pool -= take
+        for bill in bills:
+            alloc = allocation[bill.pk]
             status = Bill.Status.PAID if alloc >= bill.amount else (Bill.Status.PART_PAID if alloc > 0 else Bill.Status.UNPAID)
             if bill.amount_paid != alloc or bill.status != status:
                 bill.amount_paid = alloc

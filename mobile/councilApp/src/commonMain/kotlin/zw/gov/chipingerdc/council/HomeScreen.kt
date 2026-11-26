@@ -63,6 +63,7 @@ fun HomeScreen(ctx: Ctx) {
     val newMemos = memos.count { it.sender != me.id && it.status == "SENT" }
     val sections = buildList {
         add("My work" to buildList {
+            if (me.can("reports.executive")) add(Tile("Executive overview", Screen.Executive))
             if (me.can("dept.overview", "dept.overview_all")) add(Tile("My department (overview)", Screen.Department()))
             add(Tile("Approvals", Screen.Approvals, approvals.size))
             add(Tile("Tasks", Screen.Tasks, myTasks.size, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
@@ -85,11 +86,18 @@ fun HomeScreen(ctx: Ctx) {
             if (me.can("claims.review")) add(Tile("Stand registrations", Screen.Claims))
             if (me.can("leases.view", "leases.manage")) add(Tile("Leases", Screen.Leases))
             if (me.can("licence.view")) add(Tile("Licences", Screen.Licences))
+            if (me.can("cashup.submit", "cashup.verify")) add(Tile("Cash-ups", Screen.CashUps))
+            if (me.can("voucher.prepare", "voucher.check", "voucher.approve", "voucher.authorise", "voucher.pay", "finance.view_all"))
+                add(Tile("Payment vouchers (expenditure)", Screen.Vouchers, add = if (me.can("voucher.prepare")) Screen.NewVoucher(null) else null))
             if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
+            if (me.can("finance.reports", "reports.executive")) add(Tile("Financial reports", Screen.FinanceReport))
         })
+        if (me.can("procurement.order", "finance.view_all")) add("Procurement" to listOf(Tile("Purchase orders", Screen.Orders)))
         if (mine("ADMIN") || (me.department == "EXEC" && me.can("meetings.view"))) add("Administration" to buildList {
             if (me.can("meetings.view")) { add(Tile("Council meetings", Screen.Meetings)); add(Tile("Resolutions", Screen.Resolutions)) }
             if (me.can("policies.view")) add(Tile("Policies & by-laws", Screen.Policies))
+            if (me.can("correspondence.manage")) add(Tile("Correspondence register", Screen.Correspondence, add = Screen.NewCorrespondence))
+            if (me.can("hr.view")) add(Tile("Staff directory", Screen.Staff))
         })
         if (me.can("assets.view")) add("Assets" to listOf(Tile(if (me.can("assets.manage") || seesAll) "Assets & infrastructure" else "My department's assets", Screen.Assets)))
         if (mine("SOCIAL")) add("Social services" to buildList {
@@ -109,6 +117,8 @@ fun HomeScreen(ctx: Ctx) {
             if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
             if (me.can("risks.view", "risks.manage")) add(Tile("Risk register", Screen.Risks))
         })
+        if (me.can("audit.view_trail")) add("Governance" to listOf(Tile("Audit trail", Screen.AuditTrail)))
+        if (me.isHead && !me.can("correspondence.manage")) add("Letters" to listOf(Tile("Correspondence for my department", Screen.Correspondence, add = Screen.NewCorrespondence)))
         add("This phone" to listOf(Tile("Sync centre", Screen.SyncCentre, ctx.pending.toInt()), Tile("Client Charter", Screen.Charter)))
     }.filter { it.second.isNotEmpty() }
 

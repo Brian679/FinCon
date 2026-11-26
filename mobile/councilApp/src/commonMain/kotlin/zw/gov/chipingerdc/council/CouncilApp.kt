@@ -13,6 +13,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import zw.gov.chipingerdc.shared.ui.ChangePasswordScreen
 import zw.gov.chipingerdc.shared.ui.CouncilTheme
 import zw.gov.chipingerdc.shared.ui.LocalProfile
+import zw.gov.chipingerdc.shared.ui.LocalSiteName
+import zw.gov.chipingerdc.shared.ui.CrdcColors
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import zw.gov.chipingerdc.shared.ui.Profile
 import zw.gov.chipingerdc.shared.ui.ProfileItem
 import zw.gov.chipingerdc.shared.ui.LoginScreen
@@ -90,11 +101,25 @@ sealed interface Screen {
     data class MemoDetail(val id: String) : Screen
     data object NewMemo : Screen
     data object ChangePassword : Screen
+    // finance & administration registers (same as the staff website)
+    data object Vouchers : Screen
+    data class NewVoucher(val poId: String?) : Screen
+    data object CashUps : Screen
+    data object Orders : Screen
+    data class OrderDetail(val id: String) : Screen
+    data object Correspondence : Screen
+    data class CorrespondenceDetail(val id: String) : Screen
+    data object NewCorrespondence : Screen
+    data object Staff : Screen
+    data object FinanceReport : Screen
+    data object Executive : Screen
+    data object AuditTrail : Screen
 }
 
 /** Everything a screen needs. */
-class Ctx(val sdk: CouncilSdk, val nav: Navigator<Screen>, val me: Me, val sync: SyncState, val pending: Long) {
-    fun go(s: Screen) = nav.push(s)
+class Ctx(val sdk: CouncilSdk, val nav: Navigator<Screen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false) {
+    /** From the desktop side menu a new register replaces what is open; elsewhere it opens on top (Back returns). */
+    fun go(s: Screen) = if (fromMenu) { nav.replaceAll(Screen.Home); nav.push(s) } else nav.push(s)
     fun back() = nav.pop()
     fun syncNow() { sdk.syncNow() }
 }
@@ -137,7 +162,26 @@ fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false) {
             ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
         ),
     )
-    CompositionLocalProvider(LocalProfile provides profile) { CouncilScreens(ctx) }
+    CompositionLocalProvider(LocalProfile provides profile) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth >= 900.dp) {
+                // Desktop / tablet: menu on the left, the open register on the right.
+                Row(Modifier.fillMaxSize()) {
+                    Box(Modifier.width(380.dp).fillMaxHeight()) {
+                        CompositionLocalProvider(LocalProfile provides null) {
+                            HomeScreen(Ctx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true))
+                        }
+                    }
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(CrdcColors.Border))
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        CompositionLocalProvider(LocalSiteName provides "") {
+                            if (ctx.nav.current == Screen.Home) ApprovalsScreen(ctx) else CouncilScreens(ctx)
+                        }
+                    }
+                }
+            } else CouncilScreens(ctx)
+        }
+    }
 }
 
 @Composable
@@ -211,5 +255,17 @@ private fun CouncilScreens(ctx: Ctx) {
         is Screen.MemoDetail -> MemoDetailScreen(ctx, s.id)
         Screen.NewMemo -> NewMemoScreen(ctx)
         Screen.ChangePassword -> ChangePasswordScreen(ctx.sdk, ctx::back)
+        Screen.Vouchers -> VouchersScreen(ctx)
+        is Screen.NewVoucher -> NewVoucherScreen(ctx, s.poId)
+        Screen.CashUps -> CashUpsScreen(ctx)
+        Screen.Orders -> OrdersScreen(ctx)
+        is Screen.OrderDetail -> OrderDetailScreen(ctx, s.id)
+        Screen.Correspondence -> CorrespondenceScreen(ctx)
+        is Screen.CorrespondenceDetail -> CorrespondenceDetailScreen(ctx, s.id)
+        Screen.NewCorrespondence -> NewCorrespondenceScreen(ctx)
+        Screen.Staff -> StaffScreen(ctx)
+        Screen.FinanceReport -> FinanceReportScreen(ctx)
+        Screen.Executive -> ExecutiveScreen(ctx)
+        Screen.AuditTrail -> AuditTrailScreen(ctx)
     }
 }

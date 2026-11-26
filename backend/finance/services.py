@@ -80,6 +80,9 @@ def issue_receipt(user, *, revenue_head, amount, payer_name="", account=None, bi
         account = account or bill.account
         if bill.account_id != account.pk:
             raise ValidationError("The bill does not belong to this account.")
+        if revenue_head is None or revenue_head.pk != bill.revenue_head_id:
+            # Income is always booked to the head of the bill being paid, so reports by revenue head stay correct.
+            revenue_head = bill.revenue_head
         if bill.status == Bill.Status.CANCELLED:
             raise ValidationError("This bill has been cancelled.")
     if account is not None and account.status == ClientAccount.Status.CLOSED:
@@ -173,6 +176,8 @@ def decide_void(user, receipt, approve: bool, comment=""):
     _record(receipt, "Void approval", "APPROVED" if approve else "REJECTED", user, comment)
     if receipt.account:
         receipt.account.recalculate()
+        if approve:
+            _withdraw_unpaid_licences(receipt.account, user, receipt)
     notify([receipt.void_requested_by], f"Void {'approved' if approve else 'rejected'}: {receipt.number}", comment)
     return receipt
 
@@ -555,6 +560,8 @@ def _funds_follow(voucher, user):
 @transaction.atomic
 def pay_voucher(user, voucher, *, bank_account, payment_reference):
     _require(user, "voucher.pay")
+    if voucher.funds_requests.filter(requested_by=user).exists():
+        raise PermissionDenied("Segregation of duties: you cannot release a payment for your own request.")
     if not voucher.is_ready_for_payment:
         raise ValidationError("This voucher has not been fully approved.")
     if not payment_reference:
@@ -961,3 +968,19 @@ def area_overview(year=None):
     total = {k: sum((r[k] for r in out), ZERO_D if k in ("owed", "collected") else 0) for k in keys}
     total["pct"] = round(total["paid"] * 100 / total["shops"]) if total["shops"] else 0
     return out, total
+
+
+
+def _withdraw_unpaid_licences(account, user, receipt):
+    """A licence issued because its fee was paid goes back to "approved – awaiting payment"
+    if the payment is voided, so a voided receipt can never leave a valid licence behind."""
+    for lic in account.licences.alive().filter(status=Licence.Status.ISSUED, bill__isnull=False).select_related("bill"):
+        lic.bill.refresh_from_db()
+        if lic.bill.status != Bill.Status.PAID:
+            lic.status = Licence.Status.APPROVED
+            lic.issue_date = None
+            lic.expiry_date = None
+            lic.save()
+            audit.log(AuditLog.Action.VOID, lic, user=user, message=f"Licence withdrawn: fee receipt {receipt.number} was voided")
+            notify(client_people(account, lic.applicant) + users_with_cap("licence.approve", "FINANCE"),
+                   f"Licence {lic.number} suspended – fee not paid", f"Receipt {receipt.number} was cancelled. Pay the fee to restore the licence.")

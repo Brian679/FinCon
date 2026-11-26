@@ -28,6 +28,8 @@ class User(AbstractUser):
     national_id = models.CharField(max_length=30, blank=True)
     ward = models.PositiveSmallIntegerField(null=True, blank=True)
     must_change_password = models.BooleanField(default=False)
+    tokens_valid_after = models.DateTimeField(null=True, blank=True, editable=False,
+                                              help_text="App logins issued before this time no longer work (password changed, user deactivated …)")
     failed_login_attempts = models.PositiveSmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
 
@@ -136,3 +138,21 @@ def safe_reverse(name, *args):
         return reverse(name, args=args)
     except NoReverseMatch:
         return "#"
+
+
+
+from django.db.models.signals import pre_save  # noqa: E402
+from django.dispatch import receiver  # noqa: E402
+
+
+@receiver(pre_save, sender=User)
+def _sign_out_devices(sender, instance, **kwargs):
+    """A new password, a deactivated account or a new role ends every app session (lost / stolen phone)."""
+    if not instance.pk:
+        return
+    old = sender.objects.filter(pk=instance.pk).values("password", "is_active", "role").first()
+    if old and (old["password"] != instance.password or (old["is_active"] and not instance.is_active) or old["role"] != instance.role):
+        now = timezone.now()
+        instance.tokens_valid_after = now
+        # also written directly, because callers often save with update_fields=["password", …]
+        sender.objects.filter(pk=instance.pk).update(tokens_valid_after=now)

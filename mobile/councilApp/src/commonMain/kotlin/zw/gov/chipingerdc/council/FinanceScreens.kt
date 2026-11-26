@@ -368,6 +368,7 @@ fun RequisitionDetailScreen(ctx: Ctx, id: String) {
                     }
                 }
             }
+            IssueOrderPanel(ctx, req)
         }
     }
 }
@@ -401,6 +402,7 @@ fun VoucherDetailScreen(ctx: Ctx, id: String) {
                     }
                 }
             }
+            VoucherPayPanel(ctx, pv)
         }
     }
 }

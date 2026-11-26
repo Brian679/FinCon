@@ -6,6 +6,7 @@ from django.db import models
 from django.utils import timezone
 
 from core.models import Department, SequenceCounter, SyncModel
+from core.validators import validate_document
 
 
 class Priority(models.TextChoices):
@@ -317,7 +318,8 @@ class FundsRequest(SyncModel):
     payment_method = models.CharField(max_length=6, choices=PaymentMethod.choices, default=PaymentMethod.EFT)
     payment_details = models.CharField("Bank / mobile money details", max_length=255, blank=True)
     budget_line = models.ForeignKey("finance.BudgetLine", null=True, blank=True, on_delete=models.PROTECT, related_name="funds_requests")
-    attachment = models.FileField("Supporting document (quotation, invitation …)", upload_to="requests/", blank=True)
+    attachment = models.FileField("Supporting document (quotation, invitation …)", upload_to="requests/", blank=True,
+                                  validators=[validate_document], help_text="PDF, Word, Excel or a photo (JPG / PNG), up to 5 MB")
     # tracking
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT, db_index=True)
     submitted_at = models.DateTimeField(null=True, blank=True)
@@ -349,6 +351,12 @@ class FundsRequest(SyncModel):
     @property
     def is_open(self):
         return self.status in self.OPEN
+
+    @property
+    def payee_differs(self):
+        """True when the money would go to someone other than the requester (approvers are warned)."""
+        name = (self.payee_name or "").strip().lower()
+        return bool(name) and name != (self.requested_by.get_full_name() or self.requested_by.username).strip().lower()
 
     @property
     def days_waiting(self):

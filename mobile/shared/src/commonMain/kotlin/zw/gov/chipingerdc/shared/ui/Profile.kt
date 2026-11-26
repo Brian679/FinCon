@@ -58,7 +58,7 @@ fun ProfileButton(p: Profile) {
     var open by remember { mutableStateOf(p.startOpen) }
     Box {
         Row(Modifier.clickable { open = true }.padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp, 40.dp)) {
+            Box(Modifier.size(54.dp, 40.dp)) {
                 Box(Modifier.align(Alignment.BottomStart)) { Avatar(p.name) }
                 if (p.badge > 0) Text(p.badge.toString(), color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.align(Alignment.TopEnd).clip(CircleShape).background(CrdcColors.Danger).padding(horizontal = 5.dp, vertical = 1.dp))

@@ -111,6 +111,8 @@ class ApiClient(private val session: Session, private val app: AppKind) {
                 put("old_password", kotlinx.serialization.json.JsonPrimitive(old)); put("new_password", kotlinx.serialization.json.JsonPrimitive(new)) }) }
         }
         if (!resp.status.isSuccess()) throw ApiException(errorMessage(resp), resp.status.value)
+        // The server signs out every other device and gives this one fresh tokens.
+        runCatching { resp.body<RefreshResponse>() }.getOrNull()?.let { session.updateTokens(it.access, it.refresh) }
     }
 
     suspend fun me(): Me = authed { t -> http.get(url("me/")) { common(); bearer(t) } }.body()

@@ -299,6 +299,29 @@ def run_action(request, func, *args, success="Done.", **kwargs):
     return None
 
 
+class SafeCsvWriter:
+    """csv.writer that neutralises cells a spreadsheet would run as a formula
+    (a shop called "=HYPERLINK(...)" must not execute when the export is opened in Excel)."""
+
+    def __init__(self, f):
+        import csv
+
+        self.w = csv.writer(f)
+
+    @staticmethod
+    def clean(v):
+        if isinstance(v, str) and v[:1] in ("=", "+", "-", "@", "\t", "\r"):
+            return "'" + v
+        return v
+
+    def writerow(self, row):
+        return self.w.writerow([self.clean(v) for v in row])
+
+    def writerows(self, rows):
+        for r in rows:
+            self.writerow(r)
+
+
 def log_export(request, what):
     audit.log(AuditLog.Action.EXPORT, message=f"Exported {what}", request=request)
 

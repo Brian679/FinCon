@@ -1,3 +1,4 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -10,6 +11,9 @@ plugins {
 
 kotlin {
     androidTarget {
+        compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
+    }
+    jvm("desktop") {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
     listOf(iosX64(), iosArm64(), iosSimulatorArm64()).forEach {
@@ -26,6 +30,12 @@ kotlin {
         }
         commonMain.dependencies {
             implementation(project(":shared"))
+        }
+        val desktopMain by getting {
+            dependencies {
+                implementation(compose.desktop.currentOs)
+                implementation(libs.kotlinx.coroutines.swing)
+            }
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
@@ -56,4 +66,19 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     packaging { resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" } }
+}
+
+// Desktop application: ./gradlew :councilApp:run   ·   installers: ./gradlew :councilApp:packageDistributionForCurrentOS
+compose.desktop {
+    application {
+        mainClass = "zw.gov.chipingerdc.council.MainKt"
+        nativeDistributions {
+            targetFormats(TargetFormat.Msi, TargetFormat.Exe, TargetFormat.Dmg, TargetFormat.Deb)
+            packageName = "ChipingeRDC-Council"
+            packageVersion = "1.0.0"
+            description = "Chipinge RDC – Council"
+            vendor = "Chipinge Rural District Council"
+            windows { menuGroup = "Chipinge RDC"; shortcut = true; perUserInstall = true }
+        }
+    }
 }

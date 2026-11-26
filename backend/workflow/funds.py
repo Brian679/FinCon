@@ -305,6 +305,8 @@ def prepare_payment(user, req, *, method=None, budget_line=None):
     from finance.models import PaymentVoucher
 
     fin._require(user, "voucher.prepare")
+    if req.requested_by_id == user.pk:
+        raise PermissionDenied("Segregation of duties: someone else in Finance must prepare the payment of your own request.")
     if req.status != S.PENDING_PAYMENT:
         raise ValidationError("The request is not waiting for payment.")
     category = PaymentVoucher.Category.ALLOWANCES if req.request_type in ("TRAVEL", "ADVANCE") else PaymentVoucher.Category.OTHER

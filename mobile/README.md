@@ -46,6 +46,18 @@ cd mobile/iosCouncilApp && xcodegen && open iosCouncilApp.xcodeproj   # or iosCl
 ```
 The Xcode project's pre-build step compiles the Kotlin framework (`embedAndSignAppleFrameworkForXcode`).
 
+Desktop (Windows, macOS, Linux) – the **same app and screens** as on the phone, with the menu on the left and the
+open register on the right when the window is wide:
+```bash
+cd mobile
+./gradlew :councilApp:run                                   # council staff app on this computer
+./gradlew :councilApp:packageDistributionForCurrentOS       # installer: .msi/.exe (Windows), .dmg (macOS), .deb (Linux)
+./gradlew :clientApp:run                                    # ratepayer / shop-owner app
+```
+Server address: `CRDC_SERVER_URL=https://staff.chipingerdc.gov.zw` (or `-Dcrdc.server=...`), or *Server settings* on
+the login screen. The offline database is a file in the user's profile (`~/.chipinge-rdc/`), so work saved offline
+survives closing the app and restarting the computer. Esc goes back one screen.
+
 ## Offline behaviour in short
 * Everything you can see is in the phone's database – it works with no signal.
 * Changes are queued (outbox) and shown immediately with a "pending sync" note.
@@ -54,6 +66,8 @@ The Xcode project's pre-build step compiles the Kotlin framework (`embedAndSignA
 * If the server rejects something (e.g. you no longer have permission, a budget is exhausted), the Sync centre
   shows the reason.
 * Logging in as a different user on the same phone wipes the previous user's offline data.
+* Changing your password (in the app or on the website), being deactivated, or a change of role signs you out of
+  every other phone and computer – useful when a phone is lost or stolen.
 
 ## Verification done
 The shared module and all screens of both apps were compiled for the JVM target, and the real sync engine was

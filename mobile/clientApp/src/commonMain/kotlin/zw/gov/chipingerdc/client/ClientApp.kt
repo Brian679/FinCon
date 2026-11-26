@@ -15,6 +15,17 @@ import androidx.compose.runtime.CompositionLocalProvider
 import zw.gov.chipingerdc.shared.ui.ChangePasswordScreen
 import zw.gov.chipingerdc.shared.ui.CouncilTheme
 import zw.gov.chipingerdc.shared.ui.LocalProfile
+import zw.gov.chipingerdc.shared.ui.LocalSiteName
+import zw.gov.chipingerdc.shared.ui.CrdcColors
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import zw.gov.chipingerdc.shared.ui.Profile
 import zw.gov.chipingerdc.shared.ui.ProfileItem
 import zw.gov.chipingerdc.shared.ui.LoginScreen
@@ -46,8 +57,8 @@ sealed interface CScreen {
     data object ChangePassword : CScreen
 }
 
-class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long) {
-    fun go(s: CScreen) = nav.push(s)
+class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false) {
+    fun go(s: CScreen) = if (fromMenu) { nav.replaceAll(CScreen.Home); nav.push(s) } else nav.push(s)
     fun back() = nav.pop()
     fun syncNow() { sdk.syncNow() }
 }
@@ -92,7 +103,23 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false) {
             ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
         ),
     )
-    CompositionLocalProvider(LocalProfile provides profile) { ClientScreens(ctx) }
+    CompositionLocalProvider(LocalProfile provides profile) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            if (maxWidth >= 900.dp) {
+                Row(Modifier.fillMaxSize()) {
+                    Box(Modifier.width(380.dp).fillMaxHeight()) {
+                        CompositionLocalProvider(LocalProfile provides null) { ClientHome(CCtx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true)) }
+                    }
+                    Box(Modifier.width(1.dp).fillMaxHeight().background(CrdcColors.Border))
+                    Box(Modifier.weight(1f).fillMaxHeight()) {
+                        CompositionLocalProvider(LocalSiteName provides "") {
+                            if (ctx.nav.current == CScreen.Home) MyStandsScreen(ctx) else ClientScreens(ctx)
+                        }
+                    }
+                }
+            } else ClientScreens(ctx)
+        }
+    }
 }
 
 @Composable

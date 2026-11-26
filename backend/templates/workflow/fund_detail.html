@@ -1,6 +1,7 @@
 {% extends "generic/detail.html" %}
 {% block header_buttons %}{% if can_edit %}<li><a class="changelink" href="{% url 'workflow:fund_edit' object.pk %}">Edit</a></li>{% endif %}{% endblock %}
 {% block detail_body %}
+{% if object.payee_differs %}<p class="errornote">&#9888; Payment goes to <strong>{{ object.payee_name }}</strong>, not to the requester. Check the supporting documents before approving.</p>{% endif %}
 <div class="module"><h2>Where is this request now?</h2>
 <p class="fw-bold mb-2">{% if object.is_open %}Currently with: {{ where }}{% if object.days_waiting %} – waiting {{ object.days_waiting }} day{{ object.days_waiting|pluralize }}{% endif %}{% else %}{{ object.get_status_display }}{% endif %}</p>
 <table class="w-100 route"><thead><tr><th>Stage</th><th>Officer</th><th>Status</th><th>Date</th><th>Note</th></tr></thead>

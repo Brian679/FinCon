@@ -185,3 +185,44 @@ def act_on_request(user, sr, action, *, note="", assignee=None):
     sr.save()
     audit.log(AuditLog.Action.UPDATE, sr, user=user, message=f"Service request {action}: {note}".strip())
     return sr
+
+
+
+# ------------------------------------------------------------ correspondence
+def _can_correspond(user, department=None):
+    return user.has_cap("correspondence.manage") or (user.is_head and (department is None or department == user.department))
+
+
+@transaction.atomic
+def log_correspondence(user, *, sender, subject, department, sender_contact="", assigned_to=None, file_reference="", corr_id=None):
+    from .models import Correspondence
+
+    if not _can_correspond(user, department):
+        raise PermissionDenied("Only the registry or the head of the department can record correspondence.")
+    extra = {"id": corr_id} if corr_id else {}
+    c = Correspondence.objects.create(sender=sender, sender_contact=sender_contact, subject=subject, department=department, assigned_to=assigned_to,
+                                      file_reference=file_reference, status=Correspondence.Status.ASSIGNED if assigned_to else Correspondence.Status.RECEIVED,
+                                      created_by=user, **extra)
+    targets = [assigned_to] if assigned_to else [u for u in User.objects.filter(department=department, is_active=True) if u.is_head]
+    notify(targets, f"Letter {c.reference} from {sender}: {subject}", f"Reply due {timezone.localtime(c.response_due):%d %b %Y}" if c.response_due else "",
+           "/staff/correspondence/")
+    return c
+
+
+@transaction.atomic
+def update_correspondence(user, c, *, status="", response_summary=""):
+    from .models import Correspondence
+
+    if not (_can_correspond(user, c.department) or c.assigned_to_id == user.pk):
+        raise PermissionDenied("This letter is not assigned to you.")
+    if status:
+        if status not in Correspondence.Status.values:
+            raise ValidationError("Unknown status.")
+        c.status = status
+        if status == Correspondence.Status.RESPONDED and not c.responded_at:
+            c.responded_at = timezone.now()
+    if response_summary:
+        c.response_summary = response_summary
+    c.save()
+    audit.log(AuditLog.Action.UPDATE, c, user=user, message=f"Correspondence {c.reference}: {c.get_status_display()}")
+    return c

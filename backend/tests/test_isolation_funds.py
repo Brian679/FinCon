@@ -417,3 +417,205 @@ class AreaBoardLinkTests(CouncilTestCase):
         page = c.get(f"/staff/finance/areas/{area.pk}/")
         self.assertContains(page, "Record payment")
         self.assertContains(page, "/staff/finance/receipts/new/?account=")
+
+
+class AppParityTests(CouncilTestCase):
+    """Everything a finance / admin officer does on the website can be done from the council app."""
+
+    def api(self, username):
+        c = APIClient()
+        tok = c.post("/api/v1/auth/login/", {"username": username, "password": PW, "app": "council"}, format="json").data["access"]
+        c.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        return c
+
+    def push(self, c, op_type, payload):
+        import uuid
+
+        return c.post("/api/v1/sync/push/", {"operations": [{"op_id": str(uuid.uuid4()), "type": op_type, "payload": payload}]},
+                      format="json").data["results"][0]
+
+    def test_cashup_from_phone(self):
+        cashier = self.api("cashier")
+        acc = self.acc
+        self.assertEqual(self.push(cashier, "receipt.create", {"account": str(acc.pk), "revenue_head": str(self.rates.pk), "amount": "10"})["status"], "applied")
+        r = self.push(cashier, "cashup.submit", {"currency": "USD", "declared_cash": "10"})
+        self.assertEqual(r["status"], "applied", r)
+        self.assertEqual(Decimal(r["record"]["variance"]), Decimal("0"))
+        r2 = self.push(self.api("accountant"), "cashup.verify", {"cashup": r["record"]["id"], "ok": True})
+        self.assertEqual(r2["record"]["status"], "VERIFIED")
+
+    def test_voucher_prepare_check_approve_pay_from_phones(self):
+        from finance.models import Supplier
+
+        self.fund_bank()
+        sup = Supplier.objects.filter(status="ACTIVE").first()
+        r = self.push(self.api("exp.clerk"), "voucher.prepare", {"supplier": str(sup.pk), "description": "Stationery", "amount": "120",
+                                                                  "department": "ADMIN", "category": "SUPPLIER"})
+        self.assertEqual(r["status"], "applied", r)
+        vid = r["record"]["id"]
+        self.push(self.api("accountant"), "voucher.decide", {"voucher": vid, "approve": True})
+        self.push(self.api("treasurer"), "voucher.decide", {"voucher": vid, "approve": True})
+        r = self.push(self.api("exp.clerk"), "voucher.pay", {"voucher": vid, "bank_account": str(self.usd_bank.pk), "payment_reference": "RTGS-77"})
+        self.assertEqual(r["record"]["status"], "PAID", r)
+
+    def test_purchase_order_from_phone(self):
+        from finance.models import Requisition, RequisitionItem, Supplier
+
+        officer = self.user("tech.officer")
+        req = Requisition.objects.create(requested_by=officer, department="TECH", purpose="Cement", created_by=officer)
+        RequisitionItem.objects.create(requisition=req, description="Cement bags", quantity=10, unit_cost=Decimal("12"))
+        fin.submit_requisition(officer, req)
+        for name in ("engineer", "accountant", "treasurer"):
+            fin.decide_requisition(self.user(name), req, True)
+        sup = Supplier.objects.filter(status="ACTIVE").first()
+        r = self.push(self.api("procurement"), "po.create", {"requisition": str(req.pk), "supplier": str(sup.pk)})
+        self.assertEqual(r["status"], "applied", r)
+        r = self.push(self.api("procurement"), "po.receive", {"po": r["record"]["id"], "notes": "All bags delivered"})
+        self.assertEqual(r["record"]["status"], "DELIVERED")
+
+    def test_correspondence_from_phone(self):
+        reg = self.api("registry")
+        r = self.push(reg, "correspondence.create", {"sender": "Ministry of Local Government", "subject": "Budget circular",
+                                                     "department": "FINANCE"})
+        self.assertEqual(r["status"], "applied", r)
+        r = self.push(self.api("treasurer"), "correspondence.update", {"id": r["record"]["id"], "status": "RESPONDED",
+                                                                       "response_summary": "Acknowledged"})
+        self.assertEqual(r["record"]["status"], "RESPONDED")
+        self.assertEqual(self.push(self.api("tech.officer"), "correspondence.create", {"sender": "x", "subject": "y", "department": "FINANCE"})["status"],
+                         "rejected")
+
+    def test_reports_and_audit_trail_endpoints(self):
+        self.assertEqual(self.api("treasurer").get("/api/v1/reports/finance/").status_code, 200)
+        self.assertEqual(self.api("cashier").get("/api/v1/reports/finance/").status_code, 403)
+        data = self.api("ceo").get("/api/v1/reports/executive/").data
+        self.assertEqual(len(data["departments"]), 6)
+        self.assertEqual(self.api("engineer").get("/api/v1/reports/executive/").status_code, 403)
+        self.assertEqual(self.api("chief.auditor").get("/api/v1/audit/").status_code, 200)
+        self.assertEqual(self.api("tech.officer").get("/api/v1/audit/").status_code, 403)
+
+
+class LoopholeTests(CouncilTestCase):
+    def login_api(self, username, password=PW, app="council"):
+        c = APIClient()
+        r = c.post("/api/v1/auth/login/", {"username": username, "password": password, "app": app}, format="json")
+        return c, r
+
+    def test_login_must_name_the_app(self):
+        r = APIClient().post("/api/v1/auth/login/", {"username": "cashier", "password": PW}, format="json")
+        self.assertEqual(r.status_code, 400)
+
+    def test_password_change_signs_out_other_devices(self):
+        phone1, r1 = self.login_api("eho")
+        phone2, r2 = self.login_api("eho")
+        phone1.credentials(HTTP_AUTHORIZATION=f"Bearer {r1.data['access']}")
+        phone2.credentials(HTTP_AUTHORIZATION=f"Bearer {r2.data['access']}")
+        import time
+        time.sleep(1.1)
+        r = phone1.post("/api/v1/auth/password/", {"old_password": PW, "new_password": "Borehole#2027"}, format="json")
+        self.assertEqual(r.status_code, 200)
+        phone1.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
+        self.assertEqual(phone1.get("/api/v1/me/").status_code, 200)       # this phone keeps working
+        self.assertEqual(phone2.get("/api/v1/me/").status_code, 401)       # the other phone is signed out
+        self.assertEqual(APIClient().post("/api/v1/auth/refresh/", {"refresh": r2.data["refresh"]}, format="json").status_code, 401)
+
+    def test_deactivated_user_is_locked_out_of_the_app(self):
+        phone, r = self.login_api("cashier")
+        phone.credentials(HTTP_AUTHORIZATION=f"Bearer {r.data['access']}")
+        u = self.user("cashier")
+        u.is_active = False
+        u.save()
+        self.assertEqual(phone.get("/api/v1/me/").status_code, 401)
+
+    def test_receipt_is_booked_to_the_bills_revenue_head(self):
+        from finance.models import Bill, RevenueHead
+
+        bill = Bill.objects.alive().filter(account=self.acc, status="UNPAID").first()
+        wrong = RevenueHead.objects.exclude(pk=bill.revenue_head_id).first()
+        r = fin.issue_receipt(self.user("cashier"), revenue_head=wrong, amount=Decimal("1"), account=self.acc, bill=bill)
+        self.assertEqual(r.revenue_head_id, bill.revenue_head_id)
+
+    def test_voiding_the_fee_receipt_suspends_the_licence(self):
+        from finance.models import Licence
+
+        lic = fin.apply_licence(self.user("cashier"), account=self.other_acc, licence_type="SHOP", business_name="Grace Tuckshop", premises="Stand 9")
+        if lic.status == Licence.Status.INSPECTION:
+            lic = fin.inspect_licence(self.user("eho"), lic, True, "Clean")
+        lic = fin.decide_licence(self.user("treasurer"), lic, True, fee=Decimal("60"))
+        r = fin.issue_receipt(self.user("cashier"), revenue_head=lic.bill.revenue_head, amount=lic.bill.outstanding, account=lic.account, bill=lic.bill)
+        lic.refresh_from_db()
+        self.assertEqual(lic.status, Licence.Status.ISSUED)
+        fin.request_void(self.user("cashier"), r, "Wrong account")
+        fin.decide_void(self.user("accountant"), r, True)
+        lic.refresh_from_db()
+        self.assertEqual(lic.status, Licence.Status.APPROVED)
+
+    def test_finance_cannot_pay_their_own_request(self):
+        from workflow.models import FundsRequest, FundsRequestLine
+
+        clerk = self.user("exp.clerk")
+        req = FundsRequest.objects.create(requested_by=clerk, created_by=clerk, request_type="ADVANCE", title="Float", purpose="Petty cash float")
+        FundsRequestLine.objects.create(request=req, description="Float", quantity=1, unit_cost=Decimal("50"))
+        fr.submit(clerk, req)
+        for name in ("treasurer", "admin.officer", "ceo"):
+            if req.status in FundsRequest.PENDING:
+                fr.decide(self.user(name), req, "approve")
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_PAYMENT)
+        with self.assertRaises(PermissionDenied):
+            fr.prepare_payment(clerk, req)
+        v = fr.prepare_payment(self.user("accountant"), req)
+        self.assertEqual(v.funds_requests.first().pk, req.pk)
+
+    def test_payee_other_than_requester_is_flagged(self):
+        from workflow.models import FundsRequest
+
+        r = FundsRequest(requested_by=self.user("tech.officer"), payee_name="Zuva Petroleum")
+        self.assertTrue(r.payee_differs)
+        r.payee_name = "Prosper Mlambo"
+        self.assertFalse(r.payee_differs)
+
+    def test_csv_export_neutralises_formulas(self):
+        import io
+
+        from core.crud import SafeCsvWriter
+
+        buf = io.StringIO()
+        SafeCsvWriter(buf).writerow(['=HYPERLINK("http://x")', "Normal", 5])
+        self.assertIn("'=HYPERLINK", buf.getvalue())
+
+    def test_upload_must_be_a_real_document(self):
+        from django.core.exceptions import ValidationError
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from core.validators import validate_document
+
+        with self.assertRaises(ValidationError):
+            validate_document(SimpleUploadedFile("quote.exe", b"MZ..."))
+        with self.assertRaises(ValidationError):
+            validate_document(SimpleUploadedFile("quote.pdf", b"not a pdf"))
+        validate_document(SimpleUploadedFile("quote.pdf", b"%PDF-1.7 ..."))
+
+
+class AllocationTests(CouncilTestCase):
+    def test_payment_for_a_bill_pays_that_bill_first(self):
+        from finance.models import Bill, RevenueHead
+
+        old = Bill.objects.alive().filter(account=self.other_acc, status="UNPAID").first()
+        fee = fin.create_bill(self.user("treasurer"), account=self.other_acc, revenue_head=RevenueHead.objects.get(code="LIC-SHOP"), amount=Decimal("60"))
+        fin.issue_receipt(self.user("cashier"), revenue_head=fee.revenue_head, amount=Decimal("60"), account=self.other_acc, bill=fee)
+        fee.refresh_from_db()
+        self.assertEqual(fee.status, Bill.Status.PAID)
+        if old:
+            old.refresh_from_db()
+            self.assertEqual(old.status, Bill.Status.UNPAID)
+
+    def test_money_on_a_cancelled_bill_is_not_lost(self):
+        from finance.models import RevenueHead
+
+        bill = fin.create_bill(self.user("treasurer"), account=self.other_acc, revenue_head=RevenueHead.objects.get(code="MARKET"), amount=Decimal("10"))
+        fin.issue_receipt(self.user("cashier"), revenue_head=bill.revenue_head, amount=Decimal("10"), account=self.other_acc, bill=bill)
+        self.other_acc.refresh_from_db()
+        before = self.other_acc.balance
+        bill.status = "CANCELLED"
+        bill.save()
+        self.other_acc.recalculate()
+        self.assertEqual(self.other_acc.balance, before - Decimal("10"))

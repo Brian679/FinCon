@@ -170,6 +170,7 @@ fun FundsDetailScreen(ctx: Ctx, id: String) {
                 if (r.isOpen) Message("Currently with: ${r.whereNow}" + if (r.daysWaiting > 0) " – waiting ${r.daysWaiting} day(s)" else "", MessageKind.WARNING)
                 if (r.decisionNote.isNotBlank()) Message(r.decisionNote, if (r.status == "RETURNED") MessageKind.WARNING else MessageKind.ERROR)
             }
+            if (r.payeeDiffers) Message("Payment goes to ${r.payeeName}, not to the requester. Check the supporting documents before approving.", MessageKind.ERROR)
             SectionCard("Where is it now?") { RouteTracker(r.route) }
             SectionCard("Details") {
                 KeyValue("Type", r.requestTypeLabel)

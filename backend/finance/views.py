@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.decorators import cap_required, staff_required
 from core.crud import (
-    GenericCreateView, GenericDetailView, GenericListView, GenericUpdateView, log_export, run_action,
+    SafeCsvWriter, GenericCreateView, GenericDetailView, GenericListView, GenericUpdateView, log_export, run_action,
 )
 from core.views import finance_kpis, pending_approvals
 
@@ -214,7 +214,7 @@ def account_statement_csv(request, pk):
     log_export(request, f"statement {account.account_number}")
     resp = HttpResponse(content_type="text/csv")
     resp["Content-Disposition"] = f'attachment; filename="statement-{account.account_number}.csv"'
-    w = csv.writer(resp)
+    w = SafeCsvWriter(resp)
     w.writerow(["Date", "Type", "Number", "Description", "Amount USD"])
     for b in account.bills.alive().exclude(status="CANCELLED"):
         w.writerow([b.issue_date, "BILL", b.number, b.description, b.amount])
@@ -762,7 +762,7 @@ def reports(request):
         log_export(request, f"receipts {start} to {end}")
         resp = HttpResponse(content_type="text/csv")
         resp["Content-Disposition"] = f'attachment; filename="receipts-{start}-{end}.csv"'
-        w = csv.writer(resp)
+        w = SafeCsvWriter(resp)
         w.writerow(["Number", "Date", "Payer", "Account", "Revenue head", "Currency", "Amount", "USD", "Method", "Reference", "Channel", "Cashier", "Status"])
         for r in receipts.select_related("account", "revenue_head", "received_by"):
             w.writerow([r.number, timezone.localtime(r.created_at).strftime("%Y-%m-%d %H:%M"), r.payer_name, r.account.account_number if r.account else "",
@@ -773,7 +773,7 @@ def reports(request):
         log_export(request, f"payments {start} to {end}")
         resp = HttpResponse(content_type="text/csv")
         resp["Content-Disposition"] = f'attachment; filename="payments-{start}-{end}.csv"'
-        w = csv.writer(resp)
+        w = SafeCsvWriter(resp)
         w.writerow(["PV", "Paid at", "Payee", "Category", "Vote", "Currency", "Amount", "USD", "Reference"])
         for v in vouchers.select_related("budget_line"):
             w.writerow([v.number, timezone.localtime(v.paid_at).strftime("%Y-%m-%d %H:%M"), v.payee_name, v.category,
@@ -802,7 +802,7 @@ def areas_overview(request):
         log_export(request, "areas overview")
         resp = HttpResponse(content_type="text/csv")
         resp["Content-Disposition"] = 'attachment; filename="areas-overview.csv"'
-        w = csv.writer(resp)
+        w = SafeCsvWriter(resp)
         w.writerow(["Area", "Type", "Ward", "Shops / stands", "Paid up", "Not paid up", "Owed (USD)", "No valid licence", "Not on app",
                     "Paid this year (USD)"])
         for r in rows:
@@ -894,7 +894,7 @@ def register_import(request):
 def register_template(request):
     resp = HttpResponse(content_type="text/csv")
     resp["Content-Disposition"] = 'attachment; filename="crdc-stand-register-template.csv"'
-    w = csv.writer(resp)
+    w = SafeCsvWriter(resp)
     w.writerow(services.IMPORT_COLUMNS)
     w.writerow(["Checheche Growth Point", 22, "B14", "Tafara Hardware (Pvt) Ltd", "BUS", "0772000001", "4455/2019", "", "COM",
                 "Tafara Hardware", "40", "35000", "no"])

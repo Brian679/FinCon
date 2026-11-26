@@ -6,9 +6,19 @@ An integrated, offline-capable system for **Chipinge Rural District Council**, b
 | Part | Technology | Who uses it |
 |------|-----------|-------------|
 | `backend/` – **two websites** (public client site + staff site) and the REST/sync API | Python 3.12+ · Django 5 · SQL (PostgreSQL in production, SQLite for development) | Residents, ratepayers, shop owners (client site); council staff (staff site) |
-| `mobile/councilApp` – **Council staff app** | Kotlin Multiplatform + Compose Multiplatform (Android & iOS) | Staff, role-based, works offline |
-| `mobile/clientApp` – **Community app** | Kotlin Multiplatform + Compose Multiplatform (Android & iOS) | Residents & businesses: pay rates, licences, report problems |
+| `mobile/councilApp` – **Council staff app** | Kotlin Multiplatform + Compose Multiplatform – **Android, iOS and desktop (Windows / macOS / Linux)** | Staff, role-based, works offline – the main working tool for every department |
+| `mobile/clientApp` – **Community app** | Same – Android, iOS and desktop | Residents & businesses: pay rates, licences, report problems |
 | `mobile/shared` | Kotlin: SQLDelight (on-phone SQL database), Ktor (API), sync engine, UI kit | Used by both apps |
+
+**Where each kind of work is done**
+
+* **Council staff app (phone, tablet or desktop computer)** – the everyday tool for every department: receipting,
+  cash-ups, payment vouchers, purchase orders, licences, areas overview and shop boards, requests for funds, memos,
+  approvals, departmental registers, reports, executive overview, audit trail. Works offline and syncs.
+* **Staff website** – the administration site: creating and managing staff accounts, roles and the restricted system
+  administration, bulk imports, billing runs and printing. Staff *can* also use it for their normal work (same
+  rules), e.g. on a shared office computer.
+* **Client app (phone or desktop) and client website** – for ratepayers and shop owners.
 
 The Finance department is the most complete part, as requested. Every other department in the charter
 has its core registers and workflows.
