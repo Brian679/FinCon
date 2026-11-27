@@ -294,3 +294,32 @@ class AuditTrailView(AuditActorMixin, APIView):
         return Response({"page": page, "items": [
             {"when": r.timestamp.isoformat(), "user": r.username or "system", "action": r.get_action_display(), "object": r.object_repr,
              "model": r.model, "message": r.message, "channel": r.channel} for r in rows]})
+
+
+class FineClaimView(AuditActorMixin, APIView):
+    """Client app: find my fine by its number + my ID or phone number; my account is then linked so I can pay it."""
+    throttle_classes = [AnonRateThrottle]
+
+    def post(self, request):
+        from social.services import claim_fine
+
+        if not request.user.is_client:
+            return Response({"detail": "For residents' accounts."}, status=403)
+        try:
+            fine = claim_fine(request.user, request.data.get("reference", ""), request.data.get("id_or_phone", ""))
+        except (ValidationError, PermissionDenied) as exc:
+            return Response({"detail": " ".join(getattr(exc, "messages", [str(exc)]))}, status=400)
+        return Response({"fine": s.FineSerializer(fine).data, "account": s.ClientAccountSerializer(fine.account).data})
+
+
+class DataReportView(AuditActorMixin, APIView):
+    """Data & information management (online): figures for every register and data-quality checks."""
+
+    def get(self, request):
+        from departments.data import overview
+
+        if not request.user.has_cap("data.view", "data.manage"):
+            return Response({"detail": "For the Data Officer, heads of department, CEO and auditors."}, status=403)
+        d = overview()
+        return Response({"registers": [{"department": dept, "rows": [{"label": l, "count": n} for l, n in items]} for dept, items in d["registers"]],
+                         "checks": [{"key": k, "title": t, "department": dept, "count": n} for k, t, dept, n in d["checks"]]})

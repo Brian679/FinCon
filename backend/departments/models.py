@@ -786,3 +786,152 @@ class RecordFile(SyncModel):
 
     def __str__(self):
         return f"{self.file_number} {self.title}"
+
+
+# ================================================== Administration – land & assets, community liaison
+class LandParcel(SyncModel):
+    """Council land bank: parcels, their use and status (Land & Asset Management Officer)."""
+
+    class Use(models.TextChoices):
+        RESIDENTIAL = "RES", "Residential"
+        COMMERCIAL = "COM", "Commercial"
+        INDUSTRIAL = "IND", "Industrial"
+        INSTITUTIONAL = "INST", "Institutional (school, clinic, church)"
+        AGRICULTURAL = "AGR", "Agricultural"
+        OPEN_SPACE = "OPEN", "Open space / recreation"
+        MIXED = "MIXED", "Mixed use"
+
+    class Status(models.TextChoices):
+        VACANT = "VACANT", "Vacant – available"
+        PLANNED = "PLANNED", "Planned / being surveyed"
+        ALLOCATED = "ALLOCATED", "Allocated / sold"
+        LEASED = "LEASED", "Leased"
+        RESERVED = "RESERVED", "Reserved for council use"
+        ENCROACHED = "ENCROACHED", "Encroached / disputed"
+
+    parcel_number = models.CharField(max_length=40, unique=True)
+    name = models.CharField(max_length=150, help_text="e.g. Checheche extension phase 2")
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=200)
+    hectares = models.DecimalField(max_digits=10, decimal_places=2)
+    land_use = models.CharField(max_length=6, choices=Use.choices, default=Use.RESIDENTIAL)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.VACANT, db_index=True)
+    survey_diagram = models.CharField(max_length=60, blank=True, help_text="Survey diagram / general plan number")
+    title_deed = models.CharField(max_length=60, blank=True)
+    valuation = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="USD")
+    stands_planned = models.PositiveIntegerField(default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["ward", "parcel_number"]
+
+    def __str__(self):
+        return f"{self.parcel_number} {self.name}"
+
+
+class Engagement(SyncModel):
+    """Stakeholder engagement: WADCO / VIDCO meetings, village assemblies, consultations, councillor and partner meetings."""
+
+    class Kind(models.TextChoices):
+        WARD = "WARD", "Ward development committee (WADCO)"
+        VILLAGE = "VILLAGE", "Village assembly / VIDCO"
+        BUDGET = "BUDGET", "Budget consultation"
+        TRADITIONAL = "TRAD", "Traditional leaders"
+        PARTNER = "PARTNER", "Development partner / NGO"
+        BUSINESS = "BUSINESS", "Business community"
+        MEDIA = "MEDIA", "Media / public relations"
+
+    class Status(models.TextChoices):
+        PLANNED = "PLANNED", "Planned"
+        HELD = "HELD", "Held – report written"
+        FOLLOW_UP = "FOLLOWUP", "Held – follow-up actions open"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    title = models.CharField(max_length=200)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.WARD)
+    date = models.DateField(default=timezone.localdate)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    venue = models.CharField(max_length=150)
+    attendance = models.PositiveIntegerField(default=0)
+    issues_raised = models.TextField(blank=True)
+    resolutions = models.TextField(blank=True, help_text="What was agreed and who will do it")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PLANNED, db_index=True)
+    officer = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("ENG", 4)
+        super().save(*args, **kwargs)
+
+
+class PublicNotice(SyncModel):
+    """Notices to residents – shown in the client app (water cuts, meetings, tenders, deadlines)."""
+
+    class Category(models.TextChoices):
+        GENERAL = "GENERAL", "General notice"
+        MEETING = "MEETING", "Public meeting / consultation"
+        WATER = "WATER", "Water / service interruption"
+        DEADLINE = "DEADLINE", "Payment / licence deadline"
+        TENDER = "TENDER", "Tender / vacancy"
+        HEALTH = "HEALTH", "Health alert"
+        EMERGENCY = "EMERGENCY", "Emergency / disaster"
+
+    title = models.CharField(max_length=150)
+    category = models.CharField(max_length=10, choices=Category.choices, default=Category.GENERAL)
+    body = models.TextField()
+    ward = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Blank = whole district")
+    publish_from = models.DateField(default=timezone.localdate)
+    expires_on = models.DateField(null=True, blank=True)
+    is_published = models.BooleanField(default=True)
+    posted_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-publish_from", "-created_at"]
+
+    def __str__(self):
+        return self.title
+
+
+# ================================================== Internal audit – annual audit plan
+class AuditEngagement(SyncModel):
+    class AuditType(models.TextChoices):
+        FINANCIAL = "FIN", "Financial audit"
+        COMPLIANCE = "COMP", "Compliance audit"
+        PERFORMANCE = "PERF", "Performance / value for money"
+        SYSTEMS = "SYS", "Systems / ICT review"
+        SPECIAL = "SPECIAL", "Special investigation"
+        STOCK = "STOCK", "Stores / asset verification"
+
+    class Status(models.TextChoices):
+        PLANNED = "PLANNED", "Planned"
+        FIELDWORK = "FIELDWORK", "Fieldwork"
+        REPORTING = "REPORTING", "Draft report"
+        DONE = "DONE", "Final report issued"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    title = models.CharField(max_length=200)
+    audit_type = models.CharField(max_length=10, choices=AuditType.choices, default=AuditType.COMPLIANCE)
+    department = models.CharField(max_length=10, choices=Department.choices)
+    quarter = models.CharField(max_length=7, help_text="e.g. 2026-Q4")
+    auditor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PLANNED, db_index=True)
+    scope = models.TextField(blank=True)
+    conclusion = models.TextField(blank=True, help_text="Overall opinion / key findings")
+
+    class Meta:
+        ordering = ["quarter", "department"]
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("AUD", 4)
+        super().save(*args, **kwargs)

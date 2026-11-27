@@ -55,6 +55,11 @@ sealed interface CScreen {
     data object Plans : CScreen
     data object NewPlan : CScreen
     data object ChangePassword : CScreen
+    data object Fines : CScreen
+    data object FindFine : CScreen
+    data object Permits : CScreen
+    data object ApplyPermit : CScreen
+    data object Notices : CScreen
 }
 
 class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false) {
@@ -148,5 +153,10 @@ private fun ClientScreens(ctx: CCtx) {
         CScreen.Plans -> PlansScreen(ctx)
         CScreen.NewPlan -> NewPlanScreen(ctx)
         CScreen.ChangePassword -> ChangePasswordScreen(ctx.sdk, ctx::back)
+        CScreen.Fines -> FinesScreen(ctx)
+        CScreen.FindFine -> FindFineScreen(ctx)
+        CScreen.Permits -> PermitsScreen(ctx)
+        CScreen.ApplyPermit -> ApplyPermitScreen(ctx)
+        CScreen.Notices -> NoticesScreen(ctx)
     }
 }

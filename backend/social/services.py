@@ -83,7 +83,7 @@ def campfire_by_ward(year=None):
 
 # ----------------------------------------------------------- natural resources
 @transaction.atomic
-def decide_permit(user, permit, action, note=""):
+def decide_permit(user, permit, action, note="", unit_fee=None):
     """approve → the fee is billed and the permit becomes ACTIVE by itself when paid; reject; suspend; reinstate."""
     _require(user, "permits.approve")
     if action in ("approve", "reject"):
@@ -92,6 +92,9 @@ def decide_permit(user, permit, action, note=""):
         if permit.applied_by_id == user.pk:
             raise PermissionDenied("Segregation of duties: someone else must decide a permit you captured.")
     if action == "approve":
+        if unit_fee not in (None, ""):
+            permit.unit_fee = Decimal(str(unit_fee))
+            permit.save()     # recalculates the fee
         permit.bill = Bill.objects.create(account=permit.holder, revenue_head=_head("NAT-RES"), amount=permit.fee, created_by=user,
                                           description=f"{permit.get_permit_type_display()} permit {permit.reference}: "
                                                       f"{permit.quantity_allowed:g} {permit.get_unit_display()} × ${permit.unit_fee}",
@@ -186,3 +189,45 @@ def settle_paid_items(account):
             p.save(update_fields=["status", "updated_at"])
             if paid:
                 notify(client_people(account), f"Permit {p.reference} is now active", f"Valid until {p.valid_to:%d %b %Y}.")
+
+
+# Default council fee per unit for applications made in the residents' app (the deciding officer may change it on approval).
+PERMIT_TARIFF = {"SAND": ("M3", "3"), "GRAVEL": ("M3", "4"), "CLAY": ("M3", "2"), "MINING": ("MONTH", "75"), "TIMBER": ("M3", "12"),
+                 "FIREWOOD": ("CORD", "5"), "THATCH": ("BUNDLE", "0.50"), "OTHER": ("LOAD", "10")}
+
+
+@transaction.atomic
+def client_apply_permit(user, *, holder, permit_type, location, quantity, ward=None, days=30, permit_id=None, purpose=""):
+    if permit_type not in PERMIT_TARIFF:
+        raise ValidationError("Choose the type of permit.")
+    unit, fee = PERMIT_TARIFF[permit_type]
+    quantity = Decimal(str(quantity))
+    if quantity <= 0:
+        raise ValidationError("Enter the quantity you want to extract.")
+    days = max(1, min(int(days), 365))
+    today = timezone.localdate()
+    kwargs = {"id": permit_id} if permit_id else {}
+    permit = ResourcePermit.objects.create(permit_type=permit_type, holder=holder, ward=ward, location=location, unit=unit, quantity_allowed=quantity,
+                                           unit_fee=Decimal(fee), valid_from=today, valid_to=today + timezone.timedelta(days=days),
+                                           conditions=purpose, applied_by=user, created_by=user, **kwargs)
+    notify(users_with_cap("permits.approve"), f"Permit application from the app: {permit.reference}",
+           f"{permit.get_permit_type_display()} – {holder.name}, {location} ({quantity:g} {permit.get_unit_display()})", f"/staff/social/permits/{permit.pk}/")
+    return permit
+
+
+def claim_fine(user, reference, id_or_phone):
+    """A resident looks up a fine by its number and their ID or phone number; the offender's account is then linked to
+    their profile so the fine appears in the app and can be paid."""
+    from finance.models import Fine
+
+    ref = (reference or "").strip().upper()
+    key = "".join((id_or_phone or "").split()).upper()
+    fine = Fine.objects.alive().filter(reference__iexact=ref).select_related("account").first()
+    if fine is None or not key:
+        raise ValidationError("No fine with that number – check the fine slip / SMS.")
+    known = {"".join(v.split()).upper() for v in (fine.national_id, fine.phone, fine.account.id_number, fine.account.phone) if v}
+    if key not in known:
+        raise PermissionDenied("The ID or phone number does not match this fine.")
+    fine.account.portal_users.add(user)
+    type(fine.account).objects.filter(pk=fine.account_id).update(updated_at=timezone.now())
+    return fine

@@ -199,7 +199,8 @@ class PermitDetail(ActionDetail):
         u = self.request.user
         acts = []
         if obj.status == ResourcePermit.Status.APPLIED and u.has_cap("permits.approve") and obj.applied_by_id != u.pk:
-            acts.append({"title": "Decision", "fields": [("note", "Comment / reason", "textarea", None)],
+            acts.append({"title": "Decision", "fields": [("unit_fee", f"Fee per unit (USD) – now {obj.unit_fee}", "number", None),
+                                                         ("note", "Comment / reason", "textarea", None)],
                          "buttons": [("approve", "Approve & bill the fee", "success"), ("reject", "Reject", "outline-danger")]})
         if obj.status == ResourcePermit.Status.ACTIVE and u.has_cap("permits.manage"):
             acts.append({"title": "Record a load / quantity taken", "fields": [("quantity", f"Quantity ({obj.get_unit_display()})", "number", None),
@@ -223,7 +224,8 @@ def permit_action(request, pk):
         run_action(request, services.record_extraction, permit, quantity=request.POST.get("quantity") or "0",
                    vehicle_reg=request.POST.get("vehicle_reg", ""), destination=request.POST.get("destination", ""), success="Load recorded.")
     else:
-        run_action(request, services.decide_permit, permit, action, request.POST.get("note", ""), success="Permit updated.")
+        run_action(request, services.decide_permit, permit, action, request.POST.get("note", ""), unit_fee=request.POST.get("unit_fee") or None,
+                   success="Permit updated.")
     return redirect("social:permit", pk=pk)
 
 

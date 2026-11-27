@@ -102,7 +102,7 @@ REVENUE_HEADS = [
     ("SUNDRY", "Sundry income", "OTHER", 0, "ONCE", "I-130"),
 ]
 
-DEMO_INTERN_DEPARTMENT = {"intern": "TECH", "social.intern": "SOCIAL"}   # interns are placed in a department when their account is made
+DEMO_INTERN_DEPARTMENT = {"intern": "TECH", "social.intern": "SOCIAL", "admin.intern": "ADMIN"}   # interns are placed in a department when their account is made
 
 DEMO_STAFF = [
     # username, first, last, role
@@ -118,8 +118,12 @@ DEMO_STAFF = [
     ("procurement", "Kuda", "Mapfumo", "PROCUREMENT_OFFICER"),
     ("registry", "Blessing", "Zhou", "RECORDS_CLERK"),
     ("reception", "Rumbidzai", "Makoni", "RECEPTIONIST"),
+    ("liaison", "Chiedza", "Mutero", "LIAISON_OFFICER"),
+    ("land.officer", "Tawanda", "Gwenzi", "LAND_OFFICER"),
+    ("data.officer", "Panashe", "Nyoni", "DATA_OFFICER"),
     ("intern", "Tafadzwa", "Mhere", "INTERN"),
     ("social.intern", "Nokuthula", "Dube", "INTERN"),
+    ("admin.intern", "Tatenda", "Chari", "INTERN"),
     ("growthpoint", "Itai", "Chimedza", "GROWTH_POINT_MANAGER"),
     ("chief.auditor", "Patience", "Mazarura", "CHIEF_AUDITOR"),
     ("auditor", "Tinashe", "Chari", "AUDITOR"),
@@ -327,6 +331,7 @@ class Command(BaseCommand):
         self._demo_farms_and_intern(u)
         self._demo_social(u)
         self._demo_charter_registers(u)
+        self._demo_admin(u)
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""
@@ -671,6 +676,55 @@ class Command(BaseCommand):
             d.refresh_from_db()
             if d.status == "PENDING":
                 lv.decide(who, d, True, "Condolences")
+
+    def _demo_admin(self, u):
+        """Demo land bank, stakeholder meetings, public notices, audit plan and a resident's sand permit (illustrative only)."""
+        from datetime import timedelta
+
+        from departments.models import AuditEngagement, Engagement, LandParcel, PublicNotice
+        from social import services as sv
+
+        today = timezone.localdate()
+        lo = u["land.officer"]
+        for no, name, ward, loc, ha, use, status, stands in (("CRDC/LP/014", "Checheche extension phase 2", 22, "Checheche growth point", 38, "RES", "PLANNED", 420),
+                                                             ("CRDC/LP/015", "Checheche light industrial site", 22, "Checheche – Chipinge road", 12, "IND", "VACANT", 40),
+                                                             ("CRDC/LP/021", "Birchenough Bridge market extension", 30, "Birchenough Bridge", 2.5, "COM", "ALLOCATED", 24),
+                                                             ("CRDC/LP/033", "Chisumbanje clinic site", 25, "Chisumbanje", 1.2, "INST", "RESERVED", 0),
+                                                             ("CRDC/LP/040", "Mutema open space", 12, "Mutema business centre", 0.8, "OPEN", "ENCROACHED", 0)):
+            LandParcel.objects.create(parcel_number=no, name=name, ward=ward, location=loc, hectares=ha, land_use=use, status=status, stands_planned=stands,
+                                      survey_diagram=f"GP {no[-3:]}/2024" if status != "VACANT" else "", created_by=lo,
+                                      notes="Informal structures being put up – notice served" if status == "ENCROACHED" else "")
+        li = u["liaison"]
+        for title, kind, days, ward, venue, att, issues, res, status in (
+                ("Ward 22 WADCO meeting", "WARD", -9, 22, "Checheche hall", 46, "Refuse collection at the rank; stand allocation waiting list",
+                 "Refuse skip to be moved; Growth Point Manager to publish the waiting list", "FOLLOWUP"),
+                ("2027 budget consultation – Chibuwe", "BUDGET", -20, 25, "Chibuwe Primary School", 132, "Road D-114, borehole repairs, clinic staff houses",
+                 "Priorities captured for the 2027 budget", "HELD"),
+                ("Chief Musikavanhu – traditional leaders' meeting", "TRAD", 6, 12, "Chief's court, Mutema", 0, "", "", "PLANNED"),
+                ("World Vision WASH partners' meeting", "PARTNER", 13, None, "Council boardroom", 0, "", "", "PLANNED")):
+            Engagement.objects.create(title=title, kind=kind, date=today + timedelta(days=days), ward=ward, venue=venue, attendance=att, issues_raised=issues,
+                                      resolutions=res, status=status, officer=li, created_by=li)
+        for title, cat, body, ward, until in (
+                ("Water interruption – Checheche, Friday", "WATER", "Water supply to Checheche growth point will be off on Friday 08:00–16:00 while the main pump is repaired.", 22, 7),
+                ("2027 budget consultation meetings", "MEETING", "Residents are invited to the ward budget consultation meetings. See the schedule at your ward centre or the council offices.", None, 30),
+                ("Shop licences – renew by 31 January", "DEADLINE", "All shop and business licences expire on 31 December. Pay the licence fee, lease and levy in the app and your licence is issued automatically.", None, 60),
+                ("Cholera alert – boil drinking water", "HEALTH", "Cases reported in a neighbouring district. Boil or treat drinking water, wash hands with soap and report diarrhoea cases to the nearest clinic.", None, 21)):
+            PublicNotice.objects.create(title=title, category=cat, body=body, ward=ward, expires_on=today + timedelta(days=until), posted_by=li, created_by=li)
+        ca = u["chief.auditor"]
+        for title, kind, dept, q, who, status, concl in (
+                ("Revenue collection & cash-ups", "FIN", "FINANCE", f"{today.year}-Q4", "auditor", "FIELDWORK", ""),
+                ("Payroll & PAYE compliance", "COMP", "FINANCE", f"{today.year}-Q4", "chief.auditor", "PLANNED", ""),
+                ("CAMPFIRE revenue sharing to wards", "PERF", "SOCIAL", f"{today.year}-Q3", "auditor", "DONE",
+                 "Community shares paid within 30 days in 9 of 10 cases; one ward paid late – recommend quarterly reconciliations."),
+                ("Fuel & vehicle usage", "STOCK", "TECH", f"{today.year + 1}-Q1", "auditor", "PLANNED", "")):
+            AuditEngagement.objects.create(title=title, audit_type=kind, department=dept, quarter=q, auditor=u[who], status=status, conclusion=concl,
+                                           created_by=ca)
+        # a resident applies for a sand permit in the client app
+        resident = u["resident"]
+        acc = resident.client_accounts.first()
+        if acc:
+            sv.client_apply_permit(resident, holder=acc, permit_type="SAND", location="Musikavanhu river, Mutema – collection point 3", quantity=6,
+                                   ward=12, days=30, purpose="Building a house – 2 loads")
 
     def _demo_payroll(self, u):
         """Demo salaries and two months of payroll (illustrative amounts only – not real council salaries)."""

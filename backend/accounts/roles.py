@@ -20,8 +20,11 @@ ROLES = {
     "CEO": ("Chief Executive Officer", D.EXECUTIVE, Level.EXECUTIVE),
     "EXEC_ASSISTANT": ("Executive Assistant (Office of the CEO)", D.EXECUTIVE, Level.CLERK),
     # Administration
-    "ADMIN_OFFICER": ("Administration Officer (Head of Administration)", D.ADMINISTRATION, Level.HEAD),
+    "ADMIN_OFFICER": ("Human Resources & Administration Officer (Head of Administration)", D.ADMINISTRATION, Level.HEAD),
     "HR_OFFICER": ("Human Resources Officer", D.ADMINISTRATION, Level.OFFICER),
+    "LIAISON_OFFICER": ("Community Liaison & Public Relations Officer", D.ADMINISTRATION, Level.OFFICER),
+    "LAND_OFFICER": ("Land & Asset Management Officer", D.ADMINISTRATION, Level.OFFICER),
+    "DATA_OFFICER": ("Data & Information Management Officer", D.ADMINISTRATION, Level.OFFICER),
     "PROCUREMENT_OFFICER": ("Procurement Officer", D.ADMINISTRATION, Level.OFFICER),
     "RECORDS_CLERK": ("Records Management / Registry Clerk", D.ADMINISTRATION, Level.CLERK),
     "RECEPTIONIST": ("Receptionist / Customer Care Officer", D.ADMINISTRATION, Level.CLERK),
@@ -92,7 +95,7 @@ FINANCE_READ = {"finance.view", "finance.view_all", "finance.reports", "fines.vi
 SOCIAL_READ = {"wildlife.view", "hunts.view", "permits.view", "farms.view", "water.view", "welfare.view", "health.view", "sanitation.view",
                "facilities.view"}
 TECH_READ = {"roads.view", "lighting.view", "works.view"}
-ADMIN_READ = {"records.view"}
+ADMIN_READ = {"records.view", "land.view", "engagements.view", "notices.view", "data.view"}
 # Officers who enforce by-laws and may issue fines
 FINE_ISSUERS = {"fines.issue", "fines.view"}
 
@@ -132,6 +135,8 @@ ROLE_CAPS = {
         "messages.view",
         "fines.waive",
         "leave.ceo_approve",
+        "auditplan.view",
+        "notices.manage",
     }
     | SOCIAL_READ | TECH_READ | ADMIN_READ,
     "EXEC_ASSISTANT": {"meetings.manage", "meetings.view", "policies.view", "complaints.view_all", "correspondence.manage", "tasks.assign_any"},
@@ -139,8 +144,15 @@ ROLE_CAPS = {
     "ADMIN_OFFICER": HEAD_CAPS
     | {"complaints.view_all", "correspondence.manage", "hr.manage", "hr.view", "users.view", "procurement.order", "meetings.manage",
        "meetings.view", "policies.manage", "policies.view", "activities.manage", "assets.manage", "assets.view", "funds.admin_approve",
-       "complaints.manage", "leave.hr_approve", "records.view", "records.manage"},
+       "complaints.manage", "leave.hr_approve", "records.view", "records.manage"} | ADMIN_READ | {"notices.manage", "land.manage"},
     "HR_OFFICER": {"activities.manage", "hr.manage", "hr.view", "meetings.view", "policies.view", "leave.hr_approve"},
+    # Community liaison & PR: WADCO / village assemblies, consultations, public notices to residents (client app)
+    "LIAISON_OFFICER": {"engagements.manage", "engagements.view", "notices.manage", "notices.view", "activities.manage", "policies.view",
+                        "meetings.view", "correspondence.manage"},
+    # Land & asset management: council land bank, assets register, leases and stands information
+    "LAND_OFFICER": {"land.manage", "land.view", "assets.manage", "assets.view", "leases.view", "areas.view", "stands.view", "plans.view"},
+    # Data & information management (ICT services): statistics, data quality, exports, register imports
+    "DATA_OFFICER": {"data.view", "data.manage", "records.view", "ict.raise", "users.view"},
     "PROCUREMENT_OFFICER": {"procurement.order", "supplier.manage", "meetings.view", "policies.view", "assets.view"},
     "RECORDS_CLERK": {"meetings.manage", "meetings.view", "policies.view", "correspondence.manage", "records.view", "records.manage"},
     # Front desk: receives every complaint, compliment, suggestion and enquiry and routes it to the right officer.
@@ -229,13 +241,13 @@ ROLE_CAPS = {
     "REVENUE_CLERK": {"fines.issue", "fines.view", "farms.view", "claims.review", "reminders.send", "areas.view", "leases.view", "finance.view", "receipt.create", "receipt.void_request", "accounts.manage", "licence.view", "licence.manage", "cashup.submit"},
     "EXPENDITURE_CLERK": {"payroll.pay", "payroll.view", "assets.manage", "assets.view", "funds.view_all", "finance.view", "supplier.manage", "voucher.prepare", "voucher.pay", "procurement.order", "budget.view"},
     # Internal audit - read everything, change nothing operational
-    "CHIEF_AUDITOR": HEAD_CAPS
+    "CHIEF_AUDITOR": {"auditplan.manage", "auditplan.view"} | HEAD_CAPS
     | FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "complaints.view_all",
        "requests.view_all", "budget.view", "licence.view", "stands.view", "projects.view", "hr.view", "payments.online_view", "risks.manage",
        "incidents.view", "plans.view", "areas.view", "leases.view", "messages.view", "dept.overview_all", "assets.view",
        "meetings.view", "policies.view", "funds.view_all", "payroll.view"} | SOCIAL_READ | TECH_READ | ADMIN_READ,
-    "AUDITOR": FINANCE_READ
+    "AUDITOR": {"auditplan.manage", "auditplan.view"} | FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "budget.view", "licence.view",
        "stands.view", "projects.view", "payments.online_view", "risks.manage", "risks.view", "incidents.view", "plans.view", "areas.view",
        "leases.view", "assets.view", "meetings.view", "policies.view", "funds.view_all", "payroll.view"} | SOCIAL_READ | TECH_READ | ADMIN_READ,

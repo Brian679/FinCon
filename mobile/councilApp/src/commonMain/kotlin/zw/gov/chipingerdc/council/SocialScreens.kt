@@ -126,7 +126,8 @@ val REGISTERS: Map<String, RegisterSpec> = listOf(
             "Load ${prettyDate(e.s("date"))}" to "${money(e.s("quantity"))} ${o.s("unit_label")} · ${e.s("vehicle_reg")} → ${e.s("destination")}" } },
         actions = listOf(
             RAction("Decision", "permit.decide", "permit", listOf("approve" to "Approve & bill the fee", "reject" to "Reject"),
-                listOf(FieldSpec("note", "Comment / reason", "multiline")), listOf("permits.approve")) { o, c ->
+                listOf(FieldSpec("unit_fee", "Fee per unit (USD) – blank keeps the applied rate", "number"), FieldSpec("note", "Comment / reason", "multiline")),
+                listOf("permits.approve")) { o, c ->
                 o.s("status") == "APPLIED" && o.s("applied_by") != c.me.id.toString() },
             RAction("Record a load / quantity taken", "extraction.record", "permit", listOf("record" to "Record"),
                 listOf(FieldSpec("quantity", "Quantity", "number"), FieldSpec("vehicle_reg", "Vehicle registration"), FieldSpec("destination", "Destination")),
@@ -271,6 +272,51 @@ val REGISTERS: Map<String, RegisterSpec> = listOf(
         line = { it.s("name") to "${it.s("reference")} · ${it.s("kind_label")} · ward ${ward(it)} · ${it.s("population_served")} served\n${it.s("needs")}" },
         tone = { when (it.s("condition")) { "GOOD" -> "ACTIVE"; "POOR" -> "BROKEN"; else -> "IN_PROGRESS" } },
         extra = { listOf("Condition" to it.s("condition_label")) }),
+    // ---------------------------------------------------------------- Administration – land, liaison, notices
+    RegisterSpec("land_parcels", Entities.LAND_PARCELS, "Council land bank", "land parcel", listOf("land.view", "land.manage"), listOf("land.manage"),
+        listOf(RField("parcel_number", "Parcel number", required = true), RField("name", "Name", required = true), RField("ward", "Ward", "int"),
+            RField("location", "Location", required = true), RField("hectares", "Hectares", "number", required = true),
+            RField("land_use", "Use", "choice", listOf("RES" to "Residential", "COM" to "Commercial", "IND" to "Industrial", "INST" to "Institutional",
+                "AGR" to "Agricultural", "OPEN" to "Open space / recreation", "MIXED" to "Mixed use")),
+            RField("status", "Status", "choice", listOf("VACANT" to "Vacant – available", "PLANNED" to "Planned / being surveyed", "ALLOCATED" to "Allocated / sold",
+                "LEASED" to "Leased", "RESERVED" to "Reserved for council use", "ENCROACHED" to "Encroached / disputed")),
+            RField("survey_diagram", "Survey diagram / plan no."), RField("title_deed", "Title deed"), RField("valuation", "Valuation (USD)", "number"),
+            RField("stands_planned", "Stands planned", "int"), RField("notes", "Notes", "multiline")),
+        line = { "${it.s("parcel_number")} – ${it.s("name")}" to "${it.s("land_use_label")} · ${it.s("hectares")} ha · ${it.s("location")}, ward ${ward(it)}" +
+            (if (it.s("stands_planned") !in listOf("", "0")) "\n${it.s("stands_planned")} stands planned" else "") },
+        tone = { when (it.s("status")) { "VACANT" -> "ACTIVE"; "ENCROACHED" -> "BROKEN"; "PLANNED" -> "IN_PROGRESS"; else -> "WAITING" } }),
+    RegisterSpec("engagements", Entities.ENGAGEMENTS, "Stakeholder engagement", "meeting", listOf("engagements.view", "engagements.manage"),
+        listOf("engagements.manage"),
+        listOf(RField("title", "Meeting", required = true), RField("kind", "Type", "choice", listOf("WARD" to "Ward development committee (WADCO)",
+            "VILLAGE" to "Village assembly / VIDCO", "BUDGET" to "Budget consultation", "TRAD" to "Traditional leaders", "PARTNER" to "Development partner / NGO",
+            "BUSINESS" to "Business community", "MEDIA" to "Media / public relations")), RField("date", "Date (YYYY-MM-DD)", "date", required = true),
+            RField("ward", "Ward", "int"), RField("venue", "Venue", required = true), RField("attendance", "Attendance", "int"),
+            RField("issues_raised", "Issues raised", "multiline"), RField("resolutions", "Agreed actions", "multiline"),
+            RField("status", "Status", "choice", listOf("PLANNED" to "Planned", "HELD" to "Held – report written", "FOLLOWUP" to "Held – follow-up actions open",
+                "CANCELLED" to "Cancelled"))),
+        line = { it.s("title") to "${it.s("reference")} · ${it.s("kind_label")} · ${prettyDate(it.s("date"))} · ${it.s("venue")}" +
+            (if (it.s("attendance") !in listOf("", "0")) " · ${it.s("attendance")} people" else "") },
+        tone = { when (it.s("status")) { "HELD" -> "ACTIVE"; "FOLLOWUP" -> "IN_PROGRESS"; "CANCELLED" -> "CANCELLED"; else -> "WAITING" } }),
+    RegisterSpec("public_notices", Entities.PUBLIC_NOTICES, "Public notices to residents", "notice", listOf("notices.view", "notices.manage"),
+        listOf("notices.manage"),
+        listOf(RField("title", "Title", required = true), RField("category", "Type", "choice", listOf("GENERAL" to "General notice", "MEETING" to "Public meeting / consultation",
+            "WATER" to "Water / service interruption", "DEADLINE" to "Payment / licence deadline", "TENDER" to "Tender / vacancy", "HEALTH" to "Health alert",
+            "EMERGENCY" to "Emergency / disaster")), RField("body", "Notice", "multiline", required = true), RField("ward", "Ward (blank = whole district)", "int"),
+            RField("publish_from", "Publish from (YYYY-MM-DD)", "date"), RField("expires_on", "Until (YYYY-MM-DD)", "date"),
+            RField("is_published", "Show in the residents' app", "bool")),
+        line = { it.s("title") to "${it.s("category_label")} · ${it.s("ward").takeIf { w -> w.isNotBlank() }?.let { w -> "ward $w" } ?: "whole district"} · until ${prettyDate(it.s("expires_on"))}\n${it.s("body")}" },
+        tone = { if (it.s("is_published") == "true") "ACTIVE" else "WAITING" },
+        info = "Published notices appear on the home screen of the residents' app (filtered by ward when one is given)."),
+    // ---------------------------------------------------------------- Internal audit
+    RegisterSpec("audit_engagements", Entities.AUDIT_ENGAGEMENTS, "Internal audit plan", "audit", listOf("auditplan.view", "auditplan.manage"),
+        listOf("auditplan.manage"),
+        listOf(RField("title", "Audit", required = true), RField("audit_type", "Type", "choice", listOf("COMP" to "Compliance audit", "FIN" to "Financial audit",
+            "PERF" to "Performance / value for money", "SYS" to "Systems / ICT review", "SPECIAL" to "Special investigation", "STOCK" to "Stores / asset verification")),
+            RField("department", "Department audited", "choice", listOf("ADMIN" to "Administration", "FINANCE" to "Finance", "SOCIAL" to "Social Services", "TECH" to "Technical Services", "AUDIT" to "Internal Audit", "EXEC" to "Office of the CEO", "GROWTH" to "Growth Points")), RField("quarter", "Quarter (e.g. 2026-Q4)", required = true),
+            RField("auditor", "Auditor", "staff"), RField("status", "Status", "choice", listOf("PLANNED" to "Planned", "FIELDWORK" to "Fieldwork",
+                "REPORTING" to "Draft report", "DONE" to "Final report issued")), RField("scope", "Scope", "multiline"), RField("conclusion", "Conclusion", "multiline")),
+        line = { it.s("title") to "${it.s("reference")} · ${it.s("quarter")} · ${it.s("department_label")} · ${it.s("audit_type_label")}\n${it.s("auditor_name")}" },
+        tone = { when (it.s("status")) { "DONE" -> "CLOSED"; "PLANNED" -> "WAITING"; else -> "IN_PROGRESS" } }),
 ).associateBy { it.key }
 
 private fun canSee(ctx: Ctx, spec: RegisterSpec) = ctx.me.can(*spec.viewCaps.toTypedArray())

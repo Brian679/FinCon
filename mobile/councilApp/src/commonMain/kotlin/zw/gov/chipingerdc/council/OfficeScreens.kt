@@ -478,3 +478,25 @@ fun AuditTrailScreen(ctx: Ctx) {
         }
     }
 }
+
+
+/** Data & information management (online): what is in every register and the records that need fixing. */
+@Composable
+fun DataHubScreen(ctx: Ctx) {
+    OnlineScreen(ctx, "Data & information management", "reports/data/") { d ->
+        d.rows("checks").let { checks ->
+            val open = checks.sumOf { it.str("count").toIntOrNull() ?: 0 }
+            Kpi("Records to fix", open.toString(), "${checks.count { (it.str("count").toIntOrNull() ?: 0) > 0 }} of ${checks.size} checks", if (open > 0) CrdcColors.Danger else CrdcColors.Success, Modifier.fillMaxWidth())
+            SectionCard("Data quality") {
+                checks.forEach { c ->
+                    val n = c.str("count").toIntOrNull() ?: 0
+                    KeyValue(if (n > 0) "✖ $n" else "✔ 0", "${c.str("title")} – ${c.str("department")}")
+                }
+                Text("Open the website (Administration → Data & information management) to see and download each list.", fontSize = 11.sp, color = CrdcColors.Muted)
+            }
+        }
+        d.rows("registers").forEach { dep ->
+            SectionCard(dep.str("department")) { dep.rows("rows").forEach { r -> KeyValue(r.str("label"), r.str("count")) } }
+        }
+    }
+}

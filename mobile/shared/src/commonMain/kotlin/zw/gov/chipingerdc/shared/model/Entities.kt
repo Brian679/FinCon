@@ -63,6 +63,10 @@ object Entities {
     const val HEALTH_INSPECTIONS = "health_inspections"
     const val SANITATION = "sanitation"
     const val SOCIAL_FACILITIES = "social_facilities"
+    const val LAND_PARCELS = "land_parcels"
+    const val ENGAGEMENTS = "engagements"
+    const val PUBLIC_NOTICES = "public_notices"
+    const val AUDIT_ENGAGEMENTS = "audit_engagements"
 }
 
 @Serializable

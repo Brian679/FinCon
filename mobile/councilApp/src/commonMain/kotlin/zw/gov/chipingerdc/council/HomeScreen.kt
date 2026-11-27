@@ -14,6 +14,13 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import zw.gov.chipingerdc.shared.ui.Field
+import zw.gov.chipingerdc.shared.ui.QuickAction
+import zw.gov.chipingerdc.shared.ui.QuickActions
+import zw.gov.chipingerdc.shared.ui.greeting
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -114,6 +121,10 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("hr.view")) add(Tile("Staff directory", Screen.Staff))
         if (me.can("records.view", "records.manage")) add(reg("Records management (registry)", "record_files", "records.manage"))
         if (me.can("ict.manage")) add(Tile("ICT services – support tickets", Screen.Tickets))
+        if (me.can("land.view", "land.manage")) add(reg("Council land bank", "land_parcels", "land.manage"))
+        if (me.can("engagements.view", "engagements.manage")) add(reg("Stakeholder engagement (WADCO, village assemblies)", "engagements", "engagements.manage"))
+        if (me.can("notices.manage")) add(reg("Public notices to residents", "public_notices", "notices.manage"))
+        if (me.can("data.view", "data.manage")) add(Tile("Data & information management", Screen.DataHub))
         if (me.department == "ADMIN" && me.can("activities.manage")) add(Tile("Trainings & staff activities", Screen.Activities, add = Screen.NewActivity))
         if (!me.can("finance.view") && me.can("procurement.order")) add(Tile("Purchase orders", Screen.Orders))
     }
@@ -161,6 +172,7 @@ fun CouncilMenu(ctx: Ctx) {
     }
     val audit = buildList {
         if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
+        if (me.can("auditplan.view", "auditplan.manage")) add(reg("Internal audit plan", "audit_engagements", "auditplan.manage"))
         if (me.can("risks.view", "risks.manage")) add(Tile("Risk register", Screen.Risks))
     }
     val assets = if (me.can("assets.view")) listOf(Tile(if (me.can("assets.manage") || seesAll) "Assets & infrastructure" else "Department assets", Screen.Assets)) else emptyList()
@@ -184,8 +196,13 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("audit.view_trail")) add("Governance" to listOf(Tile("Audit trail", Screen.AuditTrail)))
     }.filter { it.second.isNotEmpty() }
 
+    var find by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        sections.forEach { (title, tiles) ->
+        Field("🔍  Find a screen (e.g. leave, fines, roads)", find, { find = it })
+        val shown = sections.map { (title, tiles) -> title to tiles.filter { find.isBlank() || it.label.contains(find.trim(), ignoreCase = true) } }
+            .filter { it.second.isNotEmpty() }
+        if (shown.isEmpty()) Text("Nothing called \"$find\" in your menu.", color = CrdcColors.Muted, fontSize = 13.sp)
+        shown.forEach { (title, tiles) ->
             IndexModule(title, tiles.map { t -> IndexRow(t.label, t.badge, { ctx.go(t.screen) }, t.add?.let { a -> { ctx.go(a) } }) })
         }
     }
@@ -212,7 +229,33 @@ fun HomeScreen(ctx: Ctx) {
 
     AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            Text(me.departmentLabel, fontSize = 13.sp, color = CrdcColors.Muted)
+            val hour = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).hour
+            Text(greeting(hour, me.fullName.substringBefore(" ")), fontSize = 18.sp, color = CrdcColors.Body)
+            Text("${me.roleLabel.ifBlank { me.departmentLabel }} · ${me.departmentLabel}", fontSize = 13.sp, color = CrdcColors.Muted)
+            // 0. one-tap shortcuts for the things this person does most
+            QuickActions("Quick actions", buildList {
+                if (me.can("receipt.create")) add(QuickAction("$", "New receipt", CrdcColors.Green) { ctx.go(Screen.NewReceipt) })
+                if (me.can("fines.issue")) add(QuickAction("⚖", "Issue a fine", CrdcColors.Danger) { ctx.go(Screen.NewFine) })
+                if (me.can("licence.manage")) add(QuickAction("🏪", "Capture licence", CrdcColors.Blue) { ctx.go(Screen.NewLicence) })
+                if (me.can("voucher.prepare")) add(QuickAction("✎", "Payment voucher", CrdcColors.Blue) { ctx.go(Screen.NewVoucher(null)) })
+                if (me.can("works.manage")) add(QuickAction("🔧", "New job card", CrdcColors.Warning) { ctx.go(Screen.RegisterForm("work_orders", null)) })
+                if (me.can("health.manage")) add(QuickAction("✚", "Health inspection", CrdcColors.Green) { ctx.go(Screen.RegisterForm("health_inspections", null)) })
+                if (me.can("wildlife.manage")) add(QuickAction("🐘", "Record wildlife", CrdcColors.Green) { ctx.go(Screen.RegisterForm("wildlife", null)) })
+                if (me.can("permits.manage")) add(QuickAction("⛏", "Permits & loads", CrdcColors.Gold) { ctx.go(Screen.Register("resource_permits")) })
+                if (me.can("welfare.manage")) add(QuickAction("❤", "Welfare households", CrdcColors.Danger) { ctx.go(Screen.Register("beneficiaries")) })
+                if (me.can("stands.manage")) add(QuickAction("🏠", "Stand applications", CrdcColors.Green) { ctx.go(Screen.Stands) })
+                if (me.can("records.manage")) add(QuickAction("🗂", "Registry files", CrdcColors.Blue) { ctx.go(Screen.Register("record_files")) })
+                if (me.can("land.manage")) add(QuickAction("🗺", "Land bank", CrdcColors.Green) { ctx.go(Screen.Register("land_parcels")) })
+                if (me.can("engagements.manage")) add(QuickAction("👥", "Record a meeting", CrdcColors.Blue) { ctx.go(Screen.RegisterForm("engagements", null)) })
+                if (me.can("notices.manage")) add(QuickAction("📢", "Post a notice", CrdcColors.Warning) { ctx.go(Screen.RegisterForm("public_notices", null)) })
+                if (me.can("data.view")) add(QuickAction("▦", "Data quality", CrdcColors.Blue) { ctx.go(Screen.DataHub) })
+                if (me.can("auditplan.manage")) add(QuickAction("✓", "Audit plan", CrdcColors.Blue) { ctx.go(Screen.Register("audit_engagements")) })
+                if (approvals.isNotEmpty()) add(0, QuickAction("✔", "Waiting for me", CrdcColors.Danger, approvals.size) { ctx.go(Screen.Approvals) })
+                if (size > 6) subList(6, size).clear()
+                add(QuickAction("☀", "Apply for leave", CrdcColors.Green) { ctx.go(Screen.NewLeave) })
+                add(QuickAction("✉", "Send a memo", CrdcColors.Blue) { ctx.go(Screen.NewMemo) })
+                add(QuickAction("☰", "My tasks", CrdcColors.Muted, myTasks.size) { ctx.go(Screen.Tasks) })
+            })
             // 1. key figures – only facts that are not listed again below
             val figures = buildList<@Composable (Modifier) -> Unit> {
                 if (me.can("finance.view_all")) add { m ->

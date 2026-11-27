@@ -19,7 +19,7 @@ from core.crud import BootstrapFormMixin, GenericCreateView, GenericListView, Ge
 from finance.services import _record, notify
 from social.models import HealthInspection, SanitationFacility, SocialFacility
 
-from .models import PublicLight, RecordFile, Road, WorkOrder
+from .models import AuditEngagement, Engagement, LandParcel, PublicLight, PublicNotice, RecordFile, Road, WorkOrder
 from .views import ActionDetail
 
 DATE = {"type": "date"}
@@ -68,6 +68,27 @@ SPECS = {
                     ("Classrooms / beds", "classrooms_or_beds"), ("Condition", "condition")],
                    ["name", "kind", "ward", "location", "responsible_authority", "population_served", "classrooms_or_beds", "condition", "needs",
                     "contact"], (), "condition", ["reference", "name", "location", "needs"]),
+    # ---- Administration: land & assets, community liaison
+    "land": (LandParcel, "admin/land", "Council land bank – land parcels", ("land.view", "land.manage"), ("land.manage",),
+             [("Parcel", "parcel_number"), ("Name", "name"), ("Ward", "ward"), ("Location", "location"), ("Hectares", "hectares"), ("Use", "land_use"),
+              ("Stands planned", "stands_planned"), ("Status", "status")],
+             ["parcel_number", "name", "ward", "location", "hectares", "land_use", "status", "survey_diagram", "title_deed", "valuation",
+              "stands_planned", "notes"], (), "status", ["parcel_number", "name", "location", "survey_diagram"]),
+    "engagements": (Engagement, "admin/engagements", "Stakeholder engagement – WADCO, village assemblies & consultations",
+                    ("engagements.view", "engagements.manage"), ("engagements.manage",),
+                    [("Ref.", "reference"), ("Date", "date"), ("Meeting", "title"), ("Type", "kind"), ("Ward", "ward"), ("Venue", "venue"),
+                     ("Attendance", "attendance"), ("Status", "status")],
+                    ["title", "kind", "date", "ward", "venue", "attendance", "issues_raised", "resolutions", "status"], ("date",), "status",
+                    ["reference", "title", "venue", "issues_raised"]),
+    "notices": (PublicNotice, "admin/notices", "Public notices (shown in the residents' app)", ("notices.view", "notices.manage"), ("notices.manage",),
+                [("From", "publish_from"), ("Title", "title"), ("Type", "category"), ("Ward", "ward"), ("Until", "expires_on"), ("Published", "is_published")],
+                ["title", "category", "body", "ward", "publish_from", "expires_on", "is_published"], ("publish_from", "expires_on"), "category",
+                ["title", "body"]),
+    # ---- Internal audit
+    "audits": (AuditEngagement, "audit/plan", "Internal audit plan – audit engagements", ("auditplan.view", "auditplan.manage"), ("auditplan.manage",),
+               [("Ref.", "reference"), ("Quarter", "quarter"), ("Audit", "title"), ("Type", "audit_type"), ("Department", "department"),
+                ("Auditor", "auditor"), ("Status", "status")],
+               ["title", "audit_type", "department", "quarter", "auditor", "status", "scope", "conclusion"], (), "status", ["reference", "title", "scope"]),
 }
 FORMS = {k: _form(v[0], v[6], v[7]) for k, v in SPECS.items()}
 
@@ -185,6 +206,10 @@ def _views(key):
     New.model, New.form_class, New.required_caps, New.title, New.detail_url_name = model, FORMS[key], manage_caps, f"New – {title}", f"registers:{key}"
     if key == "inspections":
         New.prepare = lambda self, obj: setattr(obj, "inspector", self.request.user)
+    if key == "engagements":
+        New.prepare = lambda self, obj: setattr(obj, "officer", self.request.user)
+    if key == "notices":
+        New.prepare = lambda self, obj: setattr(obj, "posted_by", self.request.user)
 
     class Edit(GenericUpdateView):
         pass
@@ -198,7 +223,8 @@ def _views(key):
     Detail.fields = [(model._meta.get_field(f).verbose_name.capitalize(), f) for f in fields] + (
         [("Completion notes", "completion_notes"), ("Materials", "materials"), ("Labour (days)", "labour_days"), ("Cost (USD)", "cost"),
          ("Signed off by", "signed_off_by")] if key == "works" else [("With", "borrowed_by"), ("Due back", "due_back")] if key == "records"
-        else [("Inspector", "inspector")] if key == "inspections" else [])
+        else [("Inspector", "inspector")] if key == "inspections" else [("Officer", "officer")] if key == "engagements"
+        else [("Posted by", "posted_by")] if key == "notices" else [])
     Detail.edit_url_name, Detail.edit_caps = f"registers:{key}_edit", manage_caps
     if scope_fn:
         Detail.scope = lambda self, qs: scope_fn(self.request.user, qs)
@@ -268,5 +294,8 @@ urlpatterns = []
 for _k, (_slug, _L, _N, _E, _D) in VIEWS.items():
     urlpatterns += [path(f"{_slug}/", _L.as_view(), name=f"{_k}_list"), path(f"{_slug}/new/", _N.as_view(), name=f"{_k}_new"),
                     path(f"{_slug}/<uuid:pk>/", _D.as_view(), name=_k), path(f"{_slug}/<uuid:pk>/edit/", _E.as_view(), name=f"{_k}_edit")]
-urlpatterns += [path("technical/works/<uuid:pk>/action/", works_action, name="works_action"),
+from .data import data_hub  # noqa: E402
+
+urlpatterns += [path("admin/data/", data_hub, name="data_hub"),
+                path("technical/works/<uuid:pk>/action/", works_action, name="works_action"),
                 path("admin/records/<uuid:pk>/action/", records_action, name="records_action")]

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+<p class="small quiet">Figures for every register in the system and the records that need fixing. Generated {{ generated|date:"d M Y H:i" }}.</p>
+<div class="row g-3">
+{% for dept, items in registers %}
+<div class="col-md-6 col-xl-4"><div class="module"><h2>{{ dept }}</h2><table class="table table-sm mb-0">
+{% for label, n in items %}<tr><td>{{ label }}</td><td class="text-end fw-semibold">{{ n }}</td></tr>{% endfor %}</table></div></div>
+{% endfor %}
+</div>
+<div class="module mt-3"><h2>Data quality – records to fix</h2><table class="table table-sm mb-0">
+<thead><tr><th>Check</th><th>Department to fix</th><th class="text-end">Records</th><th></th></tr></thead>
+{% for key, t, dept, n in checks %}<tr><td>{{ t }}</td><td>{{ dept }}</td><td class="text-end {% if n %}text-danger fw-semibold{% else %}text-success{% endif %}">{% if n %}{{ n }}{% else %}✔ 0{% endif %}</td>
+<td class="text-end">{% if n %}<a href="?show={{ key }}">View</a> · <a href="?export={{ key }}">Download CSV</a>{% endif %}</td></tr>{% endfor %}
+</table></div>
+{% if detail %}<div class="module mt-3"><h2>{{ detail.title }}</h2><table class="table table-sm mb-0"><thead><tr>{% for c in detail.cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+{% for r in detail.rows %}<tr>{% for v in r %}<td>{{ v|default:"—" }}</td>{% endfor %}</tr>{% endfor %}</table></div>{% endif %}
+{% endblock %}

@@ -29,6 +29,8 @@ ADD_LINKS = {
     "registers:inspections_list": ("registers:inspections_new", "health.manage"),
     "registers:sanitation_list": ("registers:sanitation_new", "sanitation.manage"),
     "registers:facilities_list": ("registers:facilities_new", "facilities.manage"),
+    "registers:land_list": ("registers:land_new", "land.manage"), "registers:engagements_list": ("registers:engagements_new", "engagements.manage"),
+    "registers:notices_list": ("registers:notices_new", "notices.manage"), "registers:audits_list": ("registers:audits_new", "auditplan.manage"),
     "workflow:memos": ("workflow:memo_new", None), "workflow:funds": ("workflow:fund_new", None),
     "portal:complaints": ("portal:complaint_new", None), "portal:requests": ("portal:request_new", None), "portal:licences": ("portal:licence_apply", None),
     "portal:claims": ("portal:claim_new", None), "portal:plans": ("portal:plan_new", None), "portal:stands": ("portal:stand_new", None),
@@ -181,6 +183,14 @@ def build_nav(user):
             admin_items.append(_item("Records management (registry)", "registers:records_list"))
         if c("ict.manage"):
             admin_items.append(_item("ICT services – support tickets", "departments:tickets"))
+        if c("land.view", "land.manage"):
+            admin_items.append(_item("Council land bank – land parcels", "registers:land_list"))
+        if c("engagements.view", "engagements.manage"):
+            admin_items.append(_item("Stakeholder engagement (WADCO, village assemblies)", "registers:engagements_list"))
+        if c("notices.manage"):
+            admin_items.append(_item("Public notices to residents", "registers:notices_list"))
+        if c("data.view", "data.manage"):
+            admin_items.append(_item("Data & information management", "registers:data_hub"))
         if admin_items:
             sections.append({"title": "Administration", "items": admin_items})
 
@@ -275,6 +285,8 @@ def build_nav(user):
     audit_items = []
     if c("audit.findings_view") or c("audit.respond"):
         audit_items.append(_item("Internal audit findings" if c("audit.findings_view") else "Audit findings for my department", "departments:findings"))
+    if c("auditplan.view", "auditplan.manage"):
+        audit_items.append(_item("Internal audit plan", "registers:audits_list"))
     if c("risks.view", "risks.manage"):
         audit_items.append(_item("Risk register", "departments:risks"))
     if audit_items:

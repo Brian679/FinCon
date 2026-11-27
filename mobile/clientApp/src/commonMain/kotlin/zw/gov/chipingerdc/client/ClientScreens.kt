@@ -119,8 +119,28 @@ fun ClientHome(ctx: CCtx) {
     val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
     val unpaid = bills.filter { it.status in listOf("UNPAID", "PART") }
     val total = accounts.sumOf { it.balance.toDoubleOrNull() ?: 0.0 }
+    val fines by sdk.observe(Entities.FINES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
+    val permits by sdk.observe(Entities.RESOURCE_PERMITS, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
+    val notices by sdk.observe(Entities.PUBLIC_NOTICES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
+    fun kotlinx.serialization.json.JsonObject.str(k: String) = (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+    val now = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare"))
     AppScreen("My council", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
+            Text(zw.gov.chipingerdc.shared.ui.greeting(now.hour, ctx.me.fullName.substringBefore(" ")), fontSize = 18.sp,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, color = CrdcColors.Body)
+            notices.sortedByDescending { it.str("publish_from") }.take(2).forEach { NoticeCard(it) }
+            if (notices.size > 2) androidx.compose.material3.TextButton(onClick = { ctx.go(CScreen.Notices) }) { Text("All ${notices.size} council notices →") }
+            zw.gov.chipingerdc.shared.ui.QuickActions("What would you like to do?", listOf(
+                zw.gov.chipingerdc.shared.ui.QuickAction("$", "Pay rates & bills", CrdcColors.Green, unpaid.size) { ctx.go(CScreen.Pay(null, null)) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("⚖", "Pay a fine", CrdcColors.Danger, fines.count { it.str("status") == "ISSUED" }) { ctx.go(CScreen.Fines) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("🏪", "Shop licence", CrdcColors.Blue) { ctx.go(CScreen.Licences) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("⛏", "Sand permit", CrdcColors.Gold, permits.count { it.str("status") == "APPROVED" }) { ctx.go(CScreen.Permits) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("＋", "Register my shop / stand", CrdcColors.Green) { ctx.go(CScreen.RegisterStand) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("!", "Report a problem", CrdcColors.Warning) { ctx.go(CScreen.ReportProblem) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("✉", "Complaint / suggestion", CrdcColors.Blue) { ctx.go(CScreen.NewFeedback) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("📢", "Council notices", CrdcColors.Green, 0) { ctx.go(CScreen.Notices) },
+                zw.gov.chipingerdc.shared.ui.QuickAction("🧾", "My receipts", CrdcColors.Muted) { ctx.go(CScreen.Receipts) },
+            ))
             if (accounts.isEmpty()) {
                 InfoBox("Register your stand or shop, or link your council account using the account number on your bill.")
                 PrimaryButton("Register my stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
@@ -142,6 +162,8 @@ fun ClientHome(ctx: CCtx) {
                 IndexRow("My stands & shops", 0, { ctx.go(CScreen.MyStands) }, { ctx.go(CScreen.RegisterStand) }),
                 IndexRow("Payment history", 0, { ctx.go(CScreen.Receipts) }),
                 IndexRow("Licences", 0, { ctx.go(CScreen.Licences) }, { ctx.go(CScreen.ApplyLicence) }),
+                IndexRow("Fines", fines.count { it.str("status") == "ISSUED" }, { ctx.go(CScreen.Fines) }, { ctx.go(CScreen.FindFine) }),
+                IndexRow("Sand & natural resource permits", 0, { ctx.go(CScreen.Permits) }, { ctx.go(CScreen.ApplyPermit) }),
                 IndexRow("Building plans", 0, { ctx.go(CScreen.Plans) }, { ctx.go(CScreen.NewPlan) }),
                 IndexRow("Stand applications", 0, { ctx.go(CScreen.Stands) }, { ctx.go(CScreen.ApplyStand) }),
                 IndexRow("Link another account", 0, { ctx.go(CScreen.LinkAccount) }),
@@ -150,6 +172,7 @@ fun ClientHome(ctx: CCtx) {
                 IndexRow("Problems I reported", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
                 IndexRow("Complaints & feedback", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
                 IndexRow("Notifications", notes.count { !it.isRead }, { ctx.go(CScreen.Notifications) }),
+                IndexRow("Council notices", 0, { ctx.go(CScreen.Notices) }),
             ))
             IndexModule("About", listOf(
                 IndexRow("Client Charter", 0, { ctx.go(CScreen.Charter) }),

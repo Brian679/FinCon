@@ -172,6 +172,11 @@ def staff_entities(user):
         "health_inspections": (s.sm.HealthInspection.objects.select_related("inspector"), s.InspectionSerializer) if c("health.view", "health.manage") else None,
         "sanitation": (s.sm.SanitationFacility.objects.all(), s.SanitationSerializer) if c("sanitation.view", "sanitation.manage") else None,
         "social_facilities": (s.sm.SocialFacility.objects.all(), s.FacilitySerializer) if c("facilities.view", "facilities.manage") else None,
+        "land_parcels": (s.dm.LandParcel.objects.all(), s.LandParcelSerializer) if c("land.view", "land.manage") else None,
+        "engagements": (s.dm.Engagement.objects.select_related("officer"), s.EngagementSerializer) if c("engagements.view", "engagements.manage") else None,
+        "public_notices": (s.dm.PublicNotice.objects.select_related("posted_by"), s.NoticeSerializer),   # every staff member reads the notices
+        "audit_engagements": (s.dm.AuditEngagement.objects.select_related("auditor"), s.AuditEngagementSerializer)
+        if c("auditplan.view", "auditplan.manage") else None,
     }
 
 
@@ -219,7 +224,16 @@ def client_entities(user):
         "building_plans": (s.BuildingPlan.objects.filter(applicant=user).select_related("bill"), s.BuildingPlanSerializer),
         "leases": (s.Lease.objects.filter(lessee__in=accounts).select_related("lessee", "premises"), s.LeaseSerializer),
         "trading_areas": (s.TradingArea.objects.filter(is_active=True), s.TradingAreaSerializer),
+        "fines": (s.Fine.objects.filter(account__in=accounts).select_related("offence", "issued_by"), s.FineSerializer),
+        "resource_permits": (s.sm.ResourcePermit.objects.filter(holder__in=accounts).prefetch_related("extractions"), s.PermitSerializer),
+        "public_notices": (_public_notices(user), s.NoticeSerializer),
     }
+
+
+def _public_notices(user):
+    today = timezone.localdate()
+    return s.dm.PublicNotice.objects.filter(is_published=True, publish_from__lte=today).filter(
+        Q(expires_on__isnull=True) | Q(expires_on__gte=today) | Q(updated_at__gte=timezone.now() - timedelta(days=1)))
 
 
 def entities_for(user):
@@ -779,6 +793,11 @@ def op_register_save(user, p):
                                lambda o: setattr(o, "inspector", user)),
         "sanitation": (_regs.form_for("sanitation"), s.sm.SanitationFacility, "sanitation.manage", s.SanitationSerializer, None),
         "social_facilities": (_regs.form_for("facilities"), s.sm.SocialFacility, "facilities.manage", s.FacilitySerializer, None),
+        "land_parcels": (_regs.form_for("land"), s.dm.LandParcel, "land.manage", s.LandParcelSerializer, None),
+        "engagements": (_regs.form_for("engagements"), s.dm.Engagement, "engagements.manage", s.EngagementSerializer,
+                        lambda o: setattr(o, "officer", user)),
+        "public_notices": (_regs.form_for("notices"), s.dm.PublicNotice, "notices.manage", s.NoticeSerializer, lambda o: setattr(o, "posted_by", user)),
+        "audit_engagements": (_regs.form_for("audits"), s.dm.AuditEngagement, "auditplan.manage", s.AuditEngagementSerializer, None),
     }
     if reg not in kinds:
         raise ValidationError("Unknown register.")
@@ -825,7 +844,7 @@ def op_hunt_action(user, p):
 def op_permit_decide(user, p):
     from social import services as sv
 
-    permit = sv.decide_permit(user, _get(s.sm.ResourcePermit, p["permit"]), p.get("action"), p.get("note", ""))
+    permit = sv.decide_permit(user, _get(s.sm.ResourcePermit, p["permit"]), p.get("action"), p.get("note", ""), unit_fee=p.get("unit_fee"))
     return "resource_permits", s.PermitSerializer(permit).data
 
 
@@ -925,7 +944,28 @@ STAFF_OPS = {
     "notification.read": op_notification_read,
 }
 
+def op_client_permit_apply(user, p):
+    """A resident (e.g. a sand collector) applies for a natural-resources permit in the client app.
+    No council account yet? One is opened from their profile so the fee can be billed and paid in the app."""
+    from finance.models import ClientAccount
+    from social import services as sv
+
+    accounts = _accounts_for(user)
+    if p.get("holder"):
+        holder = _get(ClientAccount, p["holder"], ClientAccount.objects.filter(pk__in=accounts.values("pk")))
+    else:
+        holder = accounts.first()
+        if holder is None:
+            holder = ClientAccount.objects.create(name=user.get_full_name() or user.username, phone=user.phone, id_number=user.national_id or "",
+                                                  email=user.email, ward=user.ward, created_by=user)
+            holder.portal_users.add(user)
+    permit = sv.client_apply_permit(user, holder=holder, permit_type=p["permit_type"], location=p["location"], ward=p.get("ward") or None,
+                                    quantity=p["quantity"], days=int(p.get("days") or 30), permit_id=p.get("id"), purpose=p.get("purpose", ""))
+    return "resource_permits", s.PermitSerializer(permit).data
+
+
 CLIENT_OPS = {
+    "permit.apply": op_client_permit_apply,
     "claim.create": op_claim_create,
     "plan.create": op_plan_create,
     "complaint.create": op_complaint_create,

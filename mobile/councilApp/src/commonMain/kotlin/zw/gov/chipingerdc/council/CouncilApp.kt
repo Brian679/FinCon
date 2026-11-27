@@ -136,6 +136,7 @@ sealed interface Screen {
     data class RegisterForm(val key: String, val id: String?) : Screen
     data object NewHunt : Screen
     data class LeaveDetail(val id: String) : Screen
+    data object DataHub : Screen
     data object NewFine : Screen
 }
 
@@ -322,6 +323,7 @@ private fun CouncilScreens(ctx: Ctx) {
         is Screen.RegisterForm -> RegisterFormScreen(ctx, s.key, s.id)
         Screen.NewHunt -> NewHuntScreen(ctx)
         is Screen.LeaveDetail -> LeaveDetailScreen(ctx, s.id)
+        Screen.DataHub -> DataHubScreen(ctx)
         Screen.NewFine -> NewFineScreen(ctx)
     }
 }

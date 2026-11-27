@@ -740,3 +740,10 @@ SanitationSerializer = _reg_serializer(sm.SanitationFacility, ["reference", "nam
                                                                "collection_days", "caretaker", "notes"])
 FacilitySerializer = _reg_serializer(sm.SocialFacility, ["reference", "name", "kind", "ward", "location", "responsible_authority", "population_served",
                                                          "classrooms_or_beds", "condition", "needs", "contact"])
+LandParcelSerializer = _reg_serializer(dm.LandParcel, ["parcel_number", "name", "ward", "location", "hectares", "land_use", "status", "survey_diagram",
+                                                       "title_deed", "valuation", "stands_planned", "notes"])
+EngagementSerializer = _reg_serializer(dm.Engagement, ["reference", "title", "kind", "date", "ward", "venue", "attendance", "issues_raised", "resolutions",
+                                                       "status", "officer"])
+NoticeSerializer = _reg_serializer(dm.PublicNotice, ["title", "category", "body", "ward", "publish_from", "expires_on", "is_published", "posted_by"])
+AuditEngagementSerializer = _reg_serializer(dm.AuditEngagement, ["reference", "title", "audit_type", "department", "quarter", "auditor", "status", "scope",
+                                                                 "conclusion"])
