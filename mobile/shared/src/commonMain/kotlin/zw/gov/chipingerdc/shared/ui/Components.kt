@@ -67,6 +67,10 @@ fun Modifier.bottomRule(color: Color = CrdcColors.Hairline, width: Dp = 1.dp) = 
  * Screen frame in the Django-admin layout:
  *  header (site name in gold, user links) · breadcrumbs bar (with sync status) · page title · content.
  */
+/** Height of the green header bar (below the status bar) and of the breadcrumb bar – the same on every screen and panel. */
+val HEADER_HEIGHT = 56.dp
+val CRUMBS_HEIGHT = 36.dp
+
 @Composable
 fun AppScreen(
     title: String,
@@ -79,8 +83,10 @@ fun AppScreen(
 ) {
     Column(Modifier.fillMaxSize().background(Color.White)) {
         // #header
+        // Fixed heights so every header lines up – the menu panel beside (or over) a screen has its gold rule and
+        // breadcrumb bar at exactly the same height as the screen, whether or not it shows the menu icon / profile picture.
         Row(
-            Modifier.fillMaxWidth().background(CrdcColors.Green).statusBarsPadding().padding(start = 16.dp, end = 4.dp, top = 10.dp, bottom = 10.dp),
+            Modifier.fillMaxWidth().background(CrdcColors.Green).statusBarsPadding().height(HEADER_HEIGHT).padding(start = 16.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             LocalMenuOpener.current?.let { open ->
@@ -97,7 +103,7 @@ fun AppScreen(
         Box(Modifier.fillMaxWidth().height(3.dp).background(CrdcColors.Gold))
         // div.breadcrumbs
         Row(
-            Modifier.fillMaxWidth().background(CrdcColors.GreenDark).padding(horizontal = 16.dp, vertical = 9.dp),
+            Modifier.fillMaxWidth().background(CrdcColors.GreenDark).height(CRUMBS_HEIGHT).padding(horizontal = 16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(if (onBack != null) "‹ Back" else "Home", color = Color.White, fontSize = 13.sp,

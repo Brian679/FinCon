@@ -65,6 +65,12 @@
     {% if user.is_authenticated and nav_items %}
     <button class="sticky toggle-nav-sidebar no-print" id="toggle-nav-sidebar" aria-label="Toggle navigation"></button>
     <nav class="sticky no-print" id="nav-sidebar" aria-label="Sidebar">
+      {# phones: the menu panel has the same header as the page, so the green bar, gold rule and menu bar line up #}
+      <div class="nav-drawer-head" aria-hidden="true">
+        <div class="ndh-top"><span>{% if SITE_KIND == 'staff' %}Chipinge RDC administration{% else %}Chipinge RDC online services{% endif %}</span>
+          <button type="button" class="ndh-close" onclick="document.body.classList.remove('nav-open')" aria-label="Close menu">&times;</button></div>
+        <div class="ndh-crumbs">Menu{% if user.get_department_display %} – {{ user.get_department_display }}{% endif %}</div>
+      </div>
       <input type="search" id="nav-filter" placeholder="Start typing to filter…" aria-label="Filter navigation items">
       {% for section in nav_items %}
       <div class="module{% for item in section.items %}{% if request.path == item.url %} current-app{% endif %}{% endfor %}">
