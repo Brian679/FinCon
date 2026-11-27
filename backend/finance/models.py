@@ -141,6 +141,7 @@ class RevenueHead(SyncModel):
     frequency = models.CharField(max_length=10, choices=Frequency.choices, default=Frequency.ONCE)
     budget_line = models.ForeignKey(BudgetLine, null=True, blank=True, on_delete=models.SET_NULL, related_name="revenue_heads")
     payable_online = models.BooleanField(default=True, help_text="Clients may pay this from the client app / portal")
+    per_hectare = models.BooleanField(default=False, help_text="Levy charged per hectare (farms): amount × hectares")
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -279,7 +280,7 @@ class Property(SyncModel):
         COMMERCIAL = "COM", "Commercial"
         INDUSTRIAL = "IND", "Industrial"
         INSTITUTIONAL = "INST", "Institutional"
-        AGRICULTURAL = "AGR", "Agricultural"
+        AGRICULTURAL = "AGR", "Agricultural / farm"
 
     account = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="properties")
     area = models.ForeignKey(TradingArea, null=True, blank=True, on_delete=models.PROTECT, related_name="properties")
@@ -289,6 +290,8 @@ class Property(SyncModel):
     ward = models.PositiveSmallIntegerField(null=True, blank=True)
     land_use = models.CharField(max_length=4, choices=LandUse.choices, default=LandUse.RESIDENTIAL)
     size_sqm = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    hectares = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                   help_text="Farms: size in hectares – the farm levy is charged per hectare")
     valuation = models.DecimalField(**MONEY, default=ZERO)
     monthly_rates = models.DecimalField(**MONEY, default=ZERO, help_text="Monthly rates charge (USD)")
     is_council_owned = models.BooleanField(default=False, help_text="Council-owned premises let out on lease")
@@ -300,7 +303,8 @@ class Property(SyncModel):
         unique_together = [("location", "stand_number")]
 
     def __str__(self):
-        return f"Stand {self.stand_number}, {self.location}"
+        kind = "Farm" if self.hectares else "Stand"
+        return f"{kind} {self.stand_number}, {self.location}"
 
 
 class Bill(SyncModel):
@@ -457,7 +461,7 @@ class Licence(SyncModel):
         INSPECTION = "INSPECTION", "Awaiting inspection"
         INSPECTED = "INSPECTED", "Inspected - passed"
         FAILED = "FAILED", "Inspected - failed"
-        APPROVED = "APPROVED", "Approved - awaiting payment"
+        APPROVED = "APPROVED", "Awaiting payment"
         ISSUED = "ISSUED", "Issued / active"
         REJECTED = "REJECTED", "Rejected"
         EXPIRED = "EXPIRED", "Expired"

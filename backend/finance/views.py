@@ -370,6 +370,13 @@ class LicenceDetail(GenericDetailView):
         return licence_scope(self.request.user, qs)
 
     template_name = "finance/licence_detail.html"
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        if self.object.status == Licence.Status.APPROVED:
+            ctx["still_to_pay"] = services.licence_outstanding(self.object)
+        return ctx
+
     fields = [("Type", "licence_type"), ("Business", "business_name"), ("Activity", "business_activity"), ("Account", "account"),
               ("Premises", "premises"), ("Ward", "ward"), ("Applicant", "applicant"), ("Fee (USD)", "fee"), ("Fee bill", "bill"),
               ("Inspected by", "inspected_by"), ("Inspection notes", "inspection_notes"), ("Approved by", "approved_by"),

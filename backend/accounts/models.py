@@ -92,6 +92,8 @@ class User(AbstractUser):
         return self.is_ceo or self.has_cap("audit.view_all")
 
     def clean(self):
+        if self.user_type == self.UserType.STAFF and self.role in roles.ANY_DEPARTMENT_ROLES and not self.department:
+            raise ValidationError({"department": "Choose the department this intern works in."})
         if self.user_type == self.UserType.STAFF and self.role:
             expected = roles.role_department(self.role)
             if self.department and expected and self.department != expected:

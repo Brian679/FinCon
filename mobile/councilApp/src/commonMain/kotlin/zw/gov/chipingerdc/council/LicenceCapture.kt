@@ -59,7 +59,7 @@ fun NewLicenceScreen(ctx: Ctx) {
                 }
                 ctx.back()
             })
-            InfoBox("Shops, food premises and liquor are inspected by the Environmental Health Officer first; then the Treasurer approves and the fee is billed. The licence is issued as soon as the fee is paid.")
+            InfoBox("No approvals: the licence fee is billed straight away and the licence is issued automatically once everything is paid – for a shop that is the licence fee, lease and levy. Health certificates and liquor still go to inspection.")
         }
     }
 }

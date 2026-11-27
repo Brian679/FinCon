@@ -537,9 +537,7 @@ class LoopholeTests(CouncilTestCase):
         from finance.models import Licence
 
         lic = fin.apply_licence(self.user("cashier"), account=self.other_acc, licence_type="SHOP", business_name="Grace Tuckshop", premises="Stand 9")
-        if lic.status == Licence.Status.INSPECTION:
-            lic = fin.inspect_licence(self.user("eho"), lic, True, "Clean")
-        lic = fin.decide_licence(self.user("treasurer"), lic, True, fee=Decimal("60"))
+        self.assertEqual(lic.status, Licence.Status.APPROVED)
         r = fin.issue_receipt(self.user("cashier"), revenue_head=lic.bill.revenue_head, amount=lic.bill.outstanding, account=lic.account, bill=lic.bill)
         lic.refresh_from_db()
         self.assertEqual(lic.status, Licence.Status.ISSUED)

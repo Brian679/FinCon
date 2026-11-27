@@ -17,7 +17,7 @@
         <input type="text" size="40" name="q" value="{{ q }}" id="searchbar">
         {% if current_filter %}<input type="hidden" name="{{ filter_field }}" value="{{ current_filter }}">{% endif %}{% if box %}<input type="hidden" name="box" value="{{ box }}">{% endif %}
         <input type="submit" value="Search">
-        {% if q %}<span class="small quiet">{{ page_obj.paginator.count|default:rows|length }} result(s) (<a href="?{% if current_filter %}{{ filter_field }}={{ current_filter }}{% endif %}">clear search</a>)</span>{% endif %}
+        {% if q %}<span class="small quiet">{% if page_obj %}{{ page_obj.paginator.count }}{% else %}{{ rows|length }}{% endif %} result(s) (<a href="?{% if current_filter %}{{ filter_field }}={{ current_filter }}{% endif %}">clear search</a>)</span>{% endif %}
       </div>
     </form></div>
     {% endif %}

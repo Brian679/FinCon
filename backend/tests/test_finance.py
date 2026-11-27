@@ -66,22 +66,98 @@ class RevenueTests(CouncilTestCase):
 
 
 class LicenceTests(CouncilTestCase):
-    def test_shop_licence_lifecycle(self):
+    def test_shop_licence_needs_no_approval_and_is_issued_when_paid(self):
         client = self.user("resident")
         lic = services.apply_licence(client, account=self.acc, licence_type="SHOP", business_name="Mhlanga Tuckshop", premises="Stand 101")
-        self.assertEqual(lic.status, Licence.Status.INSPECTION)
+        self.assertEqual(lic.status, Licence.Status.APPROVED)      # fee billed at once – no inspection, no Treasurer
+        self.assertEqual(lic.bill.amount, Decimal("60.00"))
         self.assertIsNotNone(lic.due_at)
+        services.issue_receipt(self.user("cashier"), revenue_head=self.shop, amount="75", account=self.acc)  # pays rates + licence
+        lic.refresh_from_db()
+        self.assertEqual(lic.status, Licence.Status.ISSUED)
+        self.assertIsNotNone(lic.expiry_date)
+
+    def test_shop_licence_waits_for_lease_and_levy(self):
+        from finance.models import Lease, RevenueHead
+        from datetime import date
+
+        cashier, treasurer = self.user("cashier"), self.user("treasurer")
+        prop = Property.objects.create(account=self.other_acc, location="Checheche", stand_number="TEST-1", business_name="Grace Butchery",
+                                       land_use="COM")
+        levy = RevenueHead.objects.get(code="DEV-LEVY")
+        services.run_levy_billing(treasurer, levy, 2026, area=None, amount=Decimal("45"))
+        services.create_lease(self.user("treasurer"), lessee=self.other_acc, premises=prop, start_date=date(2026, 1, 1), end_date=date(2027, 12, 31),
+                              monthly_rent=Decimal("120"), deposit=Decimal("0"), purpose="Butchery")
+        services.run_lease_billing(treasurer, 2026, 11)
+        lic = services.apply_licence(cashier, account=self.other_acc, licence_type="SHOP", business_name="Grace Butchery", premises="TEST-1",
+                                     property=prop)
+        owing = dict(services.licence_outstanding(lic))
+        self.assertEqual(owing, {"Licence fee": Decimal("60.00"), "Lease / rent": Decimal("120.00"), "Levy": Decimal("45.00")})
+        services.issue_receipt(cashier, revenue_head=lic.bill.revenue_head, amount="60", account=self.other_acc, bill=lic.bill)
+        lic.refresh_from_db()
+        self.assertEqual(lic.status, Licence.Status.APPROVED)     # fee paid but lease and levy still owing
+        for bill in prop.bills.filter(status="UNPAID"):
+            services.issue_receipt(cashier, revenue_head=bill.revenue_head, amount=str(bill.amount), account=self.other_acc, bill=bill)
+        lic.refresh_from_db()
+        self.assertEqual(lic.status, Licence.Status.ISSUED)        # everything paid → issued by itself
+
+    def test_health_certificate_still_inspected(self):
+        lic = services.apply_licence(self.user("resident"), account=self.acc, licence_type="HEALTH", business_name="Mhlanga Tuckshop",
+                                     premises="Stand 101")
+        self.assertEqual(lic.status, Licence.Status.INSPECTION)
         with self.assertRaises(PermissionDenied):
             services.inspect_licence(self.user("cashier"), lic, True, "")
         services.inspect_licence(self.user("eho"), lic, True, "Clean premises")
         services.decide_licence(self.user("treasurer"), lic, True)
         lic.refresh_from_db()
         self.assertEqual(lic.status, Licence.Status.APPROVED)
-        self.assertEqual(lic.bill.amount, Decimal("60.00"))
-        services.issue_receipt(self.user("cashier"), revenue_head=self.shop, amount="75", account=self.acc)  # pays rates + licence
-        lic.refresh_from_db()
-        self.assertEqual(lic.status, Licence.Status.ISSUED)
-        self.assertIsNotNone(lic.expiry_date)
+
+
+class FarmLevyTests(CouncilTestCase):
+    def test_farms_pay_per_hectare_and_not_flat_levies(self):
+        from finance.models import ClientAccount, RevenueHead
+
+        treasurer = self.user("treasurer")
+        farm_acc = ClientAccount.objects.create(name="Test Farm", account_type="FARM")
+        farm = Property.objects.create(account=farm_acc, location="Test farms", stand_number="F-1", land_use="AGR", hectares=Decimal("40"))
+        head = RevenueHead.objects.get(code="FARM-LEVY")
+        self.assertTrue(head.per_hectare)
+        services.run_levy_billing(treasurer, head, 2030)
+        bill = farm.bills.get(revenue_head=head)
+        self.assertEqual(bill.amount, Decimal("200.00"))           # 40 ha × $5
+        self.assertIn("40 ha", bill.description)
+        stand_bills = Bill.objects.filter(revenue_head=head, property__hectares__isnull=True)
+        self.assertFalse(stand_bills.exists())                     # stands / households don't pay the farm levy
+        services.run_levy_billing(treasurer, RevenueHead.objects.get(code="DEV-LEVY"), 2030)
+        self.assertFalse(farm.bills.filter(revenue_head__code="DEV-LEVY").exists())
+        self.assertTrue(Bill.objects.filter(revenue_head__code="DEV-LEVY", period="2030", property__stand_number="101").exists())
+        self.assertEqual(services.run_levy_billing(treasurer, head, 2030)[0], 0)   # idempotent
+
+
+class InternTests(CouncilTestCase):
+    def test_intern_works_on_department_tasks_only(self):
+        from accounts.forms import StaffUserForm
+        from workflow import services as wf
+
+        intern = self.user("intern")
+        self.assertEqual(intern.department, "TECH")
+        self.assertTrue(intern.has_cap("tasks.view"))
+        self.assertFalse(intern.has_cap("funds.request"))
+        self.assertFalse(intern.has_cap("receipt.create"))
+        task = wf.create_task(self.user("engineer"), title="Measure culverts", assigned_to=intern, department="TECH")
+        wf.update_task(intern, task, status="IN_PROGRESS", progress=40, comment="Two of four done")
+        task.refresh_from_db()
+        self.assertEqual(task.progress, 40)
+        with self.assertRaises(PermissionDenied):
+            wf.create_task(self.user("treasurer"), title="x", assigned_to=intern, department="TECH")
+        form = StaffUserForm(data={"username": "intern2", "first_name": "A", "last_name": "B", "role": "INTERN", "temporary_password": "Xy!12345abc",
+                                   "is_active": True})
+        self.assertFalse(form.is_valid())
+        self.assertIn("department", form.errors)
+        form = StaffUserForm(data={"username": "intern2", "first_name": "A", "last_name": "B", "role": "INTERN", "department": "FINANCE",
+                                   "temporary_password": "Xy!12345abc", "is_active": True})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save().department, "FINANCE")
 
     def test_client_cannot_apply_on_someone_elses_account(self):
         with self.assertRaises(PermissionDenied):

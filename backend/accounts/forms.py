@@ -29,7 +29,8 @@ class StaffUserForm(BootstrapFormMixin, forms.ModelForm):
 
     class Meta:
         model = User
-        fields = ["username", "first_name", "last_name", "email", "phone", "employee_number", "national_id", "role", "annual_leave_days", "is_active"]
+        fields = ["username", "first_name", "last_name", "email", "phone", "employee_number", "national_id", "role", "department",
+                  "annual_leave_days", "is_active"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -39,8 +40,17 @@ class StaffUserForm(BootstrapFormMixin, forms.ModelForm):
         self.fields["annual_leave_days"].required = False
         grouped = {}
         for code, (label, dept, _lvl) in roles.ROLES.items():
-            grouped.setdefault(Department(dept).label, []).append((code, label))
+            grouped.setdefault(Department(dept).label if dept else "Any department", []).append((code, label))
         self.fields["role"].choices = [("", "---------")] + list(grouped.items())
+        self.fields["department"].required = False
+        self.fields["department"].help_text = "Only for interns – other roles belong to their role's department."
+
+    def clean(self):
+        data = super().clean()
+        role = data.get("role")
+        if role in roles.ANY_DEPARTMENT_ROLES and not data.get("department"):
+            self.add_error("department", "Choose the department this intern works in.")
+        return data
         if not self.instance.pk:
             self.fields["temporary_password"].required = True
 
@@ -50,7 +60,7 @@ class StaffUserForm(BootstrapFormMixin, forms.ModelForm):
     def save(self, commit=True):
         user = super().save(commit=False)
         user.user_type = User.UserType.STAFF
-        user.department = roles.role_department(user.role)
+        user.department = roles.role_department(user.role) or self.cleaned_data.get("department") or ""
         pwd = self.cleaned_data.get("temporary_password")
         if pwd:
             user.set_password(pwd)

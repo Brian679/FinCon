@@ -43,7 +43,15 @@ ROLES = {
     "ENGINEER": ("District Engineer (Head of Technical Services)", D.TECHNICAL_SERVICES, Level.HEAD),
     "TECHNICAL_OFFICER": ("Technical Officer", D.TECHNICAL_SERVICES, Level.OFFICER),
     "BUILDING_INSPECTOR": ("Building Inspector / Development Control", D.TECHNICAL_SERVICES, Level.OFFICER),
+    # Any department: the department is chosen when the intern's account is created
+    "INTERN": ("Intern / Attachment student", None, Level.CLERK),
 }
+
+# Roles that can be placed in any department (the role itself does not fix the department).
+ANY_DEPARTMENT_ROLES = {"INTERN"}
+
+# Interns do the work their department gives them (tasks, faults, memos) but never commit council money.
+INTERN_EXCLUDED = {"funds.request", "requisition.create"}
 
 ROLE_CHOICES = [(code, label) for code, (label, _d, _l) in ROLES.items()]
 
@@ -240,5 +248,7 @@ def role_level(code):
 
 def capabilities_for(role):
     caps = set(STAFF_BASE)
+    if role == "INTERN":
+        return caps - INTERN_EXCLUDED
     caps |= ROLE_CAPS.get(role, set())
     return caps

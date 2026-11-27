@@ -70,7 +70,7 @@ data class Property(
     val id: String, val account: String = "", val accountName: String = "", val accountNumber: String = "", val accountPhone: String = "",
     val registered: Boolean = false, val area: String? = null, val areaName: String = "", val standNumber: String = "", val businessName: String = "",
     val location: String = "", val ward: Int? = null, val landUse: String = "", val landUseLabel: String = "", val valuation: String = "0",
-    val monthlyRates: String = "0", val isCouncilOwned: Boolean = false, val isActive: Boolean = true,
+    val monthlyRates: String = "0", val hectares: String? = null, val isCouncilOwned: Boolean = false, val isActive: Boolean = true,
 )
 
 @Serializable
@@ -100,7 +100,12 @@ data class Licence(
     val ward: Int? = null, val status: String = "", val statusLabel: String = "", val fee: String = "0", val bill: String? = null,
     val inspectionNotes: String = "", val rejectionReason: String = "", val issueDate: String? = null, val expiryDate: String? = null,
     val dueAt: String? = null, val createdAt: String = "", val localNote: String? = null,
+    /** Shops: licence fee, lease and levy still owing – the licence is issued by itself once this is empty. */
+    val stillToPay: List<Owing> = emptyList(),
 )
+
+@Serializable
+data class Owing(val label: String = "", val amount: String = "0")
 
 @Serializable
 data class RequisitionItem(val description: String = "", val quantity: String = "", val unitCost: String = "", val total: String = "")

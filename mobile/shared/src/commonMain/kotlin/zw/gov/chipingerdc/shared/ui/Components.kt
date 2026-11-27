@@ -212,9 +212,11 @@ fun statusColor(code: String): Color = when (tone(code)) {
 /** Status text with Django admin's yes / no / alert icon. */
 @Composable
 fun StatusChip(text: String, code: String = text) {
-    val t = tone(code)
+    // "Awaiting payment" (e.g. a licence) still needs something from the client: never show it as done
+    val t = if (text.startsWith("Awaiting", ignoreCase = true)) Tone.ATTENTION else tone(code)
     val icon = when (t) { Tone.GOOD -> "✔ "; Tone.BAD -> "✖ "; Tone.ATTENTION -> "⚠ "; Tone.NEUTRAL -> "" }
-    Text(icon + text, color = statusColor(code), fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    val color = when (t) { Tone.GOOD -> CrdcColors.Success; Tone.BAD -> CrdcColors.Danger; Tone.ATTENTION -> CrdcColors.Warning; Tone.NEUTRAL -> CrdcColors.Muted }
+    Text(icon + text, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
 }
 
 @Composable

@@ -147,7 +147,8 @@ class GenericListView(CapRequiredMixin, ListView):
                 key = accessor if isinstance(accessor, str) else ""
                 if key.endswith("status") or key in ("priority", "risk_rating"):
                     raw_val = getattr(obj, key.split(".")[-1], "")
-                    cells.append({"text": fmt(resolve(obj, accessor)), "badge": badge_class(raw_val)})
+                    text = fmt(resolve(obj, accessor))
+                    cells.append({"text": text, "badge": "warning" if str(text).startswith("Awaiting") else badge_class(raw_val)})
                 else:
                     val = resolve(raw, accessor)
                     cells.append({"text": fmt(val), "num": isinstance(val, Decimal)})
@@ -274,7 +275,7 @@ class GenericDetailView(CapRequiredMixin, DetailView):
         status = getattr(obj, "status", None)
         if status:
             ctx["status_text"] = obj.get_status_display()
-            ctx["status_badge"] = badge_class(status)
+            ctx["status_badge"] = "warning" if ctx["status_text"].startswith("Awaiting") else badge_class(status)
         if self.edit_url_name and (not self.edit_caps or self.request.user.has_cap(*self.edit_caps)):
             ctx["edit_url"] = reverse(self.edit_url_name, args=[obj.pk])
         from finance.models import ApprovalRecord

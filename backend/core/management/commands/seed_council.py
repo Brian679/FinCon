@@ -65,6 +65,7 @@ REVENUE_HEADS = [
     ("RATES", "Property / land rates", "RATES", 0, "MONTHLY", "I-100"),
     ("DEV-LEVY", "Development levy", "LEVY", 5, "ANNUAL", "I-110"),
     ("UNIT-TAX", "Unit tax", "LEVY", 2, "ANNUAL", "I-110"),
+    ("FARM-LEVY", "Farm levy (per hectare)", "LEVY", 5, "ANNUAL", "I-110"),
     ("LIC-SHOP", "Shop licence", "LICENCE", 60, "ANNUAL", "I-120"),
     ("LIC-HAWKER", "Hawker / vendor licence", "LICENCE", 20, "ANNUAL", "I-120"),
     ("LIC-BUSINESS", "General business licence", "LICENCE", 80, "ANNUAL", "I-120"),
@@ -81,6 +82,8 @@ REVENUE_HEADS = [
     ("SUNDRY", "Sundry income", "OTHER", 0, "ONCE", "I-130"),
 ]
 
+DEMO_INTERN_DEPARTMENT = {"intern": "TECH"}   # interns are placed in a department when their account is made
+
 DEMO_STAFF = [
     # username, first, last, role
     ("ceo", "Tendai", "Mutasa", "CEO"),
@@ -95,6 +98,7 @@ DEMO_STAFF = [
     ("procurement", "Kuda", "Mapfumo", "PROCUREMENT_OFFICER"),
     ("registry", "Blessing", "Zhou", "RECORDS_CLERK"),
     ("reception", "Rumbidzai", "Makoni", "RECEPTIONIST"),
+    ("intern", "Tafadzwa", "Mhere", "INTERN"),
     ("chief.auditor", "Patience", "Mazarura", "CHIEF_AUDITOR"),
     ("auditor", "Tinashe", "Chari", "AUDITOR"),
     ("social.director", "Memory", "Sibanda", "SOCIAL_HEAD"),
@@ -127,7 +131,7 @@ class Command(BaseCommand):
                                                               defaults=dict(description=desc, department=dept, kind=kind, approved_amount=Decimal(amount)))
         for code, name, cat, amount, freq, vote in REVENUE_HEADS:
             RevenueHead.objects.get_or_create(code=code, defaults=dict(name=name, category=cat, default_amount=Decimal(amount), frequency=freq,
-                                                                       budget_line=votes.get(vote)))
+                                                                       budget_line=votes.get(vote), per_hectare=code == "FARM-LEVY"))
         if not BankAccount.objects.exists():
             BankAccount.objects.create(name="Main revenue account (USD)", bank="CBZ Bank Chipinge", account_number="0000000000001", currency="USD")
             BankAccount.objects.create(name="Main revenue account (ZWG)", bank="CBZ Bank Chipinge", account_number="0000000000002", currency="ZWG")
@@ -156,7 +160,7 @@ class Command(BaseCommand):
             n += 1
             u, _ = User.objects.get_or_create(username=username, defaults=dict(first_name=first, last_name=last, employee_number=f"CRDC{n}",
                                                                                email=f"{username}@chipingerdc.gov.zw"))
-            u.user_type, u.role, u.department = User.UserType.STAFF, role, roles.role_department(role)
+            u.user_type, u.role, u.department = User.UserType.STAFF, role, roles.role_department(role) or DEMO_INTERN_DEPARTMENT.get(username, "")
             if role == "SYSADMIN":
                 u.is_superuser = u.is_staff = True
             u.set_password(pwd)
@@ -293,6 +297,7 @@ class Command(BaseCommand):
         self._demo_more_areas(u)
         self._demo_requests(u)
         self._demo_payroll(u)
+        self._demo_farms_and_intern(u)
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""
@@ -424,6 +429,27 @@ class Command(BaseCommand):
                                            issue_date=date(today.year - 1, 1, 10), expiry_date=date(today.year - 1, 12, 31))
                 # else: nothing paid, no licence
 
+    def _demo_farms_and_intern(self, u):
+        """Demo farms (farm levy $5 a hectare) and work given to the Technical Services intern."""
+        from finance import services as fin
+        from finance.models import ClientAccount as Acc, Property, RevenueHead
+        from workflow import services as wf
+
+        farms = [("Chako Estates (Pvt) Ltd", "CORP", "Middle Sabi", "MS-F12", 120), ("S. Mlambo", "IND", "Middle Sabi", "MS-F31", 8),
+                 ("Tanganda Farmers Co-operative", "CORP", "Tanganda", "TG-F4", 45), ("R. Dhliwayo", "IND", "Chibuwe", "CB-F9", 12.5)]
+        for name, kind, place, number, ha in farms:
+            acc = Acc.objects.create(name=name, account_type="FARM" if kind == "CORP" else "IND", phone=f"07724{ha * 10:05.0f}")
+            Property.objects.create(account=acc, location=f"{place} farms", stand_number=number, land_use="AGR", hectares=Decimal(str(ha)))
+        year = timezone.localdate().year
+        fin.run_levy_billing(u["treasurer"], RevenueHead.objects.get(code="FARM-LEVY"), year)
+        first = Property.objects.get(stand_number="MS-F31")
+        bill = first.bills.first()
+        fin.issue_receipt(u["collector"], revenue_head=bill.revenue_head, amount=bill.amount, account=first.account, bill=bill, channel="FIELD")
+        for title, desc, due in (("Survey culvert sites – Ward 7", "Measure and photograph the 4 culverts on the Chipinge–Checheche road.", 5),
+                                 ("Update the road condition register", "Enter last week's inspection notes into the register.", 9)):
+            wf.create_task(u["engineer"], title=title, description=desc, assigned_to=u["intern"], department="TECH",
+                           due_date=timezone.localdate() + timezone.timedelta(days=due))
+
     def _demo_payroll(self, u):
         """Demo salaries and two months of payroll (illustrative amounts only – not real council salaries)."""
         from payroll import services as pr
@@ -432,7 +458,7 @@ class Command(BaseCommand):
         User = get_user_model()
         bands = {"EXEC": ("D1", 2800), "HEAD": ("C2", 1800), "OFFICER": ("B3", 1000), "CLERK": ("A4", 650)}
         for user in User.objects.filter(user_type=User.UserType.STAFF, is_active=True).exclude(role=""):
-            grade, basic = bands.get(user.level or "OFFICER", ("B3", 1000))
+            grade, basic = ("INT", 250) if user.role == "INTERN" else bands.get(user.level or "OFFICER", ("B3", 1000))
             basic = Decimal(basic)
             payer = u["accountant"] if user.pk != u["accountant"].pk else u["treasurer"]
             pr.update_salary(payer, user, grade=grade, basic_salary=basic, housing_allowance=(basic * Decimal("0.15")).quantize(Decimal("1")),

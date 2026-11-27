@@ -115,7 +115,8 @@ class LeviesLeasesRemindersTests(CouncilTestCase):
         prop = Property.objects.get(stand_number="S2")
         lic = services.apply_licence(self.user("cashier"), account=prop.account, licence_type="BUSINESS", business_name="Selinda Grocers",
                                      premises="S2", property=prop)
-        services.decide_licence(self.user("treasurer"), lic, True)
+        self.assertEqual(lic.status, "APPROVED")   # no approvals: billed straight away
+        prop.account.refresh_from_db()
         services.issue_receipt(self.user("cashier"), revenue_head=self.rates, amount=str(prop.account.balance), account=prop.account)
         c = services.property_compliance(prop)
         self.assertEqual(c["licence"], "VALID")

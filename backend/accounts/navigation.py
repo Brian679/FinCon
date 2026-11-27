@@ -79,8 +79,9 @@ def build_nav(user):
     general += [
         _item("Tasks", "workflow:tasks"),
         _item("Memos to / from departments", "workflow:memos"),
-        _item("Requests for funds & purchases", "workflow:funds"),
-        _item("Purchase requisitions", "finance:requisitions"),
+        # interns do department work but never commit council money
+        _item("Requests for funds & purchases", "workflow:funds") if c("funds.request") else None,
+        _item("Purchase requisitions", "finance:requisitions") if c("requisition.create") else None,
         _item("Service requests / faults", "workflow:requests"),
         _item("ICT support", "departments:tickets"),
     ]

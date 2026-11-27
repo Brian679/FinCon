@@ -224,7 +224,10 @@ fun AccountDetailScreen(ctx: Ctx, id: String) {
             }
             if (ctx.me.can("receipt.create")) PrimaryButton("Receive payment", onClick = { ctx.go(Screen.NewReceiptFor(acc.id, null)) })
             SectionCard("Properties / stands") {
-                props.filter { it.account == acc.id }.forEach { KeyValue("Stand ${it.standNumber}", "${it.location} · ${it.landUseLabel} · $${money(it.monthlyRates)}/month") }
+                props.filter { it.account == acc.id }.forEach {
+                    if (it.hectares != null) KeyValue("Farm ${it.standNumber}", "${it.location} · ${it.hectares} ha · farm levy per hectare")
+                    else KeyValue("Stand ${it.standNumber}", "${it.location} · ${it.landUseLabel} · $${money(it.monthlyRates)}/month")
+                }
             }
             SectionCard("Unpaid / recent bills") {
                 val mine = bills.filter { it.account == acc.id }
@@ -280,6 +283,11 @@ fun LicenceDetailScreen(ctx: Ctx, id: String) {
                 KeyValue("Valid", if (lic.issueDate != null) "${prettyDate(lic.issueDate)} – ${prettyDate(lic.expiryDate)}" else null)
                 Row { StatusChip(lic.statusLabel, lic.status) }
                 if (lic.localNote != null) InfoBox(lic.localNote!!)
+            }
+            if (lic.stillToPay.isNotEmpty()) SectionCard("Still to pay") {
+                lic.stillToPay.forEach { KeyValue(it.label, "USD ${money(it.amount)}") }
+                InfoBox("No approvals needed: the licence is issued automatically as soon as everything is paid.")
+                if (ctx.me.can("receipt.create") && lic.bill != null) PrimaryButton("Receive payment", onClick = { ctx.go(Screen.NewReceiptFor(lic.account, lic.bill)) })
             }
             when (licenceStage(ctx.me, lic)) {
                 "Inspection" -> SectionCard("Premises inspection") {

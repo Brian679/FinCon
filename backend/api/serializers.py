@@ -91,7 +91,7 @@ class PropertySerializer(SyncSerializer):
     class Meta:
         model = Property
         fields = _sync_fields(Property, ["account", "account_name", "account_number", "account_phone", "registered", "area", "area_name",
-                                         "stand_number", "business_name", "location", "ward", "land_use", "valuation", "monthly_rates",
+                                         "stand_number", "business_name", "location", "ward", "land_use", "hectares", "valuation", "monthly_rates",
                                          "is_council_owned", "is_active"])
 
     def get_registered(self, obj):
@@ -123,12 +123,20 @@ class ReceiptSerializer(SyncSerializer):
 
 class LicenceSerializer(SyncSerializer):
     account_number = serializers.CharField(source="account.account_number", read_only=True)
+    still_to_pay = serializers.SerializerMethodField()
+
+    def get_still_to_pay(self, obj):
+        if obj.status != Licence.Status.APPROVED:
+            return []
+        from finance.services import licence_outstanding
+
+        return [{"label": label, "amount": str(amount)} for label, amount in licence_outstanding(obj)]
 
     class Meta:
         model = Licence
         fields = _sync_fields(Licence, ["number", "licence_type", "account", "property", "account_number", "business_name", "business_activity", "premises",
                                         "ward", "status", "fee", "bill", "inspection_notes", "rejection_reason", "issue_date", "expiry_date",
-                                        "due_at"])
+                                        "due_at", "still_to_pay"])
 
 
 class RequisitionSerializer(SyncSerializer):

@@ -12,7 +12,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from core import audit, sla
@@ -128,7 +128,7 @@ def notify_payment(receipt, extra_users=()):
         return 0
     account.refresh_from_db(fields=["balance"])
     prop = receipt.bill.property if receipt.bill_id and receipt.bill.property_id else None
-    what = f" for stand {prop.stand_number}" + (f" ({prop.business_name})" if prop and prop.business_name else "") if prop else ""
+    what = (f" for farm {prop.stand_number}" if prop.hectares else f" for stand {prop.stand_number}") + (f" ({prop.business_name})" if prop and prop.business_name else "") if prop else ""
     where = {Receipt.Channel.COUNTER: "at the council offices", Receipt.Channel.FIELD: "by a council revenue collector"}.get(receipt.channel, "online")
     left = "Your account is fully paid – nothing owing." if account.balance <= 0 else f"Balance remaining: USD {account.balance:,.2f}."
     body = (f"Receipt {receipt.number}: {receipt.currency} {receipt.amount:,.2f}{what} paid {where} on "
@@ -269,20 +269,71 @@ def apply_licence(user, *, account, licence_type, business_name, premises, busin
     else:
         _require(user, "licence.manage")
     head = RevenueHead.objects.filter(code=f"LIC-{licence_type}").first() or RevenueHead.objects.filter(category=RevenueHead.Category.LICENCE).first()
-    needs_inspection = licence_type in (Licence.LicenceType.SHOP, Licence.LicenceType.HEALTH, Licence.LicenceType.LIQUOR)
+    if property is None and licence_type == Licence.LicenceType.SHOP:
+        # a shop licence belongs to the shop's stand: link it when the account has exactly one business stand
+        stands = account.properties.alive().exclude(business_name="")
+        property = stands.first() if stands.count() == 1 else None
+    automatic = licence_type in AUTO_ISSUE_LICENCES
+    needs_inspection = not automatic and licence_type in (Licence.LicenceType.HEALTH, Licence.LicenceType.LIQUOR)
     kwargs = {"id": licence_id} if licence_id else {}
     lic = Licence.objects.create(
         licence_type=licence_type, account=account, business_name=business_name, premises=premises,
         business_activity=business_activity, ward=ward or account.ward, applicant=user, revenue_head=head, property=property,
         fee=head.default_amount if head else 0, renewal_of=renewal_of, created_by=user,
-        status=Licence.Status.INSPECTION if needs_inspection else Licence.Status.APPLIED,
+        status=Licence.Status.APPROVED if automatic else Licence.Status.INSPECTION if needs_inspection else Licence.Status.APPLIED,
         due_at=sla.due_from_standard("process-applications"), **kwargs,
     )
-    if needs_inspection:
+    if automatic:
+        # No approvals: the fee is billed straight away and the licence is issued by itself once everything is paid.
+        if lic.fee and lic.fee > 0:
+            lic.bill = Bill.objects.create(account=account, property=property, revenue_head=head, amount=lic.fee,
+                                           description=f"{lic.get_licence_type_display()} {lic.number} - {lic.business_name}",
+                                           due_date=timezone.localdate() + timezone.timedelta(days=30), created_by=user)
+            lic.save(update_fields=["bill", "updated_at"])
+        audit.log(AuditLog.Action.CREATE, lic, user=user, message="Licence fee billed – issued automatically when fully paid")
+        account.recalculate()
+        _maybe_issue_licences(account)
+        lic.refresh_from_db()
+        if lic.status == Licence.Status.APPROVED:
+            notify(client_people(account, user if user.is_client else None), f"Licence {lic.number}: pay to receive it",
+                   licence_dues_message(lic))
+    elif needs_inspection:
         notify(users_with_cap("licence.inspect"), f"Inspection required: {lic.business_name}", lic.premises)
     else:
         notify(users_with_cap("licence.approve", "FINANCE"), f"Licence application: {lic.business_name}")
     return lic
+
+
+# Licences issued automatically as soon as everything is paid – no inspection or Treasurer approval.
+# Health certificates and liquor recommendations still need an inspection / council decision.
+AUTO_ISSUE_LICENCES = (Licence.LicenceType.SHOP, Licence.LicenceType.HAWKER, Licence.LicenceType.BUSINESS,
+                       Licence.LicenceType.TRANSPORT, Licence.LicenceType.ADVERT)
+
+
+def licence_outstanding(lic):
+    """What must still be paid before this licence is issued: [(label, amount)].
+
+    The licence fee always; for a shop also every unpaid lease (rent) and levy bill on the shop."""
+    out = []
+    if lic.bill_id and lic.bill.status not in (Bill.Status.PAID, Bill.Status.CANCELLED):
+        out.append(("Licence fee", lic.bill.outstanding))
+    if lic.licence_type == Licence.LicenceType.SHOP:
+        dues = Bill.objects.alive().filter(status__in=[Bill.Status.UNPAID, Bill.Status.PART_PAID],
+                                           revenue_head__category__in=[RevenueHead.Category.RENT, RevenueHead.Category.LEVY])
+        dues = dues.filter(property=lic.property) if lic.property_id else dues.filter(account=lic.account)
+        for cat, label in ((RevenueHead.Category.RENT, "Lease / rent"), (RevenueHead.Category.LEVY, "Levy")):
+            amt = sum((b.outstanding for b in dues if b.revenue_head.category == cat), Decimal(0))
+            if amt > 0:
+                out.append((label, q2(amt)))
+    return out
+
+
+def licence_dues_message(lic):
+    owing = licence_outstanding(lic)
+    if not owing:
+        return "Fully paid."
+    parts = ", ".join(f"{label} USD {amt:,.2f}" for label, amt in owing)
+    return f"{lic.business_name}: still to pay {parts}. The licence is issued automatically as soon as everything is paid."
 
 
 @transaction.atomic
@@ -333,9 +384,13 @@ def decide_licence(user, lic, approve: bool, reason="", fee=None):
 
 
 def _maybe_issue_licences(account):
-    """Issue approved licences as soon as their fee bill is fully paid."""
-    for lic in account.licences.alive().filter(status=Licence.Status.APPROVED).select_related("bill"):
-        if lic.bill is None or lic.bill.status == Bill.Status.PAID:
+    """Issue approved licences as soon as everything is paid: the fee, and for a shop its lease and levy too."""
+    lics = Licence.objects.alive().filter(status=Licence.Status.APPROVED).filter(
+        models.Q(account=account) | models.Q(property__account=account) | models.Q(property__bills__account=account)).distinct()
+    for lic in lics.select_related("bill", "property"):
+        account = lic.account
+        Licence.objects.filter(pk=lic.pk).update(updated_at=timezone.now())   # apps re-sync "still to pay"
+        if not licence_outstanding(lic):
             today = timezone.localdate()
             lic.status = Licence.Status.ISSUED
             lic.issue_date = today
@@ -631,13 +686,20 @@ def confirm_online_payment(payment, provider_reference=""):
 
 # ------------------------------------------------------- levies & leases
 def run_levy_billing(user, revenue_head, year: int, *, area=None, land_use=None, amount=None):
-    """Raise an annual levy (development levy, unit tax ...) on every matching property. Idempotent per year."""
+    """Raise an annual levy on every matching property. Idempotent per year.
+
+    Stands, households and shops pay a flat levy (development levy, unit tax ...); farms pay the farm levy,
+    which is charged per hectare (e.g. $5 x 40 ha = $200), and are left out of the flat levies."""
     _require(user, "billing.run")
     amount = q2(amount or revenue_head.default_amount)
     if amount <= 0:
         raise ValidationError("Set an amount for the levy.")
     period = f"{year:04d}"
     props = Property.objects.alive().filter(is_active=True, account__status=ClientAccount.Status.ACTIVE).select_related("account")
+    if revenue_head.per_hectare:
+        props = props.filter(hectares__gt=0)
+    else:
+        props = props.filter(models.Q(hectares__isnull=True) | models.Q(hectares=0))
     if area is not None:
         props = props.filter(area=area)
     if land_use:
@@ -647,8 +709,12 @@ def run_levy_billing(user, revenue_head, year: int, *, area=None, land_use=None,
         if Bill.objects.alive().filter(account=prop.account, property=prop, revenue_head=revenue_head, period=period).exclude(status=Bill.Status.CANCELLED).exists():
             skipped += 1
             continue
-        Bill.objects.create(account=prop.account, property=prop, revenue_head=revenue_head, period=period, amount=amount,
-                            description=f"{revenue_head.name} {year} – {prop}", due_date=date(year, 3, 31) if date(year, 3, 31) > timezone.localdate() else timezone.localdate() + timezone.timedelta(days=30),
+        charge, what = amount, f"{revenue_head.name} {year} – {prop}"
+        if revenue_head.per_hectare:
+            charge = q2(amount * prop.hectares)
+            what = f"{revenue_head.name} {year} – {prop} ({prop.hectares.normalize():f} ha × ${amount:,.2f})"
+        Bill.objects.create(account=prop.account, property=prop, revenue_head=revenue_head, period=period, amount=charge,
+                            description=what, due_date=date(year, 3, 31) if date(year, 3, 31) > timezone.localdate() else timezone.localdate() + timezone.timedelta(days=30),
                             created_by=user)
         prop.account.recalculate()
         created += 1
@@ -784,7 +850,7 @@ def broadcast(user, accounts, subject, body, campaign=""):
 
 # --------------------------------------------------------- register import
 IMPORT_COLUMNS = ["area", "ward", "stand_number", "owner_name", "account_type", "phone", "id_number", "email", "land_use",
-                  "business_name", "monthly_rates", "valuation", "council_owned"]
+                  "business_name", "monthly_rates", "valuation", "council_owned", "hectares"]
 
 
 @transaction.atomic
@@ -820,7 +886,10 @@ def import_register(user, rows):
                 raise ValidationError(f"land_use must be one of {', '.join(Property.LandUse.values)}")
             defaults = dict(account=acc, area=area, ward=ward or area.ward, land_use=land_use, business_name=row.get("business_name", ""),
                             monthly_rates=q2(row.get("monthly_rates") or 0), valuation=q2(row.get("valuation") or 0),
-                            is_council_owned=row.get("council_owned", "").lower() in ("1", "yes", "y", "true"))
+                            is_council_owned=row.get("council_owned", "").lower() in ("1", "yes", "y", "true"),
+                            hectares=q2(row["hectares"]) if row.get("hectares") else None)
+            if defaults["hectares"]:
+                defaults["land_use"] = Property.LandUse.AGRICULTURAL
             prop = Property.objects.filter(location=area.name, stand_number=row["stand_number"]).first()
             if prop is None:
                 Property.objects.create(location=area.name, stand_number=row["stand_number"], created_by=user, **defaults)

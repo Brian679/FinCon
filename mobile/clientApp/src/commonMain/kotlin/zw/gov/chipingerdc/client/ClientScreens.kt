@@ -203,7 +203,10 @@ fun AccountScreen(ctx: CCtx, id: String) {
             SectionCard(acc.name) {
                 KeyValue("Account no.", acc.accountNumber)
                 KeyValue("Amount due", "USD ${money(acc.balance)}")
-                props.filter { it.account == acc.id }.forEach { KeyValue("Stand ${it.standNumber}", "${it.location} · $${money(it.monthlyRates)}/month") }
+                props.filter { it.account == acc.id }.forEach {
+                    if (it.hectares != null) KeyValue("Farm ${it.standNumber}", "${it.location} · ${it.hectares} ha")
+                    else KeyValue("Stand ${it.standNumber}", "${it.location} · $${money(it.monthlyRates)}/month")
+                }
             }
             PrimaryButton("Pay", onClick = { ctx.go(CScreen.Pay(acc.id, null)) })
             SectionCard("Bills") {
@@ -368,7 +371,14 @@ fun LicencesScreen(ctx: CCtx) {
                     if (l.expiryDate != null) KeyValue("Valid until", prettyDate(l.expiryDate))
                     if (l.rejectionReason.isNotBlank()) KeyValue("Reason", l.rejectionReason)
                     if (l.localNote != null) InfoBox(l.localNote!!)
-                    if (l.status == "APPROVED" && l.bill != null) PrimaryButton("Pay licence fee $${money(l.fee)}", onClick = { ctx.go(CScreen.Pay(l.account, l.bill)) })
+                    if (l.status == "APPROVED") {
+                        l.stillToPay.forEach { KeyValue("${it.label} to pay", "USD ${money(it.amount)}") }
+                        val feeOwed = l.stillToPay.any { it.label == "Licence fee" }
+                        val total = l.stillToPay.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
+                        if (feeOwed && l.bill != null) PrimaryButton("Pay licence fee $${money(l.fee)}", onClick = { ctx.go(CScreen.Pay(l.account, l.bill)) })
+                        else if (total > 0) PrimaryButton("Pay what is owing $${money(total.toString())}", onClick = { ctx.go(CScreen.Pay(l.account, null)) })
+                        Text("Your licence is issued automatically as soon as everything is paid.", fontSize = 12.sp, color = CrdcColors.Muted)
+                    }
                 }
             }
         }
@@ -420,7 +430,7 @@ fun ApplyLicenceScreen(ctx: CCtx) {
                 }
                 ctx.back()
             })
-            Text("Shops and food premises are inspected by the Environmental Health Officer. Once approved you pay the fee in the app and your licence is issued immediately.",
+            Text("The licence fee is billed straight away – no waiting for approval. For a shop, pay the licence fee, lease and levy and your licence is issued automatically.",
                 fontSize = 11.sp, color = CrdcColors.Muted)
         }
     }

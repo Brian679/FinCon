@@ -1,6 +1,8 @@
 {% extends "generic/detail.html" %}
 {% block header_buttons %}{% if object.status == "ISSUED" %}<li><a href="{% url "finance:licence_certificate" object.pk %}">Licence certificate</a></li>{% endif %}{% endblock %}
 {% block actions %}
+{% if still_to_pay %}<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Still to pay – the licence is issued automatically when everything is paid</div>
+<div class="card-body p-0"><table class="table table-sm mb-0">{% for label, amount in still_to_pay %}<tr><td>{{ label }}</td><td class="text-end">USD {{ amount }}</td></tr>{% endfor %}</table></div></div>{% endif %}
 {% if object.status == 'INSPECTION' and 'licence.inspect' in user.capabilities %}
 <div class="card shadow-sm mb-3 border-warning"><div class="card-header">Inspection (Health / Building)</div><div class="card-body"><form method="post" action="{% url 'finance:licence_inspect' object.pk %}">{% csrf_token %}<textarea class="form-control mb-2" name="comment" required placeholder="Inspection findings"></textarea><button class="btn btn-success" name="decision" value="pass">Passed</button> <button class="btn btn-outline-danger" name="decision" value="fail">Failed</button></form></div></div>
 {% endif %}

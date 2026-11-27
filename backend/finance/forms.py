@@ -37,7 +37,7 @@ class ClientAccountForm(BaseModelForm):
 class PropertyForm(BaseModelForm):
     class Meta:
         model = Property
-        fields = ["stand_number", "location", "ward", "land_use", "size_sqm", "valuation", "monthly_rates", "is_active"]
+        fields = ["stand_number", "location", "ward", "land_use", "size_sqm", "hectares", "valuation", "monthly_rates", "is_active"]
 
 
 class BillForm(BaseModelForm):
@@ -141,7 +141,7 @@ class ExchangeRateForm(BaseModelForm):
 class RevenueHeadForm(BaseModelForm):
     class Meta:
         model = RevenueHead
-        fields = ["code", "name", "category", "default_amount", "frequency", "budget_line", "payable_online", "is_active"]
+        fields = ["code", "name", "category", "default_amount", "per_hectare", "frequency", "budget_line", "payable_online", "is_active"]
 
 
 class CashUpForm(BootstrapFormMixin, forms.Form):
@@ -186,7 +186,7 @@ class LevyRunForm(BootstrapFormMixin, forms.Form):
 
 class ImportForm(BootstrapFormMixin, forms.Form):
     file = forms.FileField(help_text="CSV with columns: area, ward, stand_number, owner_name, account_type, phone, id_number, email, "
-                                     "land_use, business_name, monthly_rates, valuation, council_owned")
+                                     "land_use, business_name, monthly_rates, valuation, council_owned, hectares (farms)")
 
 
 class ClaimDecisionForm(BootstrapFormMixin, forms.Form):
