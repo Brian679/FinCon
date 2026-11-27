@@ -10,7 +10,7 @@
 </div>
 <div class="module mt-3"><h2>Data quality – records to fix</h2><table class="table table-sm mb-0">
 <thead><tr><th>Check</th><th>Department to fix</th><th class="text-end">Records</th><th></th></tr></thead>
-{% for key, t, dept, n in checks %}<tr><td>{{ t }}</td><td>{{ dept }}</td><td class="text-end {% if n %}text-danger fw-semibold{% else %}text-success{% endif %}">{% if n %}{{ n }}{% else %}✔ 0{% endif %}</td>
+{% for key, t, dept, n in checks %}<tr><td>{{ t }}</td><td>{{ dept }}</td><td class="text-end {% if n %}text-danger fw-semibold{% else %}text-success{% endif %}">{{ n }}</td>
 <td class="text-end">{% if n %}<a href="?show={{ key }}">View</a> · <a href="?export={{ key }}">Download CSV</a>{% endif %}</td></tr>{% endfor %}
 </table></div>
 {% if detail %}<div class="module mt-3"><h2>{{ detail.title }}</h2><table class="table table-sm mb-0"><thead><tr>{% for c in detail.cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>

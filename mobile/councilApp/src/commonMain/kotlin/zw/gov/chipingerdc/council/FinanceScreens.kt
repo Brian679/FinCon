@@ -330,7 +330,7 @@ fun ApprovalsScreen(ctx: Ctx) {
     var leaveOpen by remember { mutableStateOf<String?>(null) }
     AppScreen("Waiting for my action", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
-            if (approvals.isEmpty()) item { Empty("Nothing waiting for you. 👍") }
+            if (approvals.isEmpty()) item { Empty("Nothing waiting for you.") }
             items(approvals, key = { it.kind + it.ref + it.text }) { a ->
                 if (a.leave != null && leaveOpen == a.leave.id) {
                     DecisionPanel("Leave: ${a.leave.employeeName} – ${a.text}") { ok, comment ->

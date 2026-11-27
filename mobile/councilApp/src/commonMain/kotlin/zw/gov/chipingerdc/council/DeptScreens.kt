@@ -259,7 +259,7 @@ fun LeaveDetailScreen(ctx: Ctx, id: String) {
             }
             SectionCard("Approval route") {
                 lv.route.forEach { r ->
-                    val mark = when (r.state) { "done" -> "✔"; "rejected" -> "✖"; else -> "⏳" }
+                    val mark = when (r.state) { "done" -> "✔"; "rejected" -> "✖"; else -> "⚠" }
                     KeyValue("$mark ${r.stage}", listOf(r.who, prettyDate(r.`when`).takeIf { r.`when` != null } ?: "", r.comment).filter { it.isNotBlank() }
                         .joinToString(" · "))
                 }

@@ -31,7 +31,7 @@
 <td class="text-end" data-x="hide-sm">{% if r.owing.levies %}{{ r.owing.levies|floatformat:2 }}{% else %}–{% endif %}</td>
 <td class="text-end" data-x="hide-sm">{% if r.owing.rent %}{{ r.owing.rent|floatformat:2 }}{% else %}–{% endif %}</td>
 <td data-x="hide-sm">{% if r.licence == 'VALID' %}<span class="badge text-bg-success">Valid</span>{% elif r.licence == 'UNPAID' %}<span class="badge text-bg-warning">Fee unpaid</span>{% elif r.licence == 'PROCESSING' %}<span class="badge text-bg-info">Processing</span>{% elif r.licence == 'N/A' %}<span class="text-muted small">n/a</span>{% else %}<span class="badge text-bg-danger">{% if r.licence == 'EXPIRED' %}Expired{% else %}None{% endif %}</span>{% endif %}</td>
-<td data-x="hide-sm">{% if r.registered %}✅{% else %}<span class="text-muted">—</span>{% endif %}</td>
+<td data-x="hide-sm">{% if r.registered %}<img src="/static/admin/img/icon-yes.svg" alt="Yes">{% else %}<span class="text-muted">—</span>{% endif %}</td>
 <td>{% if r.ok %}<span class="badge text-bg-success">PAID UP</span>{% elif r.total > 0 %}<span class="badge text-bg-danger">OWING ${{ r.total|floatformat:2 }}</span>{% if can_receipt %}<div class="no-print mt-1"><a class="small" href="{% url 'finance:receipt_new' %}?account={{ r.account.pk }}{% if r.first_bill %}&bill={{ r.first_bill.pk }}{% endif %}">&#10010; Record payment</a></div>{% endif %}{% else %}<span class="badge text-bg-warning">NO VALID LICENCE</span>{% endif %}</td>
 </tr>{% empty %}<tr><td colspan="11" class="text-muted p-3">No stands registered in this area yet. Use <a href="{% url 'finance:register_import' %}">Import stands & shops</a> or add properties on client accounts.</td></tr>{% endfor %}
 </table></div></div>

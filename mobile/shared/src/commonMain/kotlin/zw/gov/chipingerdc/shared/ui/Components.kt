@@ -189,7 +189,7 @@ fun RowCard(
             Text(title, color = if (onClick != null) CrdcColors.Blue else CrdcColors.Body, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (!subtitle.isNullOrBlank()) Text(subtitle, fontSize = 12.sp, color = CrdcColors.Muted, maxLines = 3, overflow = TextOverflow.Ellipsis,
                 lineHeight = 16.sp)
-            if (!note.isNullOrBlank()) Text("⏳ $note", fontSize = 12.sp, color = CrdcColors.Warning)
+            if (!note.isNullOrBlank()) Text(note, fontSize = 12.sp, color = CrdcColors.Warning)
         }
         Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp)) {
             if (trailing != null) Text(trailing, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = CrdcColors.Body)

@@ -490,7 +490,7 @@ fun DataHubScreen(ctx: Ctx) {
             SectionCard("Data quality") {
                 checks.forEach { c ->
                     val n = c.str("count").toIntOrNull() ?: 0
-                    KeyValue(if (n > 0) "✖ $n" else "✔ 0", "${c.str("title")} – ${c.str("department")}")
+                    KeyValue(n.toString(), "${c.str("title")} – ${c.str("department")}")
                 }
                 Text("Open the website (Administration → Data & information management) to see and download each list.", fontSize = 11.sp, color = CrdcColors.Muted)
             }

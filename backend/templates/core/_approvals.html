@@ -1,5 +1,5 @@
 <div class="card shadow-sm mb-3"><div class="card-header d-flex justify-content-between"><span>Waiting for my action</span><span class="badge text-bg-{% if approvals %}warning{% else %}success{% endif %}">{{ approvals|length }}</span></div>
 <div class="table-responsive"><table class="table table-sm mb-0 align-middle">
 {% for a in approvals %}<tr><td>{{ a.kind }}</td><td><a href="{{ a.url }}">{{ a.ref }}</a></td><td>{{ a.text }}</td><td><span class="badge text-bg-warning">{{ a.stage }}</span></td></tr>
-{% empty %}<tr><td class="text-muted p-3">Nothing waiting for you. 👍</td></tr>{% endfor %}
+{% empty %}<tr><td class="text-muted p-3">Nothing waiting for you.</td></tr>{% endfor %}
 </table></div></div>

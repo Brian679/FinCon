@@ -36,6 +36,7 @@ import zw.gov.chipingerdc.shared.ui.Field
 import zw.gov.chipingerdc.shared.ui.InfoBox
 import zw.gov.chipingerdc.shared.ui.KeyValue
 import zw.gov.chipingerdc.shared.ui.ListScreen
+import zw.gov.chipingerdc.shared.ui.RowCard
 import zw.gov.chipingerdc.shared.ui.PrimaryButton
 import zw.gov.chipingerdc.shared.ui.ScrollColumn
 import zw.gov.chipingerdc.shared.ui.SecondaryButton
@@ -55,7 +56,7 @@ fun FinesScreen(ctx: CCtx) {
         PrimaryButton("Find a fine by its number", onClick = { ctx.go(CScreen.FindFine) })
         ListScreen {
             if (fines.isEmpty()) item {
-                EmptyState("⚖", "No fines on your accounts", "Got a fine slip or SMS from a council officer? Find it with the fine number and pay it here.",
+                EmptyState("No fines on your accounts.", "Got a fine slip or SMS from a council officer? Find it with the fine number and pay it here.",
                     "Find my fine") { ctx.go(CScreen.FindFine) }
             }
             items(fines.sortedByDescending { it.s("date") }, key = { it.s("id") }) { f ->
@@ -118,17 +119,16 @@ fun PermitsScreen(ctx: CCtx) {
         PrimaryButton("+ Apply for a permit", onClick = { ctx.go(CScreen.ApplyPermit) })
         ListScreen {
             if (permits.isEmpty()) item {
-                EmptyState("⛏", "No permits yet", "Apply for a sand, gravel, clay, firewood or thatch permit, pay in the app and show the permit at the collection point.",
+                EmptyState("No permits yet.", "Apply for a sand, gravel, clay, firewood or thatch permit, pay in the app and show the permit at the collection point.",
                     "Apply for a permit") { ctx.go(CScreen.ApplyPermit) }
             }
             items(permits.sortedByDescending { it.s("created_at") }, key = { it.s("id") }) { p ->
                 val active = p.s("status") == "ACTIVE"
                 SectionCard("${p.s("permit_type_label")} – ${p.s("reference")}") {
-                    if (active) Column(Modifier.fillMaxWidth().background(CrdcColors.Green.copy(alpha = 0.08f)).padding(10.dp)) {
-                        Text("✔ PERMIT VALID", color = CrdcColors.Green, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        Text(p.s("reference"), fontSize = 26.sp, fontWeight = FontWeight.Bold, color = CrdcColors.Body)
-                        Text("Show this to the council officer at the collection point. Valid until ${prettyDate(p.s("valid_to"))}.", fontSize = 12.sp,
-                            color = CrdcColors.Muted)
+                    if (active) {
+                        KeyValue("Permit number", p.s("reference"))
+                        KeyValue("Valid until", prettyDate(p.s("valid_to")))
+                        Text("Show the permit number to the council officer at the collection point.", fontSize = 12.sp, color = CrdcColors.Muted)
                     }
                     KeyValue("Site", "${p.s("location")}${p.s("ward").takeIf { it.isNotBlank() }?.let { ", ward $it" } ?: ""}")
                     KeyValue("Allowed", "${money(p.s("quantity_allowed"))} ${p.s("unit_label")}")
@@ -195,22 +195,11 @@ fun ApplyPermitScreen(ctx: CCtx) {
 }
 
 // ------------------------------------------------------------------ notices
-private fun noticeSymbol(cat: String) = when (cat) {
-    "WATER" -> "💧"; "MEETING" -> "👥"; "DEADLINE" -> "⏰"; "TENDER" -> "📄"; "HEALTH" -> "➕"; "EMERGENCY" -> "⚠"; else -> "📢"
-}
-
+/** One notice as a Django admin result row. */
 @Composable
-fun NoticeCard(n: JsonObject) {
-    val urgent = n.s("category") in listOf("EMERGENCY", "HEALTH", "WATER")
-    Row(Modifier.fillMaxWidth().background(if (urgent) CrdcColors.Danger.copy(alpha = 0.06f) else CrdcColors.Green.copy(alpha = 0.05f)).padding(10.dp)) {
-        Text(noticeSymbol(n.s("category")), fontSize = 20.sp, modifier = Modifier.padding(end = 10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(n.s("title"), fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = CrdcColors.Body)
-            Text(n.s("body"), fontSize = 12.sp, color = CrdcColors.Muted, lineHeight = 16.sp)
-            Text("${n.s("category_label")} · ${n.s("ward").takeIf { it.isNotBlank() }?.let { "ward $it" } ?: "whole district"} · ${prettyDate(n.s("publish_from"))}",
-                fontSize = 11.sp, color = CrdcColors.Muted)
-        }
-    }
+fun NoticeRow(n: JsonObject) {
+    RowCard(n.s("title"), "${n.s("body")}\n${n.s("category_label")} · ${n.s("ward").takeIf { it.isNotBlank() }?.let { "ward $it" } ?: "whole district"} · ${prettyDate(n.s("publish_from"))}",
+        null, null, null, null)
 }
 
 @Composable
@@ -218,10 +207,8 @@ fun NoticesScreen(ctx: CCtx) {
     val notices by ctx.sdk.observe(Entities.PUBLIC_NOTICES, JsonObject.serializer()).collectAsState(initial = emptyList())
     AppScreen("Council notices", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
-            if (notices.isEmpty()) item { EmptyState("📢", "No notices right now", "Water cuts, meetings, deadlines and health alerts from the council appear here.") }
-            items(notices.sortedByDescending { it.s("publish_from") }, key = { it.s("id") }) { n ->
-                Column(Modifier.padding(vertical = 4.dp)) { NoticeCard(n) }
-            }
+            if (notices.isEmpty()) item { EmptyState("No notices right now.", "Water cuts, meetings, deadlines and health alerts from the council appear here.") }
+            items(notices.sortedByDescending { it.s("publish_from") }, key = { it.s("id") }) { n -> NoticeRow(n) }
         }
     }
 }

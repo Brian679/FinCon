@@ -18,7 +18,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import zw.gov.chipingerdc.shared.ui.Field
-import zw.gov.chipingerdc.shared.ui.greeting
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -196,7 +195,7 @@ fun CouncilMenu(ctx: Ctx) {
 
     var find by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Field("🔍  Find a screen (e.g. leave, fines, roads)", find, { find = it })
+        Field("Filter", find, { find = it })
         val shown = sections.map { (title, tiles) -> title to tiles.filter { find.isBlank() || it.label.contains(find.trim(), ignoreCase = true) } }
             .filter { it.second.isNotEmpty() }
         if (shown.isEmpty()) Text("Nothing called \"$find\" in your menu.", color = CrdcColors.Muted, fontSize = 13.sp)
@@ -227,9 +226,7 @@ fun HomeScreen(ctx: Ctx) {
 
     AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            val hour = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).hour
-            Text(greeting(hour, me.fullName.substringBefore(" ")), fontSize = 18.sp, color = CrdcColors.Body)
-            Text("${me.roleLabel.ifBlank { me.departmentLabel }} · ${me.departmentLabel}", fontSize = 13.sp, color = CrdcColors.Muted)
+            Text(me.departmentLabel, fontSize = 13.sp, color = CrdcColors.Muted)
             // 1. key figures – only facts that are not listed again below
             val figures = buildList<@Composable (Modifier) -> Unit> {
                 if (me.can("finance.view_all")) add { m ->
