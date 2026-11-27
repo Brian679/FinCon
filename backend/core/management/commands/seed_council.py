@@ -102,7 +102,7 @@ REVENUE_HEADS = [
     ("SUNDRY", "Sundry income", "OTHER", 0, "ONCE", "I-130"),
 ]
 
-DEMO_INTERN_DEPARTMENT = {"intern": "TECH"}   # interns are placed in a department when their account is made
+DEMO_INTERN_DEPARTMENT = {"intern": "TECH", "social.intern": "SOCIAL"}   # interns are placed in a department when their account is made
 
 DEMO_STAFF = [
     # username, first, last, role
@@ -119,6 +119,8 @@ DEMO_STAFF = [
     ("registry", "Blessing", "Zhou", "RECORDS_CLERK"),
     ("reception", "Rumbidzai", "Makoni", "RECEPTIONIST"),
     ("intern", "Tafadzwa", "Mhere", "INTERN"),
+    ("social.intern", "Nokuthula", "Dube", "INTERN"),
+    ("growthpoint", "Itai", "Chimedza", "GROWTH_POINT_MANAGER"),
     ("chief.auditor", "Patience", "Mazarura", "CHIEF_AUDITOR"),
     ("auditor", "Tinashe", "Chari", "AUDITOR"),
     ("social.director", "Memory", "Sibanda", "SOCIAL_HEAD"),
@@ -324,6 +326,7 @@ class Command(BaseCommand):
         self._demo_payroll(u)
         self._demo_farms_and_intern(u)
         self._demo_social(u)
+        self._demo_charter_registers(u)
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""
@@ -567,6 +570,107 @@ class Command(BaseCommand):
                                          location=place, vehicle_reg=reg))
         fin.issue_receipt(u["collector"], revenue_head=issued[2].bill.revenue_head, amount=issued[2].amount, account=issued[2].account,
                           bill=issued[2].bill)
+
+    def _demo_charter_registers(self, u):
+        """Demo roads, lights, work orders, registry files, health inspections, ablutions / waste, schools & clinics, and leave
+        at different approval steps (illustrative only)."""
+        from datetime import timedelta
+
+        from departments import leave as lv
+        from departments import registers as rg
+        from departments.models import LeaveRequest, PublicLight, RecordFile, Road, WorkOrder
+        from social.models import HealthInspection, SanitationFacility, SocialFacility
+
+        today = timezone.localdate()
+        eng, tech = u["engineer"], u["tech.officer"]
+        roads = {}
+        for name, no, ward, a, b, km, surf, cond, days in (("Chipinge – Checheche road (district section)", "D-101", 22, "Chipinge", "Checheche", 58, "TAR", "FAIR", 200),
+                                                            ("Checheche – Chibuwe road", "D-114", 25, "Checheche", "Chibuwe", 24, "GRAVEL", "POOR", 400),
+                                                            ("Mutema – Rimbi road", "D-131", 12, "Mutema", "Rimbi", 18, "GRAVEL", "GOOD", 60),
+                                                            ("Mahenye access road", "D-140", 29, "Chilonga turn-off", "Mahenye", 31, "EARTH", "IMPASSABLE", 700)):
+            roads[no] = Road.objects.create(name=name, road_number=no, ward=ward, start_point=a, end_point=b, length_km=km, surface=surf, condition=cond,
+                                            last_graded=today - timedelta(days=days), bridges_culverts=3, created_by=eng)
+        lights = []
+        for kind, place, ward, pole, status in (("HIGHMAST", "Checheche growth point – bus terminus", 22, "HM-01", "WORKING"),
+                                               ("HIGHMAST", "Chisumbanje business centre", 25, "HM-04", "FAULTY"),
+                                               ("STREET", "Chipinge – Checheche road, Checheche turn-off", 22, "SL-118", "VANDAL"),
+                                               ("SOLAR", "Birchenough Bridge market", 30, "SS-07", "WORKING")):
+            lights.append(PublicLight.objects.create(light_type=kind, location=place, ward=ward, pole_number=pole, status=status,
+                                                     last_checked=today - timedelta(days=12), created_by=tech))
+        w1 = WorkOrder.objects.create(kind="ROAD", title="Grade and reshape Checheche – Chibuwe road (km 0–8)", location="Checheche – Chibuwe road", ward=25,
+                                      road=roads["D-114"], assigned_to=tech, due_date=today + timedelta(days=10), created_by=eng)
+        rg.work_action(tech, w1, "start", notes="Grader and water bowser on site")
+        w2 = WorkOrder.objects.create(kind="LIGHT", title="Replace lamp and ballast – high-mast HM-04", location="Chisumbanje business centre", ward=25,
+                                      light=lights[1], assigned_to=tech, due_date=today + timedelta(days=3), created_by=eng)
+        rg.work_action(tech, w2, "done", notes="New 400 W lamp and ballast fitted, tested at dusk", materials="400 W lamp, ballast", labour_days="1",
+                       cost="320")
+        WorkOrder.objects.create(kind="DRAIN", title="Clear blocked culvert at Mutema clinic", location="Mutema clinic", ward=12, road=roads["D-131"],
+                                 assigned_to=u["intern"], due_date=today + timedelta(days=5), created_by=eng)
+        reg = u["registry"]
+        for no, title, dept, cat, loc, conf in (("ADM/HR/014", "Personnel files A – M", "ADMIN", "Personnel", "Cabinet 3, drawer 1", True),
+                                                ("FIN/STD/221", "Checheche stand allocations 2019–2026", "FINANCE", "Stands", "Shelf B4", False),
+                                                ("ADM/CNL/2026", "Full council minutes 2026", "ADMIN", "Council minutes", "Strong room", False),
+                                                ("TECH/RD/101", "D-101 road rehabilitation contract", "TECH", "Contracts", "Shelf C1", False)):
+            RecordFile.objects.create(file_number=no, title=title, department=dept, category=cat, location=loc, confidential=conf,
+                                      retain_until=today.replace(year=today.year + 7), created_by=reg)
+        rg.record_action(reg, RecordFile.objects.get(file_number="TECH/RD/101"), "lend", borrower=eng.pk, due_back=today + timedelta(days=5))
+        eho = u["eho"]
+        for prem, kind, owner, ward, place, score, result, findings, fu in (
+                ("Checheche Fast Foods", "FOOD", "Mai Rudo", 22, "Checheche rank", 58, "FOLLOWUP", "No running water at the wash basin; food handlers' certificates expired.", 14),
+                ("Chisumbanje butchery", "BUTCHERY", "T. Matanda", 25, "Chisumbanje BC", 82, "PASS", "Cold room 3 °C, clean. Keep the fly screens closed.", None),
+                ("Chibuwe slaughter slab", "ABATTOIR", "Council", 25, "Chibuwe", 34, "FAIL", "Effluent running into the stream – slab closed until drainage is fixed.", 7),
+                ("Mahenye Primary School", "SCHOOL", "Ministry of Education", 29, "Mahenye", 75, "PASS", "Toilets adequate; hand-washing station needs soap.", None)):
+            HealthInspection.objects.create(premises=prem, premises_type=kind, owner=owner, ward=ward, location=place, score=score, result=result,
+                                            findings=findings, date=today - timedelta(days=3), inspector=eho, created_by=eho,
+                                            follow_up_date=today + timedelta(days=fu) if fu else None)
+        for name, kind, ward, place, status, days, coll in (("Checheche bus terminus toilets", "ABLUTION", 22, "Checheche", "NEEDS", 2, ""),
+                                                            ("Chipinge CBD skip – market", "REFUSE", 1, "Chipinge market", "GOOD", 1, "Mon & Thu"),
+                                                            ("Checheche dumpsite", "DUMPSITE", 22, "Checheche – 3 km east", "BLOCKED", 30, ""),
+                                                            ("Birchenough Bridge market toilets", "ABLUTION", 30, "Birchenough Bridge", "GOOD", 1, "")):
+            SanitationFacility.objects.create(name=name, kind=kind, ward=ward, location=place, status=status, last_serviced=today - timedelta(days=days),
+                                              collection_days=coll, created_by=eho)
+        so = u["social.officer"]
+        for name, kind, ward, place, pop, rooms, cond, needs in (
+                ("Chinyamukwakwa Primary School", "PRIMARY", 25, "Chinyamukwakwa", 860, 12, "POOR", "4 classroom block, 2 staff houses, borehole repair"),
+                ("Mahenye Clinic", "CLINIC", 29, "Mahenye", 9400, 8, "FAIR", "Maternity waiting shelter, solar power for the fridge"),
+                ("Checheche High School", "SECONDARY", 22, "Checheche", 1240, 22, "BUILDING", "Science laboratory under construction (CDF)"),
+                ("Tamandai ECD centre", "ECD", 26, "Tamandai", 85, 2, "POOR", "Roofing, child-friendly toilets")):
+            SocialFacility.objects.create(name=name, kind=kind, ward=ward, location=place, population_served=pop, classrooms_or_beds=rooms, condition=cond,
+                                          needs=needs, responsible_authority="Ministry" if kind != "ECD" else "Community", created_by=so)
+        # housing: stand applications at the growth points (Growth Point Manager)
+        from departments import services as dsv
+        from departments.models import StandApplication
+
+        gp = u["growthpoint"]
+        for name, nid, phone, kind, place, ward, act in (("Tendai Mapfumo", "63-221144K63", "0772110022", "RES", "Checheche growth point", 22, "allocate"),
+                                                         ("Rufaro Sithole", "63-998877R63", "0773220011", "RES", "Checheche growth point", 22, "shortlist"),
+                                                         ("Kudakwashe Moyo", "14-554433K14", "0774330022", "COM", "Birchenough Bridge growth point", 30, ""),
+                                                         ("Mai Chipo Ncube", "63-776655C63", "0775440033", "RES", "Chisumbanje growth point", 25, "")):
+            st = StandApplication.objects.create(applicant_name=name, national_id=nid, phone=phone, stand_type=kind, preferred_location=place,
+                                                 ward=ward, created_by=gp)
+            if act == "allocate":
+                dsv.stand_action(gp, st, "shortlist")
+                dsv.stand_action(gp, st, "allocate", stand="CH-H17", note="Serviced residential stand, 300 m²")
+            elif act:
+                dsv.stand_action(gp, st, act)
+        # leave at each approval step
+        def apply(user, start, days, kind="ANNUAL", reason=""):
+            r = LeaveRequest.objects.create(employee=user, leave_type=kind, start_date=today + timedelta(days=start),
+                                            end_date=today + timedelta(days=start + days), reason=reason, created_by=user)
+            lv.submit(r)
+            r.refresh_from_db()
+            return r
+        a = apply(u["eho"], 14, 4, reason="Family wedding in Mutare")                         # waiting for the Director of Social Services
+        b = apply(u["tech.officer"], 21, 6, reason="Annual leave")                            # Engineer approved → waiting for HR
+        lv.decide(eng, b, True, "Grader work will be done by then")
+        c = apply(u["cashier"], 30, 2, reason="Graduation")                                    # HOD + HR approved → waiting for CEO
+        lv.decide(u["treasurer"], c, True, "Relief cashier arranged")
+        lv.decide(u["hr.officer"], c, True, "Days available")
+        d = apply(u["registry"], 9, 1, kind="COMPASS", reason="Funeral")                       # fully approved
+        for who in (u["admin.officer"], u["hr.officer"], u["ceo"]):
+            d.refresh_from_db()
+            if d.status == "PENDING":
+                lv.decide(who, d, True, "Condolences")
 
     def _demo_payroll(self, u):
         """Demo salaries and two months of payroll (illustrative amounts only – not real council salaries)."""

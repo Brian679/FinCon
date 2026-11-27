@@ -240,11 +240,24 @@ class LeaveRequestSerializer(SyncSerializer):
     employee_name = serializers.CharField(source="employee.get_full_name", read_only=True)
     days = serializers.IntegerField(read_only=True)
     employee_department = serializers.CharField(source="employee.department", read_only=True)
+    approvers = serializers.SerializerMethodField()
+    route = serializers.SerializerMethodField()
 
     class Meta:
         model = LeaveRequest
         fields = _sync_fields(LeaveRequest, ["employee", "employee_name", "employee_department", "leave_type", "start_date", "end_date", "days", "reason", "status",
-                                             "decision_comment"])
+                                             "stage", "decision_comment", "approvers", "route"])
+
+    def get_approvers(self, obj):
+        from departments import leave
+
+        return [u.pk for u in leave.approvers(obj)]
+
+    def get_route(self, obj):
+        from departments import leave
+
+        return [{"stage": r["stage"], "who": r["who"], "state": r["state"], "comment": r["comment"],
+                 "when": r["when"].isoformat() if r["when"] else None} for r in leave.route(obj)]
 
 
 class NotificationSerializer(SyncSerializer):
@@ -702,3 +715,28 @@ class BeneficiarySerializer(_NamedFKSerializer):
     def get_assistance(self, obj):
         return [{"date": str(a.date), "kind": a.get_kind_display(), "description": a.description, "value": str(a.value),
                  "programme": a.programme} for a in obj.assistance.alive()]
+
+
+# ------------------------------------------- charter registers (technical, admin, public health, community)
+from departments import models as dm  # noqa: E402
+
+
+def _reg_serializer(model, fields, extra=None):
+    meta = type("Meta", (), {"model": model, "fields": _sync_fields(model, fields)})
+    return type(f"{model.__name__}Serializer", (_NamedFKSerializer,), {"Meta": meta, **(extra or {})})
+
+
+RoadSerializer = _reg_serializer(dm.Road, ["reference", "name", "road_number", "ward", "start_point", "end_point", "length_km", "surface", "condition",
+                                           "last_graded", "bridges_culverts", "notes"])
+LightSerializer = _reg_serializer(dm.PublicLight, ["reference", "light_type", "location", "ward", "pole_number", "status", "last_checked", "notes"])
+WorkOrderSerializer = _reg_serializer(dm.WorkOrder, ["reference", "kind", "title", "location", "ward", "road", "light", "description", "assigned_to",
+                                                     "due_date", "status", "materials", "labour_days", "cost", "completion_notes", "completed_at",
+                                                     "signed_off_by"])
+RecordFileSerializer = _reg_serializer(dm.RecordFile, ["file_number", "title", "department", "category", "location", "confidential", "opened_on",
+                                                       "retain_until", "status", "borrowed_by", "borrowed_at", "due_back", "notes"])
+InspectionSerializer = _reg_serializer(sm.HealthInspection, ["reference", "premises", "premises_type", "owner", "ward", "location", "date", "score",
+                                                             "result", "findings", "follow_up_date", "inspector"])
+SanitationSerializer = _reg_serializer(sm.SanitationFacility, ["reference", "name", "kind", "ward", "location", "status", "last_serviced",
+                                                               "collection_days", "caretaker", "notes"])
+FacilitySerializer = _reg_serializer(sm.SocialFacility, ["reference", "name", "kind", "ward", "location", "responsible_authority", "population_served",
+                                                         "classrooms_or_beds", "condition", "needs", "contact"])

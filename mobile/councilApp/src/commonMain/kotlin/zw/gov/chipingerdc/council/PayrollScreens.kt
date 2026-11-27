@@ -91,7 +91,9 @@ fun MyProfileScreen(ctx: Ctx) {
                     Kpi("Left", left.toString(), if (waiting > 0) "$waiting waiting" else null, CrdcColors.Success, Modifier.weight(1f))
                 }
                 myLeave.sortedByDescending { it.startDate }.take(5).forEach {
-                    RowCard(it.leaveTypeLabel, "${it.startDate} – ${it.endDate} · ${it.days} day(s)", null, it.statusLabel, it.status, it.localNote)
+                    RowCard(it.leaveTypeLabel, "${it.startDate} – ${it.endDate} · ${it.days} day(s)" +
+                        (if (it.status == "PENDING" && it.stageLabel.isNotBlank()) "\nWaiting for: ${it.stageLabel}" else ""), null, it.statusLabel,
+                        it.status, it.localNote) { ctx.go(Screen.LeaveDetail(it.id)) }
                 }
                 PrimaryButton("Apply for leave", onClick = { ctx.go(Screen.NewLeave) })
             }

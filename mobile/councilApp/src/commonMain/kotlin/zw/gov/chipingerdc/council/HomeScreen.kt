@@ -24,6 +24,7 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import zw.gov.chipingerdc.shared.model.Complaint
 import zw.gov.chipingerdc.shared.model.Entities
+import zw.gov.chipingerdc.shared.model.StandApplication
 import zw.gov.chipingerdc.shared.model.FundsRequest
 import zw.gov.chipingerdc.shared.model.Memo
 import zw.gov.chipingerdc.shared.model.Receipt
@@ -81,6 +82,7 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("leave.approve")) add(Tile("Leave applications to approve", Screen.Leave))
         if (me.can("resolutions.update") && !me.can("meetings.view")) add(Tile("Council resolutions for the department", Screen.Resolutions))
     }
+    fun reg(label: String, key: String, cap: String) = Tile(label, Screen.Register(key), add = if (me.can(cap)) (REGISTERS[key]?.newScreen ?: Screen.RegisterForm(key, null)) else null)
     val finance = buildList {
         if (me.can("finance.view")) add(Tile("Receipts", Screen.Receipts, add = if (me.can("receipt.create")) Screen.NewReceipt else null))
         if (me.can("cashup.submit", "cashup.verify")) add(Tile("Cash-ups", Screen.CashUps))
@@ -110,35 +112,52 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("policies.view")) add(Tile("Policies & by-laws", Screen.Policies))
         if (me.can("correspondence.manage") || me.isHead) add(Tile("Correspondence", Screen.Correspondence, add = Screen.NewCorrespondence))
         if (me.can("hr.view")) add(Tile("Staff directory", Screen.Staff))
+        if (me.can("records.view", "records.manage")) add(reg("Records management (registry)", "record_files", "records.manage"))
+        if (me.can("ict.manage")) add(Tile("ICT services – support tickets", Screen.Tickets))
         if (me.department == "ADMIN" && me.can("activities.manage")) add(Tile("Trainings & staff activities", Screen.Activities, add = Screen.NewActivity))
         if (!me.can("finance.view") && me.can("procurement.order")) add(Tile("Purchase orders", Screen.Orders))
     }
+    val communityStaff = me.can("welfare.view", "welfare.manage", "dept.overview_all")
     val social = buildList {
-        if (me.can("stands.view")) add(Tile("Stand applications", Screen.Stands, add = if (me.can("stands.manage")) Screen.NewStand else null))
-        if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
+        // Community Development Officer
+        if (me.can("welfare.view", "welfare.manage")) add(reg("Social welfare – vulnerable households", "beneficiaries", "welfare.manage"))
+        if (me.can("facilities.view", "facilities.manage")) add(reg("Schools & clinics development", "social_facilities", "facilities.manage"))
+        if (me.can("incidents.view") && communityStaff) add(Tile("Disasters & incidents", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
         if ((me.department == "SOCIAL" || seesAll) && me.can("activities.manage", "activities.verify", "dept.overview_all"))
-            add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
+            add(Tile(when {
+                communityStaff -> "Community programmes & campaigns"
+                me.can("health.manage") -> "Hygiene promotion campaigns"
+                else -> "Environmental campaigns, fireguards & land reclamation"
+            }, Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
+        // Environmental Health Officer – public health & WASH
+        if (me.can("health.view", "health.manage")) add(reg("Public health inspections", "health_inspections", "health.manage"))
         if (me.can("licence.inspect")) add(Tile("Health certificate inspections", Screen.Licences))
-        if (me.can("welfare.view", "welfare.manage")) add(Tile("Social welfare – vulnerable households", Screen.Register("beneficiaries"),
-            add = if (me.can("welfare.manage")) Screen.RegisterForm("beneficiaries", null) else null))
-        if (me.can("water.view", "water.manage")) add(Tile("Water points (WASH)", Screen.Register("water_points"),
-            add = if (me.can("water.manage")) Screen.RegisterForm("water_points", null) else null))
-        // CAMPFIRE
-        if (me.can("wildlife.view", "wildlife.manage")) add(Tile("CAMPFIRE – wildlife database", Screen.Register("wildlife"),
-            add = if (me.can("wildlife.manage")) Screen.RegisterForm("wildlife", null) else null))
+        if (me.can("water.view", "water.manage")) add(reg("Water points & boreholes", "water_points", "water.manage"))
+        if (me.can("sanitation.view", "sanitation.manage")) add(reg("Public ablutions & waste", "sanitation", "sanitation.manage"))
+        // Environmental Management & Agricultural Officer
+        if (me.can("wildlife.view", "wildlife.manage")) add(reg("CAMPFIRE – wildlife database", "wildlife", "wildlife.manage"))
         if (me.can("hunts.view", "hunts.manage")) {
-            add(Tile("CAMPFIRE – hunting quotas", Screen.Register("hunting_quotas"), add = if (me.can("hunts.manage")) Screen.RegisterForm("hunting_quotas", null) else null))
-            add(Tile("CAMPFIRE – trophy hunts", Screen.Register("trophy_hunts"), add = if (me.can("hunts.manage")) Screen.NewHunt else null))
+            add(reg("CAMPFIRE – hunting quotas", "hunting_quotas", "hunts.manage"))
+            add(reg("CAMPFIRE – trophy hunts", "trophy_hunts", "hunts.manage"))
         }
-        // natural resources & agriculture
-        if (me.can("permits.view", "permits.manage")) add(Tile("Sand, mining & forestry permits", Screen.Register("resource_permits"),
-            add = if (me.can("permits.manage")) Screen.RegisterForm("resource_permits", null) else null))
-        if (me.can("farms.view", "farms.manage")) add(Tile("Agricultural farms", Screen.Register("farms"),
-            add = if (me.can("farms.manage")) Screen.RegisterForm("farms", null) else null))
+        if (me.can("permits.view", "permits.manage")) add(reg("Sand, mining & forestry permits", "resource_permits", "permits.manage"))
+        if (me.can("incidents.view") && !communityStaff && me.can("wildlife.manage")) add(Tile("Human-wildlife conflict & fires", Screen.Incidents, add = Screen.NewIncident))
+        if (me.can("farms.view", "farms.manage")) add(reg("Agricultural farms", "farms", "farms.manage"))
+        if (me.can("stands.view") && !me.can("stands.manage")) add(Tile("Housing & stands (Growth Points)", Screen.Stands))
+    }
+    val growth = buildList {
+        if (me.can("areas.view")) add(Tile("Growth points – shops, houses & stands", Screen.Areas))
+        if (me.can("stands.manage")) add(Tile("Housing & stand allocation", Screen.Stands, add = Screen.NewStand))
+        if (me.can("leases.view")) add(Tile("Council premises leases", Screen.Leases))
+        if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
+        if (me.can("projects.view")) add(Tile("Housing & infrastructure projects", Screen.Projects))
     }
     val tech = buildList {
-        if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
-        if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
+        if (me.can("projects.view")) add(Tile("Projects (roads, buildings, lighting)", Screen.Projects))
+        if (me.can("plans.view")) add(Tile("Building plans (development control)", Screen.Plans))
+        if (me.can("roads.view", "roads.manage")) add(reg("Road network", "roads", "roads.manage"))
+        if (me.can("lighting.view", "lighting.manage")) add(reg("Public lighting", "public_lights", "lighting.manage"))
+        if (me.can("works.view", "works.manage")) add(reg("Engineering work orders", "work_orders", "works.manage"))
     }
     val audit = buildList {
         if (me.can("audit.findings_view", "audit.respond")) add(Tile("Audit findings", Screen.Findings))
@@ -146,11 +165,12 @@ fun CouncilMenu(ctx: Ctx) {
     }
     val assets = if (me.can("assets.view")) listOf(Tile(if (me.can("assets.manage") || seesAll) "Assets & infrastructure" else "Department assets", Screen.Assets)) else emptyList()
 
-    val byDept = mapOf("FINANCE" to finance, "ADMIN" to admin, "SOCIAL" to social, "TECH" to tech, "AUDIT" to audit)
+    val byDept = mapOf("FINANCE" to finance, "ADMIN" to admin, "SOCIAL" to social, "TECH" to tech, "AUDIT" to audit, "GROWTH" to growth)
     val sections = buildList {
         if (seesAll) {
             add(me.departmentLabel to work)
-            listOf("FINANCE" to "Finance", "ADMIN" to "Administration", "SOCIAL" to "Social Services", "TECH" to "Technical Services", "AUDIT" to "Internal Audit")
+            listOf("FINANCE" to "Finance", "ADMIN" to "Administration", "SOCIAL" to "Social Services", "TECH" to "Technical Services", "GROWTH" to "Growth Points",
+                "AUDIT" to "Internal Audit")
                 .forEach { (code, label) -> add(label to (byDept[code] ?: emptyList()) + if (code == "ADMIN") assets else emptyList()) }
         } else {
             // own department: day-to-day work + its registers in one list
@@ -182,6 +202,7 @@ fun HomeScreen(ctx: Ctx) {
     val requests by sdk.observe(Entities.SERVICE_REQUESTS, ServiceRequest.serializer()).collectAsState(initial = emptyList())
     val funds by sdk.observe(Entities.FUNDS_REQUESTS, FundsRequest.serializer()).collectAsState(initial = emptyList())
     val approvals = rememberApprovals(ctx)
+    val stands by sdk.observe(Entities.STANDS, StandApplication.serializer()).collectAsState(initial = emptyList())
     val today = Clock.System.now().toLocalDateTime(TimeZone.of("Africa/Harare")).date.toString()
     val myToday = receipts.filter { it.createdAt.startsWith(today) && it.status != "VOIDED" && (it.receivedBy == me.id || it.localNote != null) }
     val myTasks = tasks.filter { it.assignedToName == me.fullName && it.status in listOf("OPEN", "IN_PROGRESS") }
@@ -201,6 +222,10 @@ fun HomeScreen(ctx: Ctx) {
                 } else if (me.can("receipt.create")) add { m ->
                     val usd = myToday.filter { it.currency == "USD" }.sumOf { it.amount.toDoubleOrNull() ?: 0.0 }
                     Kpi("My collections today", "$${money(usd.toString())}", "${myToday.size} receipt(s)", modifier = m) { ctx.go(Screen.Receipts) }
+                }
+                if (me.can("growth.manage")) add { m ->
+                    val waiting = stands.filter { it.status in listOf("RECEIVED", "SHORTLISTED") }
+                    Kpi("Stand applications waiting", waiting.size.toString(), "${stands.count { it.status == "ALLOCATED" }} allocated", CrdcColors.Warning, m) { ctx.go(Screen.Stands) }
                 }
                 add { m -> Kpi("Faults / service requests", openFaults.size.toString(), "${openFaults.count { isPast(it.dueAt) }} overdue", CrdcColors.Blue, m) { ctx.go(Screen.Requests) } }
                 if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || openComplaints.isNotEmpty()) add { m ->

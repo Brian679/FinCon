@@ -79,14 +79,12 @@ def pending_approvals(user):
     if user.has_cap("licence.approve"):
         for lic in Licence.objects.alive().filter(status__in=[Licence.Status.APPLIED, Licence.Status.INSPECTED])[:50]:
             items.append({"kind": "Licence", "ref": lic.number, "text": lic.business_name, "stage": "Approval", "url": f"/staff/finance/licences/{lic.pk}/"})
-    if user.has_cap("leave.approve"):
-        from departments.models import LeaveRequest
+    if user.has_cap("leave.approve", "leave.hr_approve", "leave.ceo_approve"):
+        from departments import leave
 
-        qs = LeaveRequest.objects.alive().filter(status=LeaveRequest.Status.PENDING).exclude(employee=user)
-        if not user.is_ceo:
-            qs = qs.filter(employee__department=user.department)
-        for lv in qs[:50]:
-            items.append({"kind": "Leave", "ref": str(lv.employee), "text": f"{lv.get_leave_type_display()} {lv.days} day(s)", "stage": "Approval", "url": f"/staff/leave/{lv.pk}/"})
+        for lv in leave.awaiting(user)[:50]:
+            items.append({"kind": "Leave", "ref": str(lv.employee), "text": f"{lv.get_leave_type_display()} {lv.days} day(s)",
+                          "stage": leave.LABELS.get(lv.stage, "Approval"), "url": f"/staff/leave/{lv.pk}/"})
     return items
 
 

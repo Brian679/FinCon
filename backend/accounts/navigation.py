@@ -24,6 +24,11 @@ ADD_LINKS = {
     "social:hunts": ("social:hunt_new", "hunts.manage"), "social:permits": ("social:permit_new", "permits.manage"),
     "social:farms": ("social:farm_new", "farms.manage"), "social:water_list": ("social:water_new", "water.manage"),
     "social:beneficiaries": ("social:beneficiary_new", "welfare.manage"), "social:quotas": ("social:quota_new", "hunts.manage"),
+    "registers:roads_list": ("registers:roads_new", "roads.manage"), "registers:lights_list": ("registers:lights_new", "lighting.manage"),
+    "registers:works_list": ("registers:works_new", "works.manage"), "registers:records_list": ("registers:records_new", "records.manage"),
+    "registers:inspections_list": ("registers:inspections_new", "health.manage"),
+    "registers:sanitation_list": ("registers:sanitation_new", "sanitation.manage"),
+    "registers:facilities_list": ("registers:facilities_new", "facilities.manage"),
     "workflow:memos": ("workflow:memo_new", None), "workflow:funds": ("workflow:fund_new", None),
     "portal:complaints": ("portal:complaint_new", None), "portal:requests": ("portal:request_new", None), "portal:licences": ("portal:licence_apply", None),
     "portal:claims": ("portal:claim_new", None), "portal:plans": ("portal:plan_new", None), "portal:stands": ("portal:stand_new", None),
@@ -71,6 +76,7 @@ def build_nav(user):
     D = Department
     sees_all = user.sees_all_departments()
     dept = user.department
+    role = user.role
     sections = []
 
     # ---- The person's own department: its day-to-day work and its registers in one place.
@@ -88,7 +94,7 @@ def build_nav(user):
         _item("Service requests / faults", "workflow:requests"),
         _item("ICT support", "departments:tickets"),
     ]
-    if c("leave.approve"):
+    if c("leave.approve", "leave.hr_approve", "leave.ceo_approve"):
         general.append(_item("Leave applications to approve", "departments:leave"))
     if c("resolutions.update") and not c("meetings.view"):
         general.append(_item("Council resolutions for the department", "departments:resolutions"))
@@ -171,6 +177,10 @@ def build_nav(user):
             admin_items.append(_item("Correspondence register", "workflow:correspondence"))
         if c("hr.view"):
             admin_items.append(_item("Staff directory", "departments:staff"))
+        if c("records.view", "records.manage"):
+            admin_items.append(_item("Records management (registry)", "registers:records_list"))
+        if c("ict.manage"):
+            admin_items.append(_item("ICT services – support tickets", "departments:tickets"))
         if admin_items:
             sections.append({"title": "Administration", "items": admin_items})
 
@@ -179,37 +189,67 @@ def build_nav(user):
         asset_label = "Assets & infrastructure" if (c("assets.manage") or sees_all) else "My department's assets"
         sections.append({"title": "Assets", "items": [_item(asset_label, "departments:assets")]})
 
-    # ---- Social services
+    # ---- Social services: one block per officer's functions (the Director sees all of them)
     if show(D.SOCIAL_SERVICES):
-        social = []
-        if c("stands.view"):
-            social.append(_item("Housing & stand allocation", "departments:stands"))
-        if c("incidents.view"):
-            social.append(_item("Incidents & disasters", "departments:incidents"))
-        if c("activities.manage", "activities.verify", "dept.overview_all") and (dept == D.SOCIAL_SERVICES or sees_all):
-            social.append(_item("Community programmes & campaigns", "departments:activities"))
-        if c("licence.inspect"):
-            social.append(_item("Health certificate inspections", "finance:licences"))
+        community = []
         if c("welfare.view", "welfare.manage"):
-            social.append(_item("Social welfare – vulnerable households", "social:beneficiaries"))
+            community.append(_item("Social welfare – vulnerable households", "social:beneficiaries"))
+        if c("facilities.view", "facilities.manage"):
+            community.append(_item("Schools & clinics development", "registers:facilities_list"))
+        community_staff = c("welfare.view", "welfare.manage", "dept.overview_all") or role in ("SAFETY_OFFICER",)
+        if c("incidents.view") and community_staff:
+            community.append(_item("Disasters & incidents (public safety)", "departments:incidents"))
+        if c("activities.manage", "activities.verify", "dept.overview_all") and (dept == D.SOCIAL_SERVICES or sees_all) and community_staff:
+            community.append(_item("Community programmes & campaigns", "departments:activities"))
+        if c("stands.view") and not c("stands.manage"):
+            community.append(_item("Housing & stand allocation (Growth Points)", "departments:stands"))
+        if community:
+            sections.append({"title": "Community services", "items": community})
+        health = []
+        if c("health.view", "health.manage"):
+            health.append(_item("Public health inspections", "registers:inspections_list"))
+        if c("licence.inspect"):
+            health.append(_item("Health certificate inspections", "finance:licences"))
         if c("water.view", "water.manage"):
-            social.append(_item("Water points (WASH)", "social:water_list"))
-        if social:
-            sections.append({"title": "Social services", "items": social})
-        campfire = []
-        if c("wildlife.view", "wildlife.manage"):
-            campfire.append(_item("Wildlife database", "social:wildlife_list"))
-        if c("hunts.view", "hunts.manage"):
-            campfire += [_item("Hunting quotas", "social:quotas"), _item("Trophy hunts", "social:hunts"), _item("CAMPFIRE revenue by ward", "social:campfire")]
-        if campfire:
-            sections.append({"title": "CAMPFIRE (wildlife)", "items": campfire})
+            health.append(_item("Water points & boreholes", "social:water_list"))
+        if c("sanitation.view", "sanitation.manage"):
+            health.append(_item("Public ablutions & waste management", "registers:sanitation_list"))
+        if c("health.manage") and not community_staff:
+            health.append(_item("Hygiene promotion campaigns", "departments:activities"))
+        if health:
+            sections.append({"title": "Public health & WASH", "items": health})
         natres = []
+        if c("wildlife.view", "wildlife.manage"):
+            natres.append(_item("CAMPFIRE – wildlife database", "social:wildlife_list"))
+        if c("hunts.view", "hunts.manage"):
+            natres += [_item("CAMPFIRE – hunting quotas", "social:quotas"), _item("CAMPFIRE – trophy hunts", "social:hunts"),
+                       _item("CAMPFIRE revenue by ward", "social:campfire")]
         if c("permits.view", "permits.manage"):
             natres.append(_item("Sand, mining & forestry permits", "social:permits"))
-        if c("farms.view", "farms.manage"):
-            natres.append(_item("Agricultural farms", "social:farms"))
+        if c("wildlife.manage", "permits.manage") and c("incidents.view"):
+            natres.append(_item("Human-wildlife conflict & fires", "departments:incidents"))
+        if c("wildlife.manage") and not community_staff:
+            natres.append(_item("Environmental campaigns, fireguards & land reclamation", "departments:activities"))
         if natres:
-            sections.append({"title": "Natural resources & agriculture", "items": natres})
+            sections.append({"title": "Environment & natural resources", "items": natres})
+        if c("farms.view", "farms.manage"):
+            sections.append({"title": "Agriculture", "items": [_item("Agricultural farms", "social:farms")]})
+
+    # ---- Growth Points: the Growth Point Manager oversees every growth point
+    if show(D.GROWTH_POINTS) or c("growth.manage"):
+        gp = []
+        if c("areas.view"):
+            gp += [_item("Growth points – shops, houses & stands", "finance:areas"), _item("Growth point list", "finance:area_list")]
+        if c("stands.manage"):
+            gp.append(_item("Housing & stand allocation", "departments:stands"))
+        if c("leases.view"):
+            gp.append(_item("Council premises leases", "finance:leases"))
+        if c("plans.view") and dept == D.GROWTH_POINTS:
+            gp.append(_item("Building plans at growth points", "departments:plans"))
+        if c("projects.view") and dept == D.GROWTH_POINTS:
+            gp.append(_item("Housing & infrastructure projects", "departments:projects"))
+        if gp:
+            sections.append({"title": "Growth Points", "items": gp})
     if c("fines.issue") and dept not in (D.FINANCE,) and not sees_all:
         sections.append({"title": "By-law enforcement", "items": [_item("Fines I have issued", "finance:fines")]})
     if dept == D.ADMINISTRATION and c("activities.manage"):
@@ -222,6 +262,12 @@ def build_nav(user):
             tech.append(_item("Projects & infrastructure", "departments:projects"))
         if c("plans.view"):
             tech.append(_item("Building plans (development control)", "departments:plans"))
+        if c("roads.view", "roads.manage"):
+            tech.append(_item("Road network", "registers:roads_list"))
+        if c("lighting.view", "lighting.manage"):
+            tech.append(_item("Public lighting", "registers:lights_list"))
+        if c("works.view", "works.manage"):
+            tech.append(_item("Engineering work orders (job cards)", "registers:works_list"))
         if tech:
             sections.append({"title": "Technical services", "items": tech})
 
@@ -251,7 +297,7 @@ def build_nav(user):
     if not sees_all:
         own_titles = {D.FINANCE: ("Finance", "Procurement", "Assets"), D.ADMINISTRATION: ("Administration", "Procurement", "Assets", "Staff development"),
                       D.SOCIAL_SERVICES: ("Social services", "Assets"), D.TECHNICAL_SERVICES: ("Technical services", "Assets"),
-                      D.INTERNAL_AUDIT: ("Internal audit",)}.get(dept, ())
+                      D.INTERNAL_AUDIT: ("Internal audit",), D.GROWTH_POINTS: ("Growth Points", "Assets")}.get(dept, ())
         head = sections[0]
         rest = []
         for sec in sections[1:]:

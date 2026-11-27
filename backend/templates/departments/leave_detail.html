@@ -1,2 +1,10 @@
 {% extends "generic/detail.html" %}
-{% block actions %}{% if can_decide %}<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Decision</div><div class="card-body"><form method="post" action="{% url 'departments:leave_decide' object.pk %}">{% csrf_token %}<input class="form-control mb-2" name="comment" placeholder="Comment"><button class="btn btn-success" name="decision" value="approve">Approve</button> <button class="btn btn-outline-danger" name="decision" value="reject">Reject</button></form></div></div>{% endif %}{% endblock %}
+{% block below_details %}
+<div class="card shadow-sm mt-3"><div class="card-header">Approval route – Head of Department → HR / Administration Officer → CEO</div>
+<ul class="list-group list-group-flush">{% for r in route %}
+<li class="list-group-item small d-flex justify-content-between"><span><strong>{{ r.stage }}</strong>{% if r.who %} – {{ r.who }}{% endif %}{% if r.comment %}<br><span class="text-muted">{{ r.comment }}</span>{% endif %}</span>
+<span class="{% if r.state == 'done' %}text-success{% elif r.state == 'rejected' %}text-danger{% else %}text-warning{% endif %}">{% if r.state == 'done' %}✔{% elif r.state == 'rejected' %}✖ Not approved{% else %}⏳ Waiting{% endif %} {% if r.when %}{{ r.when|date:"d M Y H:i" }}{% endif %}</span></li>
+{% endfor %}</ul></div>
+{% endblock %}
+{% block actions %}{% if can_decide %}<div class="card shadow-sm mb-3 border-warning"><div class="card-header">Your decision ({{ stage_label }})</div><div class="card-body"><form method="post" action="{% url 'departments:leave_decide' object.pk %}">{% csrf_token %}<input class="form-control mb-2" name="comment" placeholder="Comment (needed if not approving)"><button class="btn btn-success" name="decision" value="approve">Approve</button> <button class="btn btn-outline-danger" name="decision" value="reject">Do not approve</button></form></div></div>{% endif %}
+{% if can_cancel %}<form method="post" action="{% url 'departments:leave_decide' object.pk %}">{% csrf_token %}<button class="btn btn-outline-secondary btn-sm" name="decision" value="cancel">Cancel my application</button></form>{% endif %}{% endblock %}

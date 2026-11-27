@@ -12,4 +12,4 @@ class SocialConfig(AppConfig):
         from . import models as m
 
         audit.register(m.WildlifeRecord, m.HuntingQuota, m.TrophyHunt, m.ResourcePermit, m.Extraction, m.Farm, m.WaterPoint, m.Beneficiary,
-                       m.Assistance)
+                       m.Assistance, m.HealthInspection, m.SanitationFacility, m.SocialFacility)

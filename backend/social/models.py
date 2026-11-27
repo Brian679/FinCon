@@ -414,3 +414,128 @@ class Assistance(SyncModel):
 
     def __str__(self):
         return f"{self.get_kind_display()} to {self.beneficiary.name} on {self.date}"
+
+
+# ------------------------------------------------------------ public health
+class HealthInspection(SyncModel):
+    """Public health inspections of food premises, markets, abattoirs, schools, institutions."""
+
+    class PremisesType(models.TextChoices):
+        FOOD = "FOOD", "Food outlet / restaurant"
+        BUTCHERY = "BUTCHERY", "Butchery"
+        MARKET = "MARKET", "Market"
+        ABATTOIR = "ABATTOIR", "Abattoir / slaughter slab"
+        SCHOOL = "SCHOOL", "School"
+        INSTITUTION = "INST", "Clinic / institution"
+        LODGE = "LODGE", "Lodge / guest house"
+        OTHER = "OTHER", "Other premises"
+
+    class Result(models.TextChoices):
+        PASS = "PASS", "Passed"
+        FOLLOW_UP = "FOLLOWUP", "Passed – follow-up needed"
+        FAIL = "FAIL", "Failed – closure / notice served"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    premises = models.CharField(max_length=200)
+    premises_type = models.CharField(max_length=10, choices=PremisesType.choices, default=PremisesType.FOOD)
+    owner = models.CharField(max_length=150, blank=True)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=200)
+    date = models.DateField(default=timezone.localdate)
+    score = models.PositiveSmallIntegerField(null=True, blank=True, help_text="Score out of 100")
+    result = models.CharField(max_length=10, choices=Result.choices, default=Result.PASS, db_index=True)
+    findings = models.TextField(help_text="What was found and what must be corrected")
+    follow_up_date = models.DateField(null=True, blank=True)
+    inspector = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.premises} ({self.get_result_display()})"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = _ref("HI")
+        super().save(*args, **kwargs)
+
+
+class SanitationFacility(SyncModel):
+    """WASH: public ablution blocks, refuse collection points and dumpsites (waste management)."""
+
+    class Kind(models.TextChoices):
+        ABLUTION = "ABLUTION", "Public ablution block"
+        REFUSE = "REFUSE", "Refuse collection point / skip"
+        DUMPSITE = "DUMPSITE", "Dumpsite / landfill"
+        BLAIR = "BLAIR", "Blair / VIP toilet (institution)"
+
+    class Status(models.TextChoices):
+        GOOD = "GOOD", "Clean / working"
+        NEEDS = "NEEDS", "Needs cleaning / collection"
+        BLOCKED = "BLOCKED", "Blocked / full / broken"
+        CLOSED = "CLOSED", "Closed"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    name = models.CharField(max_length=150)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=200)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.GOOD, db_index=True)
+    last_serviced = models.DateField(null=True, blank=True, help_text="Last cleaned / refuse collected")
+    collection_days = models.CharField(max_length=60, blank=True, help_text="e.g. Mon & Thu")
+    caretaker = models.CharField(max_length=120, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["ward", "location"]
+        verbose_name_plural = "sanitation facilities"
+
+    def __str__(self):
+        return f"{self.reference} {self.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = _ref("SAN")
+        super().save(*args, **kwargs)
+
+
+class SocialFacility(SyncModel):
+    """Schools & clinics development register (community services)."""
+
+    class Kind(models.TextChoices):
+        ECD = "ECD", "ECD centre"
+        PRIMARY = "PRIMARY", "Primary school"
+        SECONDARY = "SECONDARY", "Secondary school"
+        CLINIC = "CLINIC", "Clinic"
+        HOSPITAL = "HOSPITAL", "Hospital"
+        HALL = "HALL", "Community hall / centre"
+
+    class Condition(models.TextChoices):
+        GOOD = "GOOD", "Good"
+        FAIR = "FAIR", "Fair"
+        POOR = "POOR", "Poor"
+        UNDER_CONSTRUCTION = "BUILDING", "Under construction / upgrade"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    name = models.CharField(max_length=150)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=200)
+    responsible_authority = models.CharField(max_length=120, blank=True, help_text="Council, Ministry, church, community …")
+    population_served = models.PositiveIntegerField(default=0, help_text="Learners enrolled / catchment population")
+    classrooms_or_beds = models.PositiveIntegerField(default=0)
+    condition = models.CharField(max_length=10, choices=Condition.choices, default=Condition.FAIR)
+    needs = models.TextField(blank=True, help_text="Development needs: classrooms, staff houses, water, toilets, electricity …")
+    contact = models.CharField(max_length=120, blank=True)
+
+    class Meta:
+        ordering = ["ward", "name"]
+        verbose_name_plural = "social facilities"
+
+    def __str__(self):
+        return f"{self.reference} {self.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = _ref("SF")
+        super().save(*args, **kwargs)

@@ -236,7 +236,7 @@ def stand_action(user, st, action, *, stand="", note=""):
         st.status = StandApplication.Status.SHORTLISTED
     elif action == "allocate":
         if not user.has_cap("stands.allocate"):
-            raise PermissionDenied("Only the Director of Social Services can allocate stands.")
+            raise PermissionDenied("Only the Growth Point Manager can allocate stands.")
         if not stand:
             raise ValidationError("Enter the stand number.")
         st.status, st.allocated_stand, st.allocated_by, st.allocated_at = StandApplication.Status.ALLOCATED, stand, user, timezone.now()

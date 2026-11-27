@@ -59,7 +59,8 @@ class DepartmentIsolationTests(CouncilTestCase):
 
     def test_ceo_sees_every_department(self):
         titles = nav_titles(self.user("ceo"))
-        for d in ("Finance", "Social services", "Technical services", "Administration", "Internal audit"):
+        for d in ("Finance", "Community services", "Public health & WASH", "Environment & natural resources", "Technical services",
+                  "Administration", "Internal audit", "Growth Points"):
             self.assertIn(d, titles)
 
     def test_everyone_can_reach_other_departments_through_shared_links(self):
@@ -73,7 +74,7 @@ class DepartmentIsolationTests(CouncilTestCase):
         c = Client()
         c.login(username="tech.officer", password=PW)
         for url in ("/staff/finance/", "/staff/finance/receipts/", "/staff/social/incidents/", "/staff/meetings/", "/staff/policies/",
-                    "/staff/social/stands/", "/staff/finance/licences/"):
+                    "/staff/growth-points/stands/", "/staff/finance/licences/"):
             self.assertEqual(c.get(url).status_code, 403, url)
         self.assertEqual(c.get("/staff/technical/plans/").status_code, 200)
         c.login(username="hr.officer", password=PW)
@@ -487,7 +488,7 @@ class AppParityTests(CouncilTestCase):
         self.assertEqual(self.api("treasurer").get("/api/v1/reports/finance/").status_code, 200)
         self.assertEqual(self.api("cashier").get("/api/v1/reports/finance/").status_code, 403)
         data = self.api("ceo").get("/api/v1/reports/executive/").data
-        self.assertEqual(len(data["departments"]), 6)
+        self.assertEqual(len(data["departments"]), 7)     # incl. Growth Points
         self.assertEqual(self.api("engineer").get("/api/v1/reports/executive/").status_code, 403)
         self.assertEqual(self.api("chief.auditor").get("/api/v1/audit/").status_code, 200)
         self.assertEqual(self.api("tech.officer").get("/api/v1/audit/").status_code, 403)

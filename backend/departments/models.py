@@ -29,6 +29,9 @@ class LeaveRequest(SyncModel):
     end_date = models.DateField()
     reason = models.TextField(blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    stage = models.CharField(max_length=6, blank=True, choices=[("HOD", "Head of Department"), ("HR", "HR / Administration Officer"),
+                                                                 ("CEO", "Chief Executive Officer")],
+                             help_text="Who the application is waiting for")
     decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
     decided_at = models.DateTimeField(null=True, blank=True)
     decision_comment = models.CharField(max_length=255, blank=True)
@@ -627,3 +630,159 @@ class Policy(SyncModel):
 
     def __str__(self):
         return f"{self.title} v{self.version}"
+
+
+# ================================================== Technical Services (charter: roads, lighting, engineering)
+class Road(SyncModel):
+    """Road network register: roads construction / rehabilitation and maintenance."""
+
+    class Surface(models.TextChoices):
+        TAR = "TAR", "Tarred / bitumen"
+        GRAVEL = "GRAVEL", "Gravel"
+        EARTH = "EARTH", "Earth / track"
+        CONCRETE = "CONCRETE", "Concrete strip"
+
+    class Condition(models.TextChoices):
+        GOOD = "GOOD", "Good"
+        FAIR = "FAIR", "Fair"
+        POOR = "POOR", "Poor – needs rehabilitation"
+        IMPASSABLE = "IMPASSABLE", "Impassable"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    name = models.CharField(max_length=150, help_text="e.g. Checheche – Chibuwe road")
+    road_number = models.CharField(max_length=30, blank=True, help_text="District road number")
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    start_point = models.CharField(max_length=120)
+    end_point = models.CharField(max_length=120)
+    length_km = models.DecimalField(max_digits=8, decimal_places=2)
+    surface = models.CharField(max_length=10, choices=Surface.choices, default=Surface.GRAVEL)
+    condition = models.CharField(max_length=10, choices=Condition.choices, default=Condition.FAIR, db_index=True)
+    last_graded = models.DateField(null=True, blank=True, help_text="Last grading / maintenance")
+    bridges_culverts = models.PositiveSmallIntegerField(default=0)
+    notes = models.TextField(blank=True, help_text="Potholes, washaways, drainage problems …")
+
+    class Meta:
+        ordering = ["ward", "name"]
+
+    def __str__(self):
+        return f"{self.reference} {self.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("RD", 4)
+        super().save(*args, **kwargs)
+
+
+class PublicLight(SyncModel):
+    """Public lighting: street lights and high-mast lights."""
+
+    class LightType(models.TextChoices):
+        STREET = "STREET", "Street light"
+        HIGHMAST = "HIGHMAST", "High-mast light"
+        SOLAR = "SOLAR", "Solar street light"
+        FLOOD = "FLOOD", "Flood light"
+
+    class Status(models.TextChoices):
+        WORKING = "WORKING", "Working"
+        FAULTY = "FAULTY", "Faulty / not lighting"
+        VANDALISED = "VANDAL", "Vandalised / stolen parts"
+        REPAIR = "REPAIR", "Under repair"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    light_type = models.CharField(max_length=10, choices=LightType.choices, default=LightType.STREET)
+    location = models.CharField(max_length=200, help_text="Street / growth point / landmark")
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    pole_number = models.CharField(max_length=30, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.WORKING, db_index=True)
+    last_checked = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["ward", "location"]
+
+    def __str__(self):
+        return f"{self.reference} {self.get_light_type_display()} – {self.location}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("PL", 4)
+        super().save(*args, **kwargs)
+
+
+class WorkOrder(SyncModel):
+    """Engineering services job card: road maintenance, lighting repairs, council buildings, plant."""
+
+    class Kind(models.TextChoices):
+        ROAD = "ROAD", "Road maintenance / grading / patching"
+        DRAINAGE = "DRAIN", "Drainage / culverts"
+        LIGHTING = "LIGHT", "Public lighting repair"
+        BUILDING = "BUILDING", "Council building maintenance"
+        PLANT = "PLANT", "Plant & vehicle repair"
+        WATER = "WATER", "Water / borehole repair"
+        OTHER = "OTHER", "Other engineering work"
+
+    class Status(models.TextChoices):
+        OPEN = "OPEN", "Open"
+        IN_PROGRESS = "IN_PROGRESS", "In progress"
+        DONE = "DONE", "Work done – awaiting sign-off"
+        CLOSED = "CLOSED", "Signed off"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.ROAD)
+    title = models.CharField(max_length=200)
+    location = models.CharField(max_length=200)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    road = models.ForeignKey(Road, null=True, blank=True, on_delete=models.SET_NULL, related_name="work_orders")
+    light = models.ForeignKey(PublicLight, null=True, blank=True, on_delete=models.SET_NULL, related_name="work_orders")
+    description = models.TextField(blank=True)
+    assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="work_orders")
+    due_date = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.OPEN, db_index=True)
+    materials = models.TextField(blank=True, help_text="Materials used")
+    labour_days = models.DecimalField(max_digits=6, decimal_places=1, default=0)
+    cost = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="USD")
+    completion_notes = models.TextField(blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    signed_off_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["status", "due_date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("WO", 5)
+        super().save(*args, **kwargs)
+
+
+# ================================================== Administration (charter: records management)
+class RecordFile(SyncModel):
+    """Registry: council files and records – where they are, who has them, how long to keep them."""
+
+    class Status(models.TextChoices):
+        IN_REGISTRY = "IN", "In the registry"
+        ON_LOAN = "LOAN", "Out on loan"
+        ARCHIVED = "ARCHIVED", "Archived"
+        DISPOSED = "DISPOSED", "Disposed (retention ended)"
+
+    file_number = models.CharField(max_length=40, unique=True)
+    title = models.CharField(max_length=200)
+    department = models.CharField(max_length=10, choices=Department.choices)
+    category = models.CharField(max_length=60, blank=True, help_text="e.g. Personnel, Stands, Contracts, Council minutes")
+    location = models.CharField(max_length=100, help_text="Cabinet / shelf / box")
+    confidential = models.BooleanField(default=False)
+    opened_on = models.DateField(default=timezone.localdate)
+    retain_until = models.DateField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.IN_REGISTRY, db_index=True)
+    borrowed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    borrowed_at = models.DateTimeField(null=True, blank=True)
+    due_back = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["file_number"]
+
+    def __str__(self):
+        return f"{self.file_number} {self.title}"

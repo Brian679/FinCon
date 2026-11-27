@@ -56,6 +56,13 @@ object Entities {
     const val FARMS = "farms"
     const val WATER_POINTS = "water_points"
     const val BENEFICIARIES = "beneficiaries"
+    const val ROADS = "roads"
+    const val PUBLIC_LIGHTS = "public_lights"
+    const val WORK_ORDERS = "work_orders"
+    const val RECORD_FILES = "record_files"
+    const val HEALTH_INSPECTIONS = "health_inspections"
+    const val SANITATION = "sanitation"
+    const val SOCIAL_FACILITIES = "social_facilities"
 }
 
 @Serializable
@@ -201,7 +208,12 @@ data class LeaveRequest(
     val id: String, val employee: Long? = null, val employeeName: String = "", val employeeDepartment: String = "", val leaveType: String = "", val leaveTypeLabel: String = "", val startDate: String = "", val days: Int = 0,
     val endDate: String = "", val reason: String = "", val status: String = "", val statusLabel: String = "", val decisionComment: String = "",
     val localNote: String? = null,
+    /** Who it is waiting for: HOD → HR (HR / Administration Officer) → CEO. */
+    val stage: String = "", val stageLabel: String = "", val approvers: List<Long> = emptyList(), val route: List<LeaveStep> = emptyList(),
 )
+
+@Serializable
+data class LeaveStep(val stage: String = "", val who: String = "", val state: String = "", val comment: String = "", val `when`: String? = null)
 
 @Serializable
 data class AppNotification(val id: String, val title: String = "", val body: String = "", val link: String = "", val isRead: Boolean = false, val createdAt: String = "")
@@ -398,7 +410,7 @@ object Choices {
     val receiptMethods = listOf("CASH" to "Cash", "ECOCASH" to "EcoCash", "ONEMONEY" to "OneMoney", "INNBUCKS" to "InnBucks",
         "SWIPE" to "Card / swipe (POS)", "BANK" to "Bank transfer / deposit")
     val departments = listOf("EXEC" to "Office of the CEO", "ADMIN" to "Administration", "FINANCE" to "Finance",
-        "AUDIT" to "Internal Audit", "SOCIAL" to "Social Services", "TECH" to "Technical Services")
+        "AUDIT" to "Internal Audit", "SOCIAL" to "Social Services", "TECH" to "Technical Services", "GROWTH" to "Growth Points")
     val complaintKinds = listOf("COMPLAINT" to "Complaint", "COMPLIMENT" to "Compliment", "SUGGESTION" to "Suggestion", "ENQUIRY" to "Enquiry")
     val complaintChannels = listOf("OFFICE" to "Council offices", "PHONE" to "Telephone", "CONSULT" to "Community consultation",
         "BOX" to "Suggestion box", "SOCIAL" to "Social media", "EMAIL" to "Email", "CEO" to "Chief Executive Officer")

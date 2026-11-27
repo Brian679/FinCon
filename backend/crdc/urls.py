@@ -19,6 +19,7 @@ urlpatterns = [
     path("staff/", include("payroll.urls")),
     path("staff/", include("departments.urls")),
     path("staff/social/", include("social.urls")),
+    path("staff/", include("departments.registers")),
     path("portal/", include("portal.urls")),
     path("api/v1/", include("api.urls")),
 ]

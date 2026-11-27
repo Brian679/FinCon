@@ -17,6 +17,7 @@ class Department(models.TextChoices):
     INTERNAL_AUDIT = "AUDIT", "Internal Audit"
     SOCIAL_SERVICES = "SOCIAL", "Social Services"
     TECHNICAL_SERVICES = "TECH", "Technical Services"
+    GROWTH_POINTS = "GROWTH", "Growth Points"
 
 
 class Currency(models.TextChoices):

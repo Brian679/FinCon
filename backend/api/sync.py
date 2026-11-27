@@ -70,7 +70,7 @@ def _task_scope(user):
 
 
 def _leave_scope(user):
-    if user.has_cap("hr.manage") or user.is_ceo:
+    if user.has_cap("hr.manage", "leave.hr_approve") or user.is_ceo:
         return LeaveRequest.objects.all()
     if user.has_cap("leave.approve"):
         return LeaveRequest.objects.filter(employee__department=user.department)
@@ -87,7 +87,7 @@ def _finding_scope(user):
 
 def staff_entities(user):
     c = user.has_cap
-    fin_accounts = c("accounts.manage", "finance.view_all", "receipt.create")
+    fin_accounts = c("accounts.manage", "finance.view_all", "receipt.create", "growth.manage")   # Growth Point Manager: shops / houses / stands
     return {
         "service_standards": (ServiceStandard.objects.all(), s.ServiceStandardSerializer),
         "revenue_heads": (RevenueHead.objects.all(), s.RevenueHeadSerializer),
@@ -95,7 +95,7 @@ def staff_entities(user):
         "properties": (Property.objects.all(), s.PropertySerializer) if fin_accounts else None,
         "bills": (Bill.objects.filter(Q(status__in=["UNPAID", "PART"]) | Q(updated_at__gte=timezone.now() - timedelta(days=120))), s.BillSerializer) if fin_accounts else None,
         "receipts": (_receipt_scope(user), s.ReceiptSerializer) if _receipt_scope(user) is not None else None,
-        "licences": (Licence.objects.select_related("account"), s.LicenceSerializer) if c("licence.view")
+        "licences": (Licence.objects.select_related("account"), s.LicenceSerializer) if c("licence.view", "growth.manage")
         else (Licence.objects.filter(Q(status="INSPECTION") | Q(inspected_by=user)).select_related("account"), s.LicenceSerializer)
         if c("licence.inspect") else None,
         "requisitions": (_requisition_scope(user), s.RequisitionSerializer),
@@ -162,7 +162,20 @@ def staff_entities(user):
         "farms": (s.sm.Farm.objects.select_related("owner"), s.FarmSerializer) if c("farms.view", "farms.manage") else None,
         "water_points": (s.sm.WaterPoint.objects.all(), s.WaterPointSerializer) if c("water.view", "water.manage") else None,
         "beneficiaries": (s.sm.Beneficiary.objects.prefetch_related("assistance"), s.BeneficiarySerializer) if c("welfare.view", "welfare.manage") else None,
+        # charter registers per department
+        "roads": (s.dm.Road.objects.all(), s.RoadSerializer) if c("roads.view", "roads.manage") else None,
+        "public_lights": (s.dm.PublicLight.objects.all(), s.LightSerializer) if c("lighting.view", "lighting.manage") else None,
+        "work_orders": (_regs.works_scope(user, s.dm.WorkOrder.objects.select_related("assigned_to", "road", "light", "signed_off_by")),
+                        s.WorkOrderSerializer) if c("works.view", "works.manage") or s.dm.WorkOrder.objects.filter(assigned_to=user).exists() else None,
+        "record_files": (_regs.records_scope(user, s.dm.RecordFile.objects.select_related("borrowed_by")), s.RecordFileSerializer)
+        if c("records.view", "records.manage") else None,
+        "health_inspections": (s.sm.HealthInspection.objects.select_related("inspector"), s.InspectionSerializer) if c("health.view", "health.manage") else None,
+        "sanitation": (s.sm.SanitationFacility.objects.all(), s.SanitationSerializer) if c("sanitation.view", "sanitation.manage") else None,
+        "social_facilities": (s.sm.SocialFacility.objects.all(), s.FacilitySerializer) if c("facilities.view", "facilities.manage") else None,
     }
+
+
+from departments import registers as _regs  # noqa: E402
 
 
 def _fine_scope(user):
@@ -277,17 +290,13 @@ def op_receipt_void_decide(user, p):
 
 
 def op_leave_decide(user, p):
+    from departments import leave
+
     lv = _get(LeaveRequest, p["leave"])
-    if lv.status != LeaveRequest.Status.PENDING:
-        raise ValidationError("This leave application has already been decided.")
-    if lv.employee_id == user.pk or not (user.is_ceo or (user.has_cap("leave.approve") and user.department == lv.employee.department)):
-        raise PermissionDenied("You cannot decide on this leave application.")
-    lv.status = LeaveRequest.Status.APPROVED if p.get("approve") else LeaveRequest.Status.REJECTED
-    lv.decided_by = user
-    lv.decided_at = timezone.now()
-    lv.decision_comment = p.get("comment", "")
-    lv.save()
-    fin.notify([lv.employee], f"Leave {lv.get_status_display().lower()}", lv.decision_comment)
+    if p.get("cancel"):
+        lv = leave.cancel(user, lv)
+    else:
+        lv = leave.decide(user, lv, bool(p.get("approve")), p.get("comment", ""))
     return "leave", s.LeaveRequestSerializer(lv).data
 
 
@@ -381,8 +390,10 @@ def op_leave_apply(user, p):
         raise ValidationError("Invalid leave dates.")
     lv = LeaveRequest.objects.create(id=p.get("id"), employee=user, leave_type=p.get("leave_type", "ANNUAL"), start_date=start, end_date=end,
                                      reason=p.get("reason", ""), created_by=user)
-    heads = [u for u in type(user).objects.filter(department=user.department, is_active=True) if u.is_head and u != user]
-    fin.notify(heads, f"Leave application: {user}", f"{lv.start_date} – {lv.end_date}", f"/staff/leave/{lv.pk}/")
+    from departments import leave
+
+    leave.submit(lv)   # Head of Department → HR / Administration Officer → CEO
+    lv.refresh_from_db()
     return "leave", s.LeaveRequestSerializer(lv).data
 
 
@@ -760,6 +771,14 @@ def op_register_save(user, p):
         "farms": (sf.FarmForm, s.sm.Farm, "farms.manage", s.FarmSerializer, None),
         "water_points": (sf.WaterPointForm, s.sm.WaterPoint, "water.manage", s.WaterPointSerializer, None),
         "beneficiaries": (sf.BeneficiaryForm, s.sm.Beneficiary, "welfare.manage", s.BeneficiarySerializer, None),
+        "roads": (_regs.form_for("roads"), s.dm.Road, "roads.manage", s.RoadSerializer, None),
+        "public_lights": (_regs.form_for("lights"), s.dm.PublicLight, "lighting.manage", s.LightSerializer, None),
+        "work_orders": (_regs.form_for("works"), s.dm.WorkOrder, "works.manage", s.WorkOrderSerializer, None),
+        "record_files": (_regs.form_for("records"), s.dm.RecordFile, "records.manage", s.RecordFileSerializer, None),
+        "health_inspections": (_regs.form_for("inspections"), s.sm.HealthInspection, "health.manage", s.InspectionSerializer,
+                               lambda o: setattr(o, "inspector", user)),
+        "sanitation": (_regs.form_for("sanitation"), s.sm.SanitationFacility, "sanitation.manage", s.SanitationSerializer, None),
+        "social_facilities": (_regs.form_for("facilities"), s.sm.SocialFacility, "facilities.manage", s.FacilitySerializer, None),
     }
     if reg not in kinds:
         raise ValidationError("Unknown register.")
@@ -830,7 +849,21 @@ def op_assistance_give(user, p):
     return "beneficiaries", s.BeneficiarySerializer(b).data
 
 
+def op_work_action(user, p):
+    wo = _regs.work_action(user, _get(s.dm.WorkOrder, p["work_order"]), p.get("action"), assigned_to=p.get("assigned_to"), notes=p.get("notes", ""),
+                           materials=p.get("materials", ""), labour_days=p.get("labour_days") or None, cost=p.get("cost") or None)
+    return "work_orders", s.WorkOrderSerializer(wo).data
+
+
+def op_record_action(user, p):
+    rf = _regs.record_action(user, _get(s.dm.RecordFile, p["record_file"]), p.get("action"), borrower=p.get("borrower"),
+                             due_back=p.get("due_back") or None, notes=p.get("notes", ""))
+    return "record_files", s.RecordFileSerializer(rf).data
+
+
 STAFF_OPS = {
+    "work.action": op_work_action,
+    "record.action": op_record_action,
     "register.save": op_register_save,
     "fine.issue": op_fine_issue,
     "fine.decide": op_fine_decide,

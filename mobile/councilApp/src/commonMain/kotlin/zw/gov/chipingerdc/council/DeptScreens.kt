@@ -1,5 +1,6 @@
 package zw.gov.chipingerdc.council
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Text
@@ -26,6 +27,7 @@ import zw.gov.chipingerdc.shared.platformName
 import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.ChoicePicker
 import zw.gov.chipingerdc.shared.ui.CrdcColors
+import zw.gov.chipingerdc.shared.ui.DecisionPanel
 import zw.gov.chipingerdc.shared.ui.Empty
 import zw.gov.chipingerdc.shared.ui.Field
 import zw.gov.chipingerdc.shared.ui.InfoBox
@@ -37,6 +39,7 @@ import zw.gov.chipingerdc.shared.ui.RowCard
 import zw.gov.chipingerdc.shared.ui.ScrollColumn
 import zw.gov.chipingerdc.shared.ui.SecondaryButton
 import zw.gov.chipingerdc.shared.ui.SectionCard
+import zw.gov.chipingerdc.shared.ui.StatusChip
 import zw.gov.chipingerdc.shared.ui.money
 import zw.gov.chipingerdc.shared.ui.prettyDate
 
@@ -126,8 +129,9 @@ fun LeaveScreen(ctx: Ctx) {
         ListScreen {
             if (list.isEmpty()) item { Empty("No leave applications.") }
             items(list, key = { it.id }) { l ->
-                RowCard(l.employeeName.ifBlank { ctx.me.fullName }, "${l.leaveTypeLabel} · ${l.startDate} – ${l.endDate}\n${l.decisionComment}", null,
-                    l.statusLabel.ifBlank { l.status }, l.status, l.localNote)
+                RowCard(l.employeeName.ifBlank { ctx.me.fullName }, "${l.leaveTypeLabel} · ${l.startDate} – ${l.endDate} · ${l.days} day(s)" +
+                    (if (l.status == "PENDING" && l.stageLabel.isNotBlank()) "\nWaiting for: ${l.stageLabel}" else "\n${l.decisionComment}"), null,
+                    l.statusLabel.ifBlank { l.status }, l.status, l.localNote) { ctx.go(Screen.LeaveDetail(l.id)) }
             }
         }
     }
@@ -234,6 +238,46 @@ fun CharterScreen(ctx: Ctx) {
                     Text("“We are committed to responsive, transparent, accountable and quality municipal service delivery for sustainable development and improved quality of life for all residents of Chipinge District.”")
                 }
             }
+        }
+    }
+}
+
+
+/** One leave application with its approval route: Head of Department → HR / Administration Officer → CEO. */
+@Composable
+fun LeaveDetailScreen(ctx: Ctx, id: String) {
+    val l by ctx.sdk.observeOne(Entities.LEAVE, id, LeaveRequest.serializer()).collectAsState(initial = null)
+    AppScreen("Leave application", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+        val lv = l ?: return@AppScreen Empty("Not found")
+        ScrollColumn {
+            SectionCard("${lv.employeeName.ifBlank { ctx.me.fullName }} – ${lv.leaveTypeLabel}") {
+                KeyValue("From", prettyDate(lv.startDate)); KeyValue("To", prettyDate(lv.endDate)); KeyValue("Working days", lv.days.toString())
+                KeyValue("Reason", lv.reason)
+                if (lv.status == "PENDING" && lv.stageLabel.isNotBlank()) KeyValue("Waiting for", lv.stageLabel)
+                Row { StatusChip(lv.statusLabel.ifBlank { lv.status }, lv.status) }
+                lv.localNote?.let { InfoBox(it) }
+            }
+            SectionCard("Approval route") {
+                lv.route.forEach { r ->
+                    val mark = when (r.state) { "done" -> "✔"; "rejected" -> "✖"; else -> "⏳" }
+                    KeyValue("$mark ${r.stage}", listOf(r.who, prettyDate(r.`when`).takeIf { r.`when` != null } ?: "", r.comment).filter { it.isNotBlank() }
+                        .joinToString(" · "))
+                }
+                if (lv.route.isEmpty()) Text("Head of Department → HR / Administration Officer → CEO", fontSize = 12.sp, color = CrdcColors.Muted)
+            }
+            if (lv.status == "PENDING" && ctx.me.id in lv.approvers && lv.localNote == null) {
+                DecisionPanel("Your decision (${lv.stageLabel})") { ok, comment ->
+                    ctx.sdk.markPending(Entities.LEAVE, lv.id, "Decision queued")
+                    ctx.sdk.enqueue("leave.decide", "Leave decision ${lv.employeeName}", Entities.LEAVE, lv.id) {
+                        put("leave", lv.id); put("approve", ok); put("comment", comment)
+                    }
+                }
+            }
+            if (lv.employee == ctx.me.id && lv.status in listOf("PENDING", "APPROVED") && lv.localNote == null)
+                SecondaryButton("Cancel my application", {
+                    ctx.sdk.markPending(Entities.LEAVE, lv.id, "Cancellation queued")
+                    ctx.sdk.enqueue("leave.decide", "Cancel leave ${lv.startDate}", Entities.LEAVE, lv.id) { put("leave", lv.id); put("cancel", true) }
+                })
         }
     }
 }

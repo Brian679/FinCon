@@ -57,9 +57,9 @@ fun rememberApprovals(ctx: Ctx): List<Approval> {
         reqs.forEach { r -> requisitionStage(me, r)?.let { add(Approval("Requisition", r.number, "${r.departmentLabel} · $${r.total}", it, Screen.RequisitionDetail(r.id))) } }
         vouchers.forEach { v -> voucherStage(me, v)?.let { add(Approval("Payment voucher", v.number, "${v.payeeName} · ${v.currency} ${v.amount}", it, Screen.VoucherDetail(v.id))) } }
         licences.forEach { l -> licenceStage(me, l)?.let { add(Approval("Licence", l.number, l.businessName, it, Screen.LicenceDetail(l.id))) } }
-        if (me.can("leave.approve")) leave.filter {
-            it.status == "PENDING" && it.employee != me.id && it.localNote == null && (me.isCeo || it.employeeDepartment == me.department)
-        }.forEach { add(Approval("Leave", it.employeeName, "${it.leaveTypeLabel} ${it.startDate} – ${it.endDate}", "Approval", null, leave = it)) }
+        leave.filter { it.status == "PENDING" && it.employee != me.id && it.localNote == null && me.id in it.approvers }
+            .forEach { add(Approval("Leave", it.employeeName, "${it.leaveTypeLabel} ${it.startDate} – ${it.endDate} (${it.days} days)",
+                it.stageLabel.ifBlank { "Approval" }, Screen.LeaveDetail(it.id), leave = it)) }
         if (me.can("receipt.void_approve")) receipts.filter {
             it.status == "VOID_REQ" && it.voidRequestedBy != me.id && it.receivedBy != me.id && it.localNote == null
         }.forEach { add(Approval("Receipt void", it.number, it.voidReason, "Approve void", Screen.ReceiptDetail(it.id), receipt = it)) }

@@ -30,7 +30,7 @@ class LeaveList(GenericListView):
 
     def scope(self, qs):
         u = self.request.user
-        if u.has_cap("hr.manage") or u.is_ceo:
+        if u.has_cap("hr.manage", "leave.hr_approve") or u.is_ceo:
             return qs
         if u.has_cap("leave.approve"):
             return qs.filter(employee__department=u.department)
@@ -48,10 +48,9 @@ class LeaveCreate(GenericCreateView):
         obj.employee = self.request.user
 
     def after_save(self, obj):
-        heads = [u for u in User.objects.filter(department=obj.employee.department, is_active=True) if u.is_head and u != obj.employee]
-        if obj.employee.is_head:
-            heads = [u for u in User.objects.filter(role="CEO", is_active=True)]
-        notify(heads, f"Leave application: {obj.employee}", f"{obj.get_leave_type_display()} {obj.start_date} – {obj.end_date}", f"/staff/leave/{obj.pk}/")
+        from . import leave
+
+        leave.submit(obj)   # Head of Department → HR / Administration Officer → CEO
 
 
 class LeaveDetail(GenericDetailView):
@@ -59,33 +58,36 @@ class LeaveDetail(GenericDetailView):
     required_caps = ("leave.apply",)
     template_name = "departments/leave_detail.html"
     fields = [("Employee", "employee"), ("Type", "leave_type"), ("From", "start_date"), ("To", "end_date"), ("Working days", "days"),
-              ("Reason", "reason"), ("Decided by", "decided_by"), ("Decided at", "decided_at"), ("Comment", "decision_comment")]
+              ("Reason", "reason"), ("Waiting for", "stage"), ("Last decided by", "decided_by"), ("Comment", "decision_comment")]
 
     def scope(self, qs):
         return LeaveList.scope(self, qs)
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
+        from . import leave
+
         lv, u = self.object, self.request.user
-        ctx["can_decide"] = lv.status == "PENDING" and lv.employee_id != u.pk and (
-            u.is_ceo or (u.has_cap("leave.approve") and u.department == lv.employee.department))
+        ctx["can_decide"] = leave.can_decide(u, lv)
+        ctx["stage_label"] = leave.LABELS.get(lv.stage, "")
+        ctx["route"] = leave.route(lv)
+        ctx["can_cancel"] = lv.employee_id == u.pk and lv.status in ("PENDING", "APPROVED") and lv.start_date > timezone.localdate()
         return ctx
 
 
-@cap_required("leave.approve")
+@staff_required
 @require_POST
 def leave_decide(request, pk):
-    lv = get_object_or_404(LeaveRequest, pk=pk, status=LeaveRequest.Status.PENDING)
-    if lv.employee_id == request.user.pk or not (request.user.is_ceo or request.user.department == lv.employee.department):
-        raise PermissionDenied
-    lv.status = LeaveRequest.Status.APPROVED if request.POST.get("decision") == "approve" else LeaveRequest.Status.REJECTED
-    lv.decided_by = request.user
-    lv.decided_at = timezone.now()
-    lv.decision_comment = request.POST.get("comment", "")
-    lv.save()
-    audit.log(AuditLog.Action.APPROVE if lv.status == "APPROVED" else AuditLog.Action.REJECT, lv)
-    notify([lv.employee], f"Leave {lv.get_status_display().lower()}", lv.decision_comment)
-    messages.success(request, "Decision recorded.")
+    from core.crud import run_action
+
+    from . import leave
+
+    lv = get_object_or_404(LeaveRequest, pk=pk)
+    if request.POST.get("decision") == "cancel":
+        run_action(request, leave.cancel, request.user, lv, success="Leave application cancelled.")
+    else:
+        run_action(request, leave.decide, request.user, lv, request.POST.get("decision") == "approve", request.POST.get("comment", ""),
+                   success="Decision recorded – the next approver has been notified.")
     return redirect("departments:leave_detail", pk=pk)
 
 

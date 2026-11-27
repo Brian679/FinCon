@@ -21,6 +21,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import zw.gov.chipingerdc.shared.model.ClientAccount
 import zw.gov.chipingerdc.shared.model.Entities
+import zw.gov.chipingerdc.shared.model.StaffMember
 import zw.gov.chipingerdc.shared.ui.ActionPanel
 import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.ChoicePicker
@@ -189,6 +190,87 @@ val REGISTERS: Map<String, RegisterSpec> = listOf(
                 listOf("fines.issue", "fines.waive")) { o, _ -> o.s("status") == "ISSUED" }),
         editable = { false }, newScreen = Screen.NewFine,
         info = "A fine is billed to the offender's council account (opened from the ID or phone if needed), sent by SMS, and shows PAID as soon as it is paid."),
+    // ---------------------------------------------------------------- Technical Services
+    RegisterSpec("roads", Entities.ROADS, "Road network", "road", listOf("roads.view", "roads.manage"), listOf("roads.manage"),
+        listOf(RField("name", "Road name", required = true), RField("road_number", "District road number"), RField("ward", "Ward", "int"),
+            RField("start_point", "From", required = true), RField("end_point", "To", required = true), RField("length_km", "Length (km)", "number", required = true),
+            RField("surface", "Surface", "choice", listOf("GRAVEL" to "Gravel", "TAR" to "Tarred / bitumen", "EARTH" to "Earth / track", "CONCRETE" to "Concrete strip")),
+            RField("condition", "Condition", "choice", listOf("FAIR" to "Fair", "GOOD" to "Good", "POOR" to "Poor – needs rehabilitation", "IMPASSABLE" to "Impassable")),
+            RField("last_graded", "Last graded (YYYY-MM-DD)", "date"), RField("bridges_culverts", "Bridges / culverts", "int"), RField("notes", "Notes", "multiline")),
+        line = { "${it.s("name")} (${it.s("length_km")} km)" to "${it.s("reference")} · ${it.s("road_number")} · ${it.s("surface_label")} · ward ${ward(it)}\nLast graded ${prettyDate(it.s("last_graded"))}" },
+        tone = { when (it.s("condition")) { "GOOD" -> "ACTIVE"; "FAIR" -> "IN_PROGRESS"; else -> "BROKEN" } },
+        extra = { listOf("Condition" to it.s("condition_label")) }),
+    RegisterSpec("public_lights", Entities.PUBLIC_LIGHTS, "Public lighting", "light", listOf("lighting.view", "lighting.manage"), listOf("lighting.manage"),
+        listOf(RField("light_type", "Type", "choice", listOf("STREET" to "Street light", "HIGHMAST" to "High-mast light", "SOLAR" to "Solar street light", "FLOOD" to "Flood light")),
+            RField("location", "Location", required = true), RField("ward", "Ward", "int"), RField("pole_number", "Pole number"),
+            RField("status", "Status", "choice", listOf("WORKING" to "Working", "FAULTY" to "Faulty / not lighting", "VANDAL" to "Vandalised / stolen parts", "REPAIR" to "Under repair")),
+            RField("last_checked", "Last checked (YYYY-MM-DD)", "date"), RField("notes", "Notes", "multiline")),
+        line = { "${it.s("light_type_label")} – ${it.s("location")}" to "${it.s("reference")} · pole ${it.s("pole_number")} · ward ${ward(it)} · checked ${prettyDate(it.s("last_checked"))}" },
+        tone = { when (it.s("status")) { "WORKING" -> "ACTIVE"; "REPAIR" -> "IN_PROGRESS"; else -> "BROKEN" } }),
+    RegisterSpec("work_orders", Entities.WORK_ORDERS, "Engineering work orders", "work order", listOf("works.view", "works.manage"), listOf("works.manage"),
+        listOf(RField("kind", "Type", "choice", listOf("ROAD" to "Road maintenance / grading / patching", "DRAIN" to "Drainage / culverts", "LIGHT" to "Public lighting repair",
+            "BUILDING" to "Council building maintenance", "PLANT" to "Plant & vehicle repair", "WATER" to "Water / borehole repair", "OTHER" to "Other engineering work")),
+            RField("title", "Work to be done", required = true), RField("location", "Location", required = true), RField("ward", "Ward", "int"),
+            RField("description", "Details", "multiline"), RField("assigned_to", "Give the job to", "staff"), RField("due_date", "Due (YYYY-MM-DD)", "date")),
+        line = { it.s("title") to "${it.s("reference")} · ${it.s("kind_label")} · ${it.s("location")}\n${it.s("assigned_to_name").ifBlank { "not assigned" }} · due ${prettyDate(it.s("due_date"))}" },
+        amount = { if (it.s("cost") !in listOf("", "0", "0.00")) "$" + money(it.s("cost")) else null },
+        tone = { when (it.s("status")) { "CLOSED" -> "CLOSED"; "DONE" -> "VERIFIED"; "IN_PROGRESS" -> "IN_PROGRESS"; else -> "OPEN" } },
+        extra = { listOf("Assigned to" to it.s("assigned_to_name"), "Road" to it.s("road_name"), "Light" to it.s("light_name"), "Materials" to it.s("materials"),
+            "Labour (days)" to it.s("labour_days"), "Cost" to "USD ${money(it.s("cost"))}", "Completion notes" to it.s("completion_notes"),
+            "Signed off by" to it.s("signed_off_by_name")) },
+        actions = listOf(
+            RAction("Report progress", "work.action", "work_order", listOf("done" to "Work done", "start" to "Started"),
+                listOf(FieldSpec("notes", "What was done", "multiline"), FieldSpec("materials", "Materials used"), FieldSpec("labour_days", "Labour (days)", "number"),
+                    FieldSpec("cost", "Cost (USD)", "number")), listOf("works.manage", "works.view", "tasks.view")) { o, c ->
+                o.s("status") in listOf("OPEN", "IN_PROGRESS") && (o.s("assigned_to") == c.me.id.toString() || c.me.can("works.assign")) },
+            RAction("Sign off (District Engineer)", "work.action", "work_order", listOf("signoff" to "Sign off", "reopen" to "Send back"),
+                listOf(FieldSpec("notes", "Comment", "multiline")), listOf("works.assign")) { o, c -> o.s("status") == "DONE" && o.s("assigned_to") != c.me.id.toString() }),
+        editable = { it.s("status") == "OPEN" },
+        info = "The District Engineer assigns job cards; the officer reports the work, materials and cost; the Engineer signs it off (a repaired light shows Working, a graded road gets today's date)."),
+    // ---------------------------------------------------------------- Administration
+    RegisterSpec("record_files", Entities.RECORD_FILES, "Records management (registry)", "file", listOf("records.view", "records.manage"), listOf("records.manage"),
+        listOf(RField("file_number", "File number", required = true), RField("title", "Title", required = true),
+            RField("department", "Department", "choice", listOf("ADMIN" to "Administration", "FINANCE" to "Finance", "SOCIAL" to "Social Services",
+                "TECH" to "Technical Services", "AUDIT" to "Internal Audit", "EXEC" to "Office of the CEO", "GROWTH" to "Growth Points")),
+            RField("category", "Category"), RField("location", "Cabinet / shelf / box", required = true), RField("confidential", "Confidential", "bool"),
+            RField("opened_on", "Opened (YYYY-MM-DD)", "date"), RField("retain_until", "Keep until (YYYY-MM-DD)", "date"), RField("notes", "Notes", "multiline")),
+        line = { "${it.s("file_number")} – ${it.s("title")}" to "${it.s("department_label")} · ${it.s("location")}" +
+            (if (it.s("status") == "LOAN") "\nWith ${it.s("borrowed_by_name")} – due ${prettyDate(it.s("due_back"))}" else "") },
+        tone = { when (it.s("status")) { "IN" -> "ACTIVE"; "LOAN" -> "IN_PROGRESS"; else -> "WAITING" } },
+        extra = { listOf("With" to it.s("borrowed_by_name"), "Due back" to prettyDate(it.s("due_back"))) },
+        actions = listOf(
+            RAction("File returned?", "record.action", "record_file", listOf("return" to "Returned to the registry"), emptyList(), listOf("records.manage")) { o, _ -> o.s("status") == "LOAN" },
+            RAction("Archive", "record.action", "record_file", listOf("archive" to "Archive the file"), emptyList(), listOf("records.manage")) { o, _ -> o.s("status") == "IN" })),
+    // ---------------------------------------------------------------- Social Services – public health & community
+    RegisterSpec("health_inspections", Entities.HEALTH_INSPECTIONS, "Public health inspections", "inspection", listOf("health.view", "health.manage"), listOf("health.manage"),
+        listOf(RField("premises", "Premises", required = true), RField("premises_type", "Type", "choice", listOf("FOOD" to "Food outlet / restaurant", "BUTCHERY" to "Butchery",
+            "MARKET" to "Market", "ABATTOIR" to "Abattoir / slaughter slab", "SCHOOL" to "School", "INST" to "Clinic / institution", "LODGE" to "Lodge / guest house", "OTHER" to "Other premises")),
+            RField("owner", "Owner / operator"), RField("ward", "Ward", "int"), RField("location", "Location", required = true),
+            RField("date", "Date (YYYY-MM-DD)", "date", required = true), RField("score", "Score (out of 100)", "int"),
+            RField("result", "Result", "choice", listOf("PASS" to "Passed", "FOLLOWUP" to "Passed – follow-up needed", "FAIL" to "Failed – closure / notice served")),
+            RField("findings", "Findings and corrections needed", "multiline", required = true), RField("follow_up_date", "Follow-up visit (YYYY-MM-DD)", "date")),
+        line = { it.s("premises") to "${it.s("reference")} · ${it.s("premises_type_label")} · ${prettyDate(it.s("date"))}\n${it.s("location")}, ward ${ward(it)} · score ${it.s("score").ifBlank { "-" }}" },
+        tone = { when (it.s("result")) { "PASS" -> "ACTIVE"; "FAIL" -> "BROKEN"; else -> "IN_PROGRESS" } },
+        extra = { listOf("Result" to it.s("result_label"), "Inspector" to it.s("inspector_name")) }),
+    RegisterSpec("sanitation", Entities.SANITATION, "Ablutions & waste management", "facility", listOf("sanitation.view", "sanitation.manage"), listOf("sanitation.manage"),
+        listOf(RField("name", "Name", required = true), RField("kind", "Type", "choice", listOf("ABLUTION" to "Public ablution block", "REFUSE" to "Refuse collection point / skip",
+            "DUMPSITE" to "Dumpsite / landfill", "BLAIR" to "Blair / VIP toilet (institution)")), RField("ward", "Ward", "int"), RField("location", "Location", required = true),
+            RField("status", "Status", "choice", listOf("GOOD" to "Clean / working", "NEEDS" to "Needs cleaning / collection", "BLOCKED" to "Blocked / full / broken", "CLOSED" to "Closed")),
+            RField("last_serviced", "Last cleaned / collected (YYYY-MM-DD)", "date"), RField("collection_days", "Collection days"), RField("caretaker", "Caretaker"),
+            RField("notes", "Notes", "multiline")),
+        line = { it.s("name") to "${it.s("reference")} · ${it.s("kind_label")} · ${it.s("location")}\nServiced ${prettyDate(it.s("last_serviced"))} ${it.s("collection_days")}" },
+        tone = { when (it.s("status")) { "GOOD" -> "ACTIVE"; "NEEDS" -> "IN_PROGRESS"; else -> "BROKEN" } }),
+    RegisterSpec("social_facilities", Entities.SOCIAL_FACILITIES, "Schools & clinics development", "school / clinic", listOf("facilities.view", "facilities.manage"),
+        listOf("facilities.manage"),
+        listOf(RField("name", "Name", required = true), RField("kind", "Type", "choice", listOf("PRIMARY" to "Primary school", "SECONDARY" to "Secondary school", "ECD" to "ECD centre",
+            "CLINIC" to "Clinic", "HOSPITAL" to "Hospital", "HALL" to "Community hall / centre")), RField("ward", "Ward", "int"), RField("location", "Location", required = true),
+            RField("responsible_authority", "Responsible authority"), RField("population_served", "Learners / population served", "int"),
+            RField("classrooms_or_beds", "Classrooms / beds", "int"),
+            RField("condition", "Condition", "choice", listOf("FAIR" to "Fair", "GOOD" to "Good", "POOR" to "Poor", "BUILDING" to "Under construction / upgrade")),
+            RField("needs", "Development needs", "multiline"), RField("contact", "Contact (head / sister-in-charge)")),
+        line = { it.s("name") to "${it.s("reference")} · ${it.s("kind_label")} · ward ${ward(it)} · ${it.s("population_served")} served\n${it.s("needs")}" },
+        tone = { when (it.s("condition")) { "GOOD" -> "ACTIVE"; "POOR" -> "BROKEN"; else -> "IN_PROGRESS" } },
+        extra = { listOf("Condition" to it.s("condition_label")) }),
 ).associateBy { it.key }
 
 private fun canSee(ctx: Ctx, spec: RegisterSpec) = ctx.me.can(*spec.viewCaps.toTypedArray())
@@ -228,11 +310,11 @@ fun RegisterItemScreen(ctx: Ctx, key: String, id: String) {
         val o = item ?: return@AppScreen Empty("Not found")
         ScrollColumn {
             val (t, _) = spec.line(o)
-            SectionCard("${o.s("reference")} – $t") {
+            SectionCard(listOf(o.s("reference"), t).filter { it.isNotBlank() }.joinToString(" – ")) {
                 spec.fields.forEach { f ->
                     val v = when (f.kind) {
                         "choice" -> o.s(f.key + "_label").ifBlank { o.s(f.key) }
-                        "account", "ref" -> o.s(f.key + "_name")
+                        "account", "ref", "staff" -> o.s(f.key + "_name")
                         "bool" -> if (o.s(f.key) == "true") "Yes" else "No"
                         "date" -> prettyDate(o.s(f.key))
                         else -> o.s(f.key)
@@ -298,6 +380,13 @@ fun RegisterFormScreen(ctx: Ctx, key: String, id: String?) {
                     "account" -> AccountField(ctx, f.label, values[f.key] ?: "", values[f.key + "_name"] ?: "") {
                         values[f.key] = it.id; values[f.key + "_name"] = it.name
                     }
+                    "staff" -> {
+                        val staff by ctx.sdk.observe(Entities.STAFF, StaffMember.serializer()).collectAsState(initial = emptyList())
+                        val mine = staff.filter { it.isActive && it.department == ctx.me.department }
+                        Picker(f.label, mine, mine.firstOrNull { it.userId.toString() == values[f.key] }, { "${it.fullName} – ${it.roleLabel}" }, onSelect = {
+                            values[f.key] = it.userId.toString(); values[f.key + "_name"] = it.fullName
+                        })
+                    }
                     else -> Field(f.label + if (f.required) " *" else "", values[f.key] ?: "", { values[f.key] = it })
                 }
             }
@@ -311,7 +400,7 @@ fun RegisterFormScreen(ctx: Ctx, key: String, id: String?) {
                     spec.fields.forEach { f ->
                         put(f.key, values[f.key] ?: "")
                         if (f.kind == "choice") put(f.key + "_label", f.choices.firstOrNull { it.first == values[f.key] }?.second ?: "")
-                        if (f.kind == "account") put(f.key + "_name", values[f.key + "_name"] ?: "")
+                        if (f.kind == "account" || f.kind == "staff") put(f.key + "_name", values[f.key + "_name"] ?: "")
                     }
                     put("local_note", "Saved on this device – sent on sync")
                 }
@@ -321,7 +410,7 @@ fun RegisterFormScreen(ctx: Ctx, key: String, id: String?) {
                         spec.fields.forEach { f ->
                             val v = values[f.key] ?: ""
                             when {
-                                v.isBlank() && f.kind in listOf("int", "number", "date", "account") -> Unit
+                                v.isBlank() && f.kind in listOf("int", "number", "date", "account", "staff") -> Unit
                                 f.kind == "bool" -> put(f.key, v == "true")
                                 else -> put(f.key, v)
                             }
