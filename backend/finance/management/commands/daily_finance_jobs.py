@@ -19,6 +19,9 @@ class Command(BaseCommand):
         try:
             n = services.expire_licences()
             self.stdout.write(f"{n} licence(s) expired")
+            from social.services import expire_permits
+
+            self.stdout.write(f"{expire_permits()} natural resources permit(s) expired")
             today = timezone.localdate()
             if today.day == 1 and actor is not None:
                 created, skipped = services.run_rates_billing(actor, today.year, today.month)

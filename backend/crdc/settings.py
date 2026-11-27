@@ -35,6 +35,7 @@ INSTALLED_APPS = [
     "workflow",
     "departments",
     "payroll",
+    "social",
     "portal",
     "api",
 ]

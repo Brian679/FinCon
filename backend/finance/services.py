@@ -108,6 +108,7 @@ def issue_receipt(user, *, revenue_head, amount, payer_name="", account=None, bi
     if account is not None:
         account.recalculate()
         _maybe_issue_licences(account)
+        settle_paid_items(account)
         notify_payment(receipt)
     return receipt
 
@@ -178,6 +179,7 @@ def decide_void(user, receipt, approve: bool, comment=""):
         receipt.account.recalculate()
         if approve:
             _withdraw_unpaid_licences(receipt.account, user, receipt)
+            settle_paid_items(receipt.account)
     notify([receipt.void_requested_by], f"Void {'approved' if approve else 'rejected'}: {receipt.number}", comment)
     return receipt
 
@@ -1053,3 +1055,133 @@ def _withdraw_unpaid_licences(account, user, receipt):
             audit.log(AuditLog.Action.VOID, lic, user=user, message=f"Licence withdrawn: fee receipt {receipt.number} was voided")
             notify(client_people(account, lic.applicant) + users_with_cap("licence.approve", "FINANCE"),
                    f"Licence {lic.number} suspended – fee not paid", f"Receipt {receipt.number} was cancelled. Pay the fee to restore the licence.")
+
+
+# ------------------------------------------------------------ fines & penalties
+def _offender_account(user, *, name, national_id="", phone="", ward=None):
+    """Find the offender's council account (ID number, then phone + name) or open one, so the fine is a bill like any other."""
+    acc = None
+    if national_id:
+        acc = ClientAccount.objects.alive().filter(id_number__iexact=national_id).first()
+    if acc is None and phone:
+        acc = ClientAccount.objects.alive().filter(phone=phone, name__iexact=name).first()
+    if acc is None:
+        acc = ClientAccount.objects.create(name=name, account_type=ClientAccount.AccountType.INDIVIDUAL, id_number=national_id, phone=phone,
+                                           ward=ward, created_by=user)
+    return acc
+
+
+@transaction.atomic
+def issue_fine(user, *, offence, offender_name, location, amount=None, account=None, national_id="", phone="", vehicle_reg="", ward=None,
+               date=None, notes="", fine_id=None):
+    from .models import Fine
+
+    _require(user, "fines.issue")
+    amount = q2(amount or offence.default_fine)
+    if amount <= 0:
+        raise ValidationError("The fine must be more than zero.")
+    account = account or _offender_account(user, name=offender_name, national_id=national_id, phone=phone, ward=ward)
+    head = RevenueHead.objects.filter(code="FINES").first() or RevenueHead.objects.filter(category=RevenueHead.Category.FINES).first()
+    kwargs = {"id": fine_id} if fine_id else {}
+    fine = Fine(offence=offence, account=account, offender_name=offender_name, national_id=national_id, phone=phone, vehicle_reg=vehicle_reg,
+                ward=ward, location=location, date=date or timezone.localdate(), amount=amount, notes=notes, issued_by=user, created_by=user, **kwargs)
+    fine.save()
+    fine.bill = Bill.objects.create(account=account, revenue_head=head, amount=amount, created_by=user,
+                                    description=f"Fine {fine.reference}: {offence.name} ({location})",
+                                    due_date=fine.date + timezone.timedelta(days=14))
+    fine.save(update_fields=["bill", "updated_at"])
+    account.recalculate()
+    from core.messaging import notify_client
+
+    notify_client(users=client_people(account), phone=phone or account.phone, subject=f"Fine {fine.reference}",
+                  body=f"{offence.name} at {location} on {fine.date:%d %b %Y}: fine USD {amount:,.2f}, due by {fine.bill.due_date:%d %b %Y}. "
+                       f"Pay at the council offices, to a council collector or in the Chipinge RDC app.",
+                  account_number=account.account_number, sent_by=user, campaign="Fines")
+    return fine
+
+
+@transaction.atomic
+def decide_fine(user, fine, action, reason=""):
+    """Waive a fine (Treasurer / CEO, never the officer who issued it) or refer an unpaid fine to court."""
+    from .models import Fine
+
+    if action == "waive":
+        _require(user, "fines.waive")
+        if fine.issued_by_id == user.pk:
+            raise PermissionDenied("Segregation of duties: you cannot waive a fine you issued.")
+        if not reason:
+            raise ValidationError("Give the reason for waiving the fine.")
+        if fine.status != Fine.Status.ISSUED:
+            raise ValidationError("Only unpaid fines can be waived.")
+        if fine.bill_id:
+            bill = fine.bill
+            if bill.amount_paid > 0:
+                raise ValidationError("Part of this fine has been paid – void the receipt first.")
+            bill.status, bill.cancel_reason = Bill.Status.CANCELLED, f"Fine {fine.reference} waived: {reason}"
+            bill.save()
+            bill.account.recalculate()
+        fine.status = Fine.Status.WAIVED
+    elif action == "court":
+        _require(user, "fines.issue", "fines.waive")
+        if fine.status != Fine.Status.ISSUED:
+            raise ValidationError("Only unpaid fines can be referred to court.")
+        fine.status = Fine.Status.COURT
+    else:
+        raise ValidationError("Unknown action.")
+    fine.decided_by = user
+    fine.decision_reason = reason
+    fine.save()
+    _record(fine, "Fine decision", action.upper(), user, reason)
+    return fine
+
+
+@transaction.atomic
+def run_late_penalties(user, *, rate_pct, days_overdue=30, today=None):
+    """Charge a late-payment penalty (% of what is still owed) on every bill overdue by more than
+    ``days_overdue`` days. Once per bill per month, so running it twice in a month changes nothing.
+    Fines and penalties themselves are not penalised again."""
+    _require(user, "billing.run")
+    rate = Decimal(str(rate_pct))
+    if rate <= 0 or rate > 50:
+        raise ValidationError("The penalty rate must be between 0 and 50 %.")
+    today = today or timezone.localdate()
+    period = f"{today.year:04d}-{today.month:02d}"
+    head = RevenueHead.objects.get(code="PENALTY")
+    cutoff = today - timezone.timedelta(days=int(days_overdue))
+    overdue = Bill.objects.alive().filter(status__in=[Bill.Status.UNPAID, Bill.Status.PART_PAID], due_date__lt=cutoff).exclude(
+        revenue_head__category=RevenueHead.Category.FINES).select_related("account")
+    created = skipped = 0
+    for bill in overdue:
+        tag = f"Late payment penalty on {bill.number}"
+        if Bill.objects.alive().filter(revenue_head=head, period=period, description__startswith=tag).exists():
+            skipped += 1
+            continue
+        amount = q2(bill.outstanding * rate / 100)
+        if amount <= 0:
+            continue
+        Bill.objects.create(account=bill.account, property=bill.property, revenue_head=head, period=period, amount=amount, created_by=user,
+                            description=f"{tag} ({rate:g}% of USD {bill.outstanding:,.2f})", due_date=today + timezone.timedelta(days=30))
+        bill.account.recalculate()
+        created += 1
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="finance.Bill",
+              message=f"Late payment penalties {period} at {rate:g}%: {created} raised, {skipped} already charged")
+    return created, skipped
+
+
+def settle_paid_items(account):
+    """Keep fines, trophy hunts and resource permits in step with their bills (after a receipt or a void)."""
+    from .models import Fine
+
+    for fine in Fine.objects.alive().filter(account=account, status__in=[Fine.Status.ISSUED, Fine.Status.PAID, Fine.Status.COURT]).select_related("bill"):
+        paid = fine.bill_id and fine.bill.status == Bill.Status.PAID
+        if paid and fine.status != Fine.Status.PAID:
+            fine.status = Fine.Status.PAID
+            fine.save(update_fields=["status", "updated_at"])
+        elif not paid and fine.status == Fine.Status.PAID:
+            fine.status = Fine.Status.ISSUED
+            fine.save(update_fields=["status", "updated_at"])
+    try:
+        from social.services import settle_paid_items as social_settle
+    except ImportError:  # pragma: no cover
+        return
+    social_settle(account)

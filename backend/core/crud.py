@@ -27,6 +27,12 @@ BADGES = {
 }
 
 
+def _pending_text(text):
+    """'Awaiting payment', 'Issued – unpaid', 'Hunted – awaiting payment': still waiting for something, never green."""
+    t = str(text).lower()
+    return t.startswith("awaiting") or "unpaid" in t or "awaiting" in t
+
+
 def badge_class(value):
     for cls, values in BADGES.items():
         if value in values:
@@ -148,7 +154,7 @@ class GenericListView(CapRequiredMixin, ListView):
                 if key.endswith("status") or key in ("priority", "risk_rating"):
                     raw_val = getattr(obj, key.split(".")[-1], "")
                     text = fmt(resolve(obj, accessor))
-                    cells.append({"text": text, "badge": "warning" if str(text).startswith("Awaiting") else badge_class(raw_val)})
+                    cells.append({"text": text, "badge": "warning" if _pending_text(text) else badge_class(raw_val)})
                 else:
                     val = resolve(raw, accessor)
                     cells.append({"text": fmt(val), "num": isinstance(val, Decimal)})
@@ -275,7 +281,7 @@ class GenericDetailView(CapRequiredMixin, DetailView):
         status = getattr(obj, "status", None)
         if status:
             ctx["status_text"] = obj.get_status_display()
-            ctx["status_badge"] = "warning" if ctx["status_text"].startswith("Awaiting") else badge_class(status)
+            ctx["status_badge"] = "warning" if _pending_text(ctx["status_text"]) else badge_class(status)
         if self.edit_url_name and (not self.edit_caps or self.request.user.has_cap(*self.edit_caps)):
             ctx["edit_url"] = reverse(self.edit_url_name, args=[obj.pk])
         from finance.models import ApprovalRecord

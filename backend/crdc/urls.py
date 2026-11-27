@@ -18,6 +18,7 @@ urlpatterns = [
     path("staff/", include("workflow.urls")),
     path("staff/", include("payroll.urls")),
     path("staff/", include("departments.urls")),
+    path("staff/social/", include("social.urls")),
     path("portal/", include("portal.urls")),
     path("api/v1/", include("api.urls")),
 ]

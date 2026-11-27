@@ -74,4 +74,11 @@ urlpatterns = [
     path("claims/", v.ClaimList.as_view(), name="claims"),
     path("claims/<uuid:pk>/", v.claim_detail, name="claim"),
     path("billing-runs/", v.billing_runs, name="billing_runs"),
+    path("fines/", v.FineList.as_view(), name="fines"),
+    path("fines/new/", v.fine_new, name="fine_new"),
+    path("fines/<uuid:pk>/", v.FineDetail.as_view(), name="fine"),
+    path("fines/<uuid:pk>/action/", v.fine_action, name="fine_action"),
+    path("fines/offences/", v.OffenceList.as_view(), name="offences"),
+    path("fines/offences/new/", v.OffenceNew.as_view(), name="offence_new"),
+    path("fines/offences/<uuid:pk>/", v.OffenceEdit.as_view(), name="offence_edit"),
 ]

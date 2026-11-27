@@ -845,3 +845,60 @@ class AccountClaim(SyncModel):
         if not self.reference:
             self.reference = SequenceCounter.next("CLM", 5)
         super().save(*args, **kwargs)
+
+
+# ------------------------------------------------------------ fines & penalties
+class Offence(SyncModel):
+    """Schedule of by-law offences and their standard fines (set by council)."""
+
+    code = models.CharField(max_length=20, unique=True)
+    name = models.CharField(max_length=200)
+    by_law = models.CharField(max_length=200, blank=True, help_text="By-law / section")
+    default_fine = models.DecimalField(**MONEY, validators=POSITIVE)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["code"]
+
+    def __str__(self):
+        return f"{self.code} – {self.name} (${self.default_fine})"
+
+
+class Fine(SyncModel):
+    """A fine issued for a by-law offence. It is billed to the offender's council account and
+    becomes PAID by itself when the bill is paid. Waiving needs the Treasurer / CEO (not the issuer)."""
+
+    class Status(models.TextChoices):
+        ISSUED = "ISSUED", "Issued – unpaid"
+        PAID = "PAID", "Paid"
+        WAIVED = "WAIVED", "Waived"
+        COURT = "COURT", "Referred to court"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    offence = models.ForeignKey(Offence, on_delete=models.PROTECT, related_name="fines")
+    account = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="fines")
+    offender_name = models.CharField(max_length=200)
+    national_id = models.CharField(max_length=30, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    vehicle_reg = models.CharField(max_length=20, blank=True)
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    location = models.CharField(max_length=200)
+    date = models.DateField(default=timezone.localdate)
+    amount = models.DecimalField(**MONEY, validators=POSITIVE)
+    notes = models.TextField(blank=True)
+    status = models.CharField(max_length=8, choices=Status.choices, default=Status.ISSUED, db_index=True)
+    bill = models.ForeignKey(Bill, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    issued_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
+    decision_reason = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-date", "-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.offender_name} – {self.offence.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("FIN", 5)
+        super().save(*args, **kwargs)

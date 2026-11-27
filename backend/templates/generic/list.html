@@ -7,6 +7,7 @@
   {% if create_url %}<li><a href="{{ create_url }}" class="addlink">Add</a></li>{% endif %}
 </ul>
 {% endif %}
+{% if subtitle %}<p class="small quiet">{{ subtitle }}</p>{% endif %}
 {% block above_table %}{% endblock %}
 <div class="module{% if filter_choices %} filtered{% endif %}" id="changelist">
   <div class="changelist-form-container">

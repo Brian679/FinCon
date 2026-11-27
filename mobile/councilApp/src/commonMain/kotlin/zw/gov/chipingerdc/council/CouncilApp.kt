@@ -131,6 +131,11 @@ sealed interface Screen {
     data object Arrears : Screen
     data object TaxTables : Screen
     data object NewLicence : Screen
+    data class Register(val key: String) : Screen
+    data class RegisterItem(val key: String, val id: String) : Screen
+    data class RegisterForm(val key: String, val id: String?) : Screen
+    data object NewHunt : Screen
+    data object NewFine : Screen
 }
 
 /** Everything a screen needs. */
@@ -311,5 +316,10 @@ private fun CouncilScreens(ctx: Ctx) {
         Screen.Arrears -> ArrearsScreen(ctx)
         Screen.TaxTables -> TaxTablesScreen(ctx)
         Screen.NewLicence -> NewLicenceScreen(ctx)
+        is Screen.Register -> RegisterListScreen(ctx, s.key)
+        is Screen.RegisterItem -> RegisterItemScreen(ctx, s.key, s.id)
+        is Screen.RegisterForm -> RegisterFormScreen(ctx, s.key, s.id)
+        Screen.NewHunt -> NewHuntScreen(ctx)
+        Screen.NewFine -> NewFineScreen(ctx)
     }
 }

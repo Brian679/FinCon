@@ -47,6 +47,15 @@ object Entities {
     const val SALARY_PROFILES = "salary_profiles"
     const val PAYSLIPS = "payslips"
     const val TAX_TABLES = "tax_tables"
+    const val OFFENCES = "offences"
+    const val FINES = "fines"
+    const val WILDLIFE = "wildlife"
+    const val HUNTING_QUOTAS = "hunting_quotas"
+    const val TROPHY_HUNTS = "trophy_hunts"
+    const val RESOURCE_PERMITS = "resource_permits"
+    const val FARMS = "farms"
+    const val WATER_POINTS = "water_points"
+    const val BENEFICIARIES = "beneficiaries"
 }
 
 @Serializable

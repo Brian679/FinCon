@@ -213,7 +213,7 @@ fun statusColor(code: String): Color = when (tone(code)) {
 @Composable
 fun StatusChip(text: String, code: String = text) {
     // "Awaiting payment" (e.g. a licence) still needs something from the client: never show it as done
-    val t = if (text.startsWith("Awaiting", ignoreCase = true)) Tone.ATTENTION else tone(code)
+    val t = if (text.contains("awaiting", ignoreCase = true) || text.contains("unpaid", ignoreCase = true)) Tone.ATTENTION else tone(code)
     val icon = when (t) { Tone.GOOD -> "✔ "; Tone.BAD -> "✖ "; Tone.ATTENTION -> "⚠ "; Tone.NEUTRAL -> "" }
     val color = when (t) { Tone.GOOD -> CrdcColors.Success; Tone.BAD -> CrdcColors.Danger; Tone.ATTENTION -> CrdcColors.Warning; Tone.NEUTRAL -> CrdcColors.Muted }
     Text(icon + text, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)

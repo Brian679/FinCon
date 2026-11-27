@@ -598,3 +598,107 @@ class TaxTableSerializer(SyncSerializer):
 
     def get_bands(self, obj):
         return [{"lower": str(b.lower), "upper": str(b.upper) if b.upper is not None else None, "rate": str(b.rate)} for b in obj.bands.all()]
+
+
+# ------------------------------------------------- fines & social services
+from finance.models import Fine, Offence  # noqa: E402
+from social import models as sm  # noqa: E402
+
+
+class _NamedFKSerializer(SyncSerializer):
+    """Adds ``<fk>_name`` (the related object's name) for every foreign key in ``Meta.fields``."""
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        for f in instance._meta.concrete_fields:
+            if f.is_relation and f.name in data:
+                rel = getattr(instance, f.name)
+                data[f"{f.name}_name"] = (rel.get_full_name() or rel.username) if hasattr(rel, "get_full_name") else (
+                    getattr(rel, "name", None) or str(rel)) if rel else ""
+        return data
+
+
+class OffenceSerializer(SyncSerializer):
+    class Meta:
+        model = Offence
+        fields = _sync_fields(Offence, ["code", "name", "by_law", "default_fine", "is_active"])
+
+
+class FineSerializer(_NamedFKSerializer):
+    class Meta:
+        model = Fine
+        fields = _sync_fields(Fine, ["reference", "offence", "account", "offender_name", "national_id", "phone", "vehicle_reg", "ward", "location",
+                                     "date", "amount", "notes", "status", "bill", "issued_by", "decided_by", "decision_reason"])
+
+
+class WildlifeSerializer(_NamedFKSerializer):
+    class Meta:
+        model = sm.WildlifeRecord
+        fields = _sync_fields(sm.WildlifeRecord, ["reference", "species", "record_type", "date", "ward", "location", "count", "gps", "notes",
+                                                  "recorded_by"])
+
+
+class QuotaSerializer(_NamedFKSerializer):
+    used = serializers.IntegerField(read_only=True)
+    remaining = serializers.IntegerField(read_only=True)
+
+    class Meta:
+        model = sm.HuntingQuota
+        fields = _sync_fields(sm.HuntingQuota, ["year", "species", "ward", "concession", "quota", "trophy_fee", "notes", "used", "remaining"])
+
+
+class HuntSerializer(_NamedFKSerializer):
+    species = serializers.CharField(source="quota.species", read_only=True)
+    species_label = serializers.CharField(read_only=True)
+    ward = serializers.IntegerField(source="quota.ward", read_only=True)
+    community_share = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    council_share = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = sm.TrophyHunt
+        fields = _sync_fields(sm.TrophyHunt, ["reference", "quota", "species", "species_label", "ward", "operator", "professional_hunter",
+                                              "client_name", "client_nationality", "hunt_date", "trophy_fee", "community_share_pct", "community_share",
+                                              "council_share", "trophy_details", "status", "bill", "recorded_by"])
+
+
+class PermitSerializer(_NamedFKSerializer):
+    quantity_extracted = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    quantity_left = serializers.DecimalField(max_digits=14, decimal_places=2, read_only=True)
+    extractions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = sm.ResourcePermit
+        fields = _sync_fields(sm.ResourcePermit, ["reference", "permit_type", "holder", "ward", "location", "gps", "unit", "quantity_allowed",
+                                                  "unit_fee", "fee", "valid_from", "valid_to", "ema_reference", "conditions", "status", "bill",
+                                                  "applied_by", "decided_by", "decision_note", "quantity_extracted", "quantity_left", "extractions"])
+
+    def get_extractions(self, obj):
+        return [{"date": str(e.date), "quantity": str(e.quantity), "vehicle_reg": e.vehicle_reg, "destination": e.destination,
+                 "by": e.recorded_by.get_full_name() if e.recorded_by else ""} for e in obj.extractions.alive()]
+
+
+class FarmSerializer(_NamedFKSerializer):
+    class Meta:
+        model = sm.Farm
+        fields = _sync_fields(sm.Farm, ["reference", "name", "owner", "farm_number", "ward", "location", "hectares", "farm_type", "activity",
+                                        "main_crops", "cattle", "goats_sheep", "irrigated_hectares", "water_source", "gps", "status", "notes"])
+
+
+class WaterPointSerializer(_NamedFKSerializer):
+    class Meta:
+        model = sm.WaterPoint
+        fields = _sync_fields(sm.WaterPoint, ["reference", "name", "point_type", "ward", "village", "households_served", "status", "last_serviced",
+                                              "water_quality_ok", "committee_contact", "gps", "notes"])
+
+
+class BeneficiarySerializer(_NamedFKSerializer):
+    assistance = serializers.SerializerMethodField()
+
+    class Meta:
+        model = sm.Beneficiary
+        fields = _sync_fields(sm.Beneficiary, ["reference", "name", "national_id", "phone", "ward", "village", "household_size", "category",
+                                               "is_active", "notes", "assistance"])
+
+    def get_assistance(self, obj):
+        return [{"date": str(a.date), "kind": a.get_kind_display(), "description": a.description, "value": str(a.value),
+                 "programme": a.programme} for a in obj.assistance.alive()]

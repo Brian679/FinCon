@@ -142,7 +142,8 @@ class InternTests(CouncilTestCase):
         intern = self.user("intern")
         self.assertEqual(intern.department, "TECH")
         self.assertTrue(intern.has_cap("tasks.view"))
-        self.assertFalse(intern.has_cap("funds.request"))
+        self.assertTrue(intern.has_cap("funds.request"))           # interns may request funds and raise requisitions
+        self.assertTrue(intern.has_cap("requisition.create"))
         self.assertFalse(intern.has_cap("receipt.create"))
         task = wf.create_task(self.user("engineer"), title="Measure culverts", assigned_to=intern, department="TECH")
         wf.update_task(intern, task, status="IN_PROGRESS", progress=40, comment="Two of four done")

@@ -50,8 +50,6 @@ ROLES = {
 # Roles that can be placed in any department (the role itself does not fix the department).
 ANY_DEPARTMENT_ROLES = {"INTERN"}
 
-# Interns do the work their department gives them (tasks, faults, memos) but never commit council money.
-INTERN_EXCLUDED = {"funds.request", "requisition.create"}
 
 ROLE_CHOICES = [(code, label) for code, (label, _d, _l) in ROLES.items()]
 
@@ -86,7 +84,12 @@ HEAD_CAPS = {
     "reports.department",
 }
 
-FINANCE_READ = {"finance.view", "finance.view_all", "finance.reports"}
+FINANCE_READ = {"finance.view", "finance.view_all", "finance.reports", "fines.view"}
+
+# Social Services registers: read access for oversight (CEO, internal audit)
+SOCIAL_READ = {"wildlife.view", "hunts.view", "permits.view", "farms.view", "water.view", "welfare.view"}
+# Officers who enforce by-laws and may issue fines
+FINE_ISSUERS = {"fines.issue", "fines.view"}
 
 ROLE_CAPS = {
     "SYSADMIN": {"ict.manage", "assets.manage", "assets.view", "meetings.view", "policies.view", "users.manage", "audit.view_trail", "audit.view_all", "system.settings"},
@@ -122,7 +125,9 @@ ROLE_CAPS = {
         "areas.view",
         "leases.view",
         "messages.view",
-    },
+        "fines.waive",
+    }
+    | SOCIAL_READ,
     "EXEC_ASSISTANT": {"meetings.manage", "meetings.view", "policies.view", "complaints.view_all", "correspondence.manage", "tasks.assign_any"},
     # Administration
     "ADMIN_OFFICER": HEAD_CAPS
@@ -174,6 +179,12 @@ ROLE_CAPS = {
         "messages.view",
         "assets.manage",
         "assets.view",
+        "fines.issue",
+        "fines.waive",
+        "offences.manage",
+        "hunts.view",
+        "permits.view",
+        "farms.view",
     },
     "ACCOUNTANT": FINANCE_READ
     | {
@@ -204,8 +215,12 @@ ROLE_CAPS = {
         "funds.view_all",
         "payroll.manage",
         "payroll.view",
+        "fines.issue",
+        "hunts.view",
+        "permits.view",
+        "farms.view",
     },
-    "REVENUE_CLERK": {"claims.review", "reminders.send", "areas.view", "leases.view", "finance.view", "receipt.create", "receipt.void_request", "accounts.manage", "licence.view", "licence.manage", "cashup.submit"},
+    "REVENUE_CLERK": {"fines.issue", "fines.view", "farms.view", "claims.review", "reminders.send", "areas.view", "leases.view", "finance.view", "receipt.create", "receipt.void_request", "accounts.manage", "licence.view", "licence.manage", "cashup.submit"},
     "EXPENDITURE_CLERK": {"payroll.pay", "payroll.view", "assets.manage", "assets.view", "funds.view_all", "finance.view", "supplier.manage", "voucher.prepare", "voucher.pay", "procurement.order", "budget.view"},
     # Internal audit - read everything, change nothing operational
     "CHIEF_AUDITOR": HEAD_CAPS
@@ -213,22 +228,29 @@ ROLE_CAPS = {
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "complaints.view_all",
        "requests.view_all", "budget.view", "licence.view", "stands.view", "projects.view", "hr.view", "payments.online_view", "risks.manage",
        "incidents.view", "plans.view", "areas.view", "leases.view", "messages.view", "dept.overview_all", "assets.view",
-       "meetings.view", "policies.view", "funds.view_all", "payroll.view"},
+       "meetings.view", "policies.view", "funds.view_all", "payroll.view"} | SOCIAL_READ,
     "AUDITOR": FINANCE_READ
     | {"audit.view_trail", "audit.view_all", "audit.findings_manage", "audit.findings_view", "budget.view", "licence.view",
        "stands.view", "projects.view", "payments.online_view", "risks.manage", "risks.view", "incidents.view", "plans.view", "areas.view",
-       "leases.view", "assets.view", "meetings.view", "policies.view", "funds.view_all", "payroll.view"},
+       "leases.view", "assets.view", "meetings.view", "policies.view", "funds.view_all", "payroll.view"} | SOCIAL_READ,
     # Social services
-    "SOCIAL_HEAD": HEAD_CAPS | {"stands.manage", "stands.view", "stands.allocate", "licence.inspect", "activities.manage",
-                                "incidents.manage", "incidents.view", "assets.condition", "assets.view"},
-    "SOCIAL_OFFICER": {"stands.manage", "stands.view", "activities.manage", "incidents.manage", "incidents.view", "assets.condition", "assets.view"},
-    "HEALTH_OFFICER": {"licence.inspect", "activities.manage", "incidents.view", "assets.condition", "assets.view"},
-    "NATURAL_RESOURCES_OFFICER": {"activities.manage", "incidents.manage", "incidents.view"},
-    "SAFETY_OFFICER": {"activities.manage", "incidents.manage", "incidents.view"},
+    "SOCIAL_HEAD": HEAD_CAPS | SOCIAL_READ | FINE_ISSUERS
+    | {"stands.manage", "stands.view", "stands.allocate", "licence.inspect", "activities.manage", "incidents.manage", "incidents.view",
+       "assets.condition", "assets.view", "wildlife.manage", "hunts.manage", "permits.manage", "permits.approve", "farms.manage",
+       "water.manage", "welfare.manage"},
+    "SOCIAL_OFFICER": FINE_ISSUERS | {"stands.manage", "stands.view", "activities.manage", "incidents.manage", "incidents.view", "assets.condition",
+                                      "assets.view", "farms.manage", "farms.view", "welfare.manage", "welfare.view", "water.view"},
+    "HEALTH_OFFICER": FINE_ISSUERS | {"licence.inspect", "activities.manage", "incidents.view", "assets.condition", "assets.view", "water.manage",
+                                      "water.view"},
+    # CAMPFIRE (wildlife, quotas, trophy hunts) and natural resources (sand, mining, forestry permits)
+    "NATURAL_RESOURCES_OFFICER": FINE_ISSUERS | {"activities.manage", "incidents.manage", "incidents.view", "wildlife.manage", "wildlife.view",
+                                                 "hunts.manage", "hunts.view", "permits.manage", "permits.approve", "permits.view", "farms.manage",
+                                                 "farms.view"},
+    "SAFETY_OFFICER": FINE_ISSUERS | {"activities.manage", "incidents.manage", "incidents.view"},
     # Technical services
-    "ENGINEER": HEAD_CAPS | {"projects.manage", "projects.view", "plans.view", "plans.review", "plans.approve", "assets.condition", "assets.view"},
+    "ENGINEER": HEAD_CAPS | {"water.view", "projects.manage", "projects.view", "plans.view", "plans.review", "plans.approve", "assets.condition", "assets.view"},
     "TECHNICAL_OFFICER": {"projects.manage", "projects.view", "plans.view", "plans.review", "assets.condition", "assets.view"},
-    "BUILDING_INSPECTOR": {"projects.view", "plans.view", "plans.review", "assets.view"},
+    "BUILDING_INSPECTOR": FINE_ISSUERS | {"projects.view", "plans.view", "plans.review", "assets.view"},
 }
 
 CLIENT_CAPS = {"portal.use"}
@@ -248,7 +270,5 @@ def role_level(code):
 
 def capabilities_for(role):
     caps = set(STAFF_BASE)
-    if role == "INTERN":
-        return caps - INTERN_EXCLUDED
     caps |= ROLE_CAPS.get(role, set())
     return caps

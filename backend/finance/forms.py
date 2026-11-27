@@ -2,10 +2,12 @@ from django import forms
 from django.forms import inlineformset_factory
 
 from core.crud import BaseModelForm, BootstrapFormMixin, date_widgets
+from django.utils import timezone
+
 from core.models import Currency
 
 from .models import (
-    BankAccount, Bill, BudgetLine, ClientAccount, ExchangeRate, Licence, PaymentVoucher, Property, PurchaseOrder,
+    BankAccount, Bill, BudgetLine, ClientAccount, ExchangeRate, Licence, Offence, PaymentVoucher, Property, PurchaseOrder,
     Receipt, Requisition, RequisitionItem, RevenueHead, Supplier,
 )
 
@@ -203,3 +205,29 @@ class BroadcastForm(BootstrapFormMixin, forms.Form):
     only_owing = forms.BooleanField(required=False, initial=True, label="Only accounts that owe money")
     subject = forms.CharField(max_length=120)
     message = forms.CharField(widget=forms.Textarea(attrs={"rows": 4}), max_length=400)
+
+
+class PenaltyRunForm(BootstrapFormMixin, forms.Form):
+    rate_pct = forms.DecimalField(max_digits=5, decimal_places=2, initial=10, label="Penalty (% of amount overdue)")
+    days_overdue = forms.IntegerField(min_value=1, max_value=365, initial=30, label="Charge bills overdue by more than (days)")
+
+
+class OffenceForm(BaseModelForm):
+    class Meta:
+        model = Offence
+        fields = ["code", "name", "by_law", "default_fine", "is_active"]
+
+
+class FineForm(BootstrapFormMixin, forms.Form):
+    offence = forms.ModelChoiceField(queryset=Offence.objects.alive().filter(is_active=True))
+    offender_name = forms.CharField(max_length=200, label="Offender (person or business)")
+    national_id = forms.CharField(max_length=30, required=False, label="National ID / company reg.")
+    phone = forms.CharField(max_length=20, required=False, help_text="The fine is sent to this number by SMS")
+    account = forms.ModelChoiceField(queryset=ClientAccount.objects.alive(), required=False,
+                                     help_text="Existing council account – leave blank to find / open one from the ID or phone")
+    vehicle_reg = forms.CharField(max_length=20, required=False)
+    location = forms.CharField(max_length=200)
+    ward = forms.IntegerField(required=False, min_value=1, max_value=40)
+    date = forms.DateField(initial=timezone.localdate, widget=forms.DateInput(attrs={"type": "date"}, format="%Y-%m-%d"))
+    amount = forms.DecimalField(max_digits=12, decimal_places=2, required=False, help_text="Leave blank for the standard fine")
+    notes = forms.CharField(required=False, widget=forms.Textarea(attrs={"rows": 2}))

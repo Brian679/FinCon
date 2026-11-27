@@ -1029,6 +1029,7 @@ def billing_runs(request):
     rates_form = forms.BillingRunForm(request.POST if request.POST.get("run") == "rates" else None, initial={"year": today.year, "month": today.month}, prefix="r")
     lease_form = forms.BillingRunForm(request.POST if request.POST.get("run") == "leases" else None, initial={"year": today.year, "month": today.month}, prefix="l")
     levy_form = forms.LevyRunForm(request.POST if request.POST.get("run") == "levy" else None, initial={"year": today.year}, prefix="v")
+    penalty_form = forms.PenaltyRunForm(request.POST if request.POST.get("run") == "penalty" else None, prefix="p")
     result = None
     if request.method == "POST":
         run = request.POST.get("run")
@@ -1040,7 +1041,106 @@ def billing_runs(request):
             d = levy_form.cleaned_data
             result = run_action(request, services.run_levy_billing, d["revenue_head"], d["year"], area=d["area"], land_use=d["land_use"] or None,
                                 amount=d["amount"], success="Levy billing done.")
+        elif run == "penalty" and penalty_form.is_valid():
+            d = penalty_form.cleaned_data
+            result = run_action(request, services.run_late_penalties, rate_pct=d["rate_pct"], days_overdue=d["days_overdue"],
+                                success="Late payment penalties charged.")
         if result:
             messages.info(request, f"{result[0]} bill(s) raised; {result[1]} were already billed for that period.")
             return redirect("finance:bills")
-    return render(request, "finance/billing_runs.html", {"title": "Billing runs", "rates_form": rates_form, "lease_form": lease_form, "levy_form": levy_form})
+    return render(request, "finance/billing_runs.html", {"title": "Billing runs", "rates_form": rates_form, "lease_form": lease_form, "levy_form": levy_form,
+                                                           "penalty_form": penalty_form})
+
+
+# --------------------------------------------------------- fines & penalties
+from departments.views import ActionDetail  # noqa: E402
+
+from .models import Fine, Offence  # noqa: E402
+
+
+class FineList(GenericListView):
+    model = Fine
+    required_caps = ("fines.view", "fines.issue")
+    title = "Fines & penalties (by-law offences)"
+    columns = [("Ref.", "reference"), ("Date", "date"), ("Offender", "offender_name"), ("Offence", "offence.name"), ("Location", "location"),
+               ("Amount (USD)", "amount"), ("Issued by", "issued_by"), ("Status", "status")]
+    search_fields = ["reference", "offender_name", "national_id", "phone", "vehicle_reg", "location"]
+    detail_url_name = "finance:fine"
+    create_url_name = "finance:fine_new"
+    create_caps = ("fines.issue",)
+    extra_buttons = [("Offence schedule", "finance:offences", ("fines.view", "offences.manage"))]
+
+    def scope(self, qs):
+        u = self.request.user
+        return qs if u.has_cap("fines.view") and (u.has_cap("finance.view") or u.sees_all_departments() or u.is_head) else qs.filter(issued_by=u)
+
+
+@cap_required("fines.issue")
+def fine_new(request):
+    form = forms.FineForm(request.POST or None)
+    if request.method == "POST" and form.is_valid():
+        fine = run_action(request, services.issue_fine, success="Fine issued – billed to the offender's account and sent by SMS.", **form.cleaned_data)
+        if fine:
+            return redirect("finance:fine", pk=fine.pk)
+    return render(request, "generic/form.html", {"form": form, "title": "Issue a fine"})
+
+
+class FineDetail(ActionDetail):
+    model = Fine
+    required_caps = ("fines.view", "fines.issue")
+    action_url_name = "finance:fine_action"
+    fields = [("Offence", "offence"), ("Offender", "offender_name"), ("National ID", "national_id"), ("Phone", "phone"), ("Vehicle", "vehicle_reg"),
+              ("Account", "account"), ("Location", "location"), ("Ward", "ward"), ("Date", "date"), ("Amount (USD)", "amount"), ("Notes", "notes"),
+              ("Bill", "bill"), ("Issued by", "issued_by"), ("Decided by", "decided_by"), ("Reason", "decision_reason")]
+
+    def scope(self, qs):
+        return FineList.scope(self, qs)
+
+    def actions(self, obj):
+        u = self.request.user
+        acts = []
+        if obj.status == Fine.Status.ISSUED and u.has_cap("fines.waive") and obj.issued_by_id != u.pk:
+            acts.append({"title": "Waive the fine (Treasurer / CEO)", "fields": [("reason", "Reason", "textarea", None)],
+                         "buttons": [("waive", "Waive", "outline-danger")]})
+        if obj.status == Fine.Status.ISSUED and u.has_cap("fines.issue", "fines.waive"):
+            acts.append({"title": "Not paid?", "fields": [("reason", "Note", "textarea", None)], "buttons": [("court", "Refer to court", "warning")]})
+        return acts
+
+
+@cap_required("fines.issue", "fines.waive")
+@require_POST
+def fine_action(request, pk):
+    fine = get_object_or_404(Fine, pk=pk)
+    run_action(request, services.decide_fine, fine, request.POST.get("action"), request.POST.get("reason", ""), success="Fine updated.")
+    return redirect("finance:fine", pk=pk)
+
+
+class OffenceList(GenericListView):
+    model = Offence
+    required_caps = ("fines.view", "offences.manage")
+    title = "Offence schedule – standard fines"
+    columns = [("Code", "code"), ("Offence", "name"), ("By-law", "by_law"), ("Fine (USD)", "default_fine"), ("Active", "is_active")]
+    search_fields = ["code", "name", "by_law"]
+    filter_field = None
+    detail_url_name = "finance:offence_edit"
+    create_url_name = "finance:offence_new"
+    create_caps = ("offences.manage",)
+
+
+class OffenceNew(GenericCreateView):
+    model = Offence
+    form_class = forms.OffenceForm
+    required_caps = ("offences.manage",)
+    title = "New offence"
+
+    def get_success_url(self):
+        return reverse("finance:offences")
+
+
+class OffenceEdit(GenericUpdateView):
+    model = Offence
+    form_class = forms.OffenceForm
+    required_caps = ("offences.manage",)
+
+    def get_success_url(self):
+        return reverse("finance:offences")

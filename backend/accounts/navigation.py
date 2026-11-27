@@ -20,6 +20,10 @@ ADD_LINKS = {
     "departments:risks": ("departments:risk_new", "risks.manage"), "departments:meetings": ("departments:meeting_new", "meetings.manage"),
     "departments:tickets": ("departments:ticket_new", None), "departments:policies": ("departments:policy_new", "policies.manage"),
     "accounts:users": ("accounts:user_new", "users.manage"),
+    "finance:fines": ("finance:fine_new", "fines.issue"), "social:wildlife_list": ("social:wildlife_new", "wildlife.manage"),
+    "social:hunts": ("social:hunt_new", "hunts.manage"), "social:permits": ("social:permit_new", "permits.manage"),
+    "social:farms": ("social:farm_new", "farms.manage"), "social:water_list": ("social:water_new", "water.manage"),
+    "social:beneficiaries": ("social:beneficiary_new", "welfare.manage"), "social:quotas": ("social:quota_new", "hunts.manage"),
     "workflow:memos": ("workflow:memo_new", None), "workflow:funds": ("workflow:fund_new", None),
     "portal:complaints": ("portal:complaint_new", None), "portal:requests": ("portal:request_new", None), "portal:licences": ("portal:licence_apply", None),
     "portal:claims": ("portal:claim_new", None), "portal:plans": ("portal:plan_new", None), "portal:stands": ("portal:stand_new", None),
@@ -79,7 +83,6 @@ def build_nav(user):
     general += [
         _item("Tasks", "workflow:tasks"),
         _item("Memos to / from departments", "workflow:memos"),
-        # interns do department work but never commit council money
         _item("Requests for funds & purchases", "workflow:funds") if c("funds.request") else None,
         _item("Purchase requisitions", "finance:requisitions") if c("requisition.create") else None,
         _item("Service requests / faults", "workflow:requests"),
@@ -135,6 +138,14 @@ def build_nav(user):
             fin.append(_item("Online payments", "finance:online_payments"))
         if c("finance.reports"):
             fin.append(_item("Financial reports", "finance:reports"))
+        if c("fines.view"):
+            fin.append(_item("Fines & penalties", "finance:fines"))
+        if c("hunts.view") and dept != D.SOCIAL_SERVICES:
+            fin.append(_item("CAMPFIRE trophy fees", "social:hunts"))
+        if c("permits.view") and dept != D.SOCIAL_SERVICES:
+            fin.append(_item("Sand, mining & forestry permits", "social:permits"))
+        if c("farms.view") and dept != D.SOCIAL_SERVICES:
+            fin.append(_item("Farms register (farm levy)", "social:farms"))
         if c("payroll.view", "payroll.manage"):
             fin += [_item("Payroll", "payroll:payroll"), _item("Salaries", "payroll:salaries"), _item("Salaries owed to staff", "payroll:arrears"),
                     _item("PAYE tax tables", "payroll:tax")]
@@ -178,9 +189,29 @@ def build_nav(user):
         if c("activities.manage", "activities.verify", "dept.overview_all") and (dept == D.SOCIAL_SERVICES or sees_all):
             social.append(_item("Community programmes & campaigns", "departments:activities"))
         if c("licence.inspect"):
-            social.append(_item("Shop health inspections", "finance:licences"))
+            social.append(_item("Health certificate inspections", "finance:licences"))
+        if c("welfare.view", "welfare.manage"):
+            social.append(_item("Social welfare – vulnerable households", "social:beneficiaries"))
+        if c("water.view", "water.manage"):
+            social.append(_item("Water points (WASH)", "social:water_list"))
         if social:
             sections.append({"title": "Social services", "items": social})
+        campfire = []
+        if c("wildlife.view", "wildlife.manage"):
+            campfire.append(_item("Wildlife database", "social:wildlife_list"))
+        if c("hunts.view", "hunts.manage"):
+            campfire += [_item("Hunting quotas", "social:quotas"), _item("Trophy hunts", "social:hunts"), _item("CAMPFIRE revenue by ward", "social:campfire")]
+        if campfire:
+            sections.append({"title": "CAMPFIRE (wildlife)", "items": campfire})
+        natres = []
+        if c("permits.view", "permits.manage"):
+            natres.append(_item("Sand, mining & forestry permits", "social:permits"))
+        if c("farms.view", "farms.manage"):
+            natres.append(_item("Agricultural farms", "social:farms"))
+        if natres:
+            sections.append({"title": "Natural resources & agriculture", "items": natres})
+    if c("fines.issue") and dept not in (D.FINANCE,) and not sees_all:
+        sections.append({"title": "By-law enforcement", "items": [_item("Fines I have issued", "finance:fines")]})
     if dept == D.ADMINISTRATION and c("activities.manage"):
         sections.append({"title": "Staff development", "items": [_item("Trainings & staff activities", "departments:activities")]})
 

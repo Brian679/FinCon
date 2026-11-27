@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+  <h1 class="h4 mb-0">{{ title }}</h1>
+  <form class="d-flex gap-1" method="get"><input class="form-control form-control-sm" style="width:6rem" type="number" name="year" value="{{ year }}"><button class="btn btn-sm btn-secondary">Show</button></form>
+</div>
+<p class="small text-muted">Trophy fees from the CAMPFIRE quota by producer ward. The community (ward) share is paid to the ward once the fee is received; the rest is the council's share.</p>
+<div class="module"><h2>Revenue by ward</h2>
+<table class="table table-sm mb-0"><thead><tr><th>Ward</th><th class="text-end">Hunts</th><th class="text-end">Fees billed</th><th class="text-end">Fees paid</th><th class="text-end">Community share</th><th class="text-end">Council share</th></tr></thead>
+<tbody>{% for r in rows %}<tr><td>{{ r.ward|default:"District" }}</td><td class="text-end">{{ r.hunts }}</td><td class="text-end">{{ r.fees|floatformat:2 }}</td><td class="text-end">{{ r.paid|floatformat:2 }}</td><td class="text-end">{{ r.community|floatformat:2 }}</td><td class="text-end">{{ r.council|floatformat:2 }}</td></tr>
+{% empty %}<tr><td colspan="6" class="text-muted">No hunts this year.</td></tr>{% endfor %}</tbody>
+<tfoot><tr class="fw-bold"><td>Total</td><td class="text-end">{{ totals.hunts }}</td><td class="text-end">{{ totals.fees|floatformat:2 }}</td><td class="text-end">{{ totals.paid|floatformat:2 }}</td><td class="text-end">{{ totals.community|floatformat:2 }}</td><td class="text-end">{{ totals.council|floatformat:2 }}</td></tr></tfoot></table></div>
+<div class="module mt-3"><h2>Quota use {{ year }}</h2>
+<table class="table table-sm mb-0"><thead><tr><th>Species</th><th>Ward / concession</th><th class="text-end">Quota</th><th class="text-end">Used</th><th class="text-end">Left</th></tr></thead>
+<tbody>{% for q in quotas %}<tr><td>{{ q.get_species_display }}</td><td>{{ q.concession|default:q.ward }}</td><td class="text-end">{{ q.quota }}</td><td class="text-end">{{ q.used }}</td><td class="text-end">{{ q.remaining }}</td></tr>
+{% empty %}<tr><td colspan="5" class="text-muted">No quotas set.</td></tr>{% endfor %}</tbody></table></div>
+{% endblock %}

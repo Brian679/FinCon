@@ -150,7 +150,26 @@ def staff_entities(user):
         "correspondence": ((s.Correspondence.objects.select_related("assigned_to") if c("correspondence.manage") or user.sees_all_departments()
                             else s.Correspondence.objects.filter(Q(department=user.department) | Q(assigned_to=user)).select_related("assigned_to")),
                            s.CorrespondenceSerializer) if (c("correspondence.manage") or user.is_head) else None,
+        # fines & Social Services registers (CAMPFIRE, natural resources, farms, water, welfare)
+        "offences": (s.Offence.objects.all(), s.OffenceSerializer) if c("fines.issue", "fines.view") else None,
+        "fines": (_fine_scope(user), s.FineSerializer) if c("fines.issue", "fines.view") else None,
+        "wildlife": (s.sm.WildlifeRecord.objects.select_related("recorded_by"), s.WildlifeSerializer) if c("wildlife.view", "wildlife.manage") else None,
+        "hunting_quotas": (s.sm.HuntingQuota.objects.all(), s.QuotaSerializer) if c("hunts.view", "hunts.manage") else None,
+        "trophy_hunts": (s.sm.TrophyHunt.objects.select_related("quota", "operator", "recorded_by"), s.HuntSerializer)
+        if c("hunts.view", "hunts.manage") else None,
+        "resource_permits": (s.sm.ResourcePermit.objects.select_related("holder", "applied_by", "decided_by").prefetch_related("extractions"),
+                             s.PermitSerializer) if c("permits.view", "permits.manage") else None,
+        "farms": (s.sm.Farm.objects.select_related("owner"), s.FarmSerializer) if c("farms.view", "farms.manage") else None,
+        "water_points": (s.sm.WaterPoint.objects.all(), s.WaterPointSerializer) if c("water.view", "water.manage") else None,
+        "beneficiaries": (s.sm.Beneficiary.objects.prefetch_related("assistance"), s.BeneficiarySerializer) if c("welfare.view", "welfare.manage") else None,
     }
+
+
+def _fine_scope(user):
+    qs = s.Fine.objects.select_related("offence", "account", "issued_by", "decided_by")
+    if user.has_cap("fines.view") and (user.has_cap("finance.view") or user.sees_all_departments() or user.is_head):
+        return qs
+    return qs.filter(issued_by=user)
 
 
 def _staff_scope(user):
@@ -701,7 +720,125 @@ def op_payslip_pay(user, p):
     return "payslips", s.PayslipSerializer(slip).data
 
 
+# ------------------------------------------------- fines & Social Services
+def _form_save(user, p, form_cls, model, cap, entity, serializer, prepare=None):
+    """Create or edit a register record from the app with the same form (and rules) as the website."""
+    if not user.has_cap(cap):
+        raise PermissionDenied(f"You need: {cap}")
+    instance = model.objects.alive().filter(pk=p.get("id")).first() if p.get("id") else None
+    data = {k: v for k, v in p.items() if k not in ("id",)}
+    if instance is not None:   # an edit only sends what changed – keep the rest
+        initial = {f: getattr(instance, f + "_id", None) if hasattr(instance, f + "_id") else getattr(instance, f) for f in form_cls._meta.fields}
+        data = {**{k: v for k, v in initial.items() if v is not None}, **data}
+    else:   # a new record: anything the phone left out takes the register's default (e.g. 0 goats, status Active)
+        for name in form_cls._meta.fields:
+            f = model._meta.get_field(name)
+            if name not in data and f.has_default():
+                data[name] = f.get_default()
+    form = form_cls(data=data, instance=instance)
+    if not form.is_valid():
+        raise ValidationError("; ".join(f"{k}: {' '.join(v)}" for k, v in form.errors.items()))
+    obj = form.save(commit=False)
+    if instance is None:
+        if p.get("id"):
+            obj.id = p["id"]
+        obj.created_by = user
+        if prepare:
+            prepare(obj)
+    obj.save()
+    return entity, serializer(obj).data
+
+
+def op_register_save(user, p):
+    from social import forms as sf
+
+    reg = p.get("register")
+    kinds = {
+        "wildlife": (sf.WildlifeForm, s.sm.WildlifeRecord, "wildlife.manage", s.WildlifeSerializer, lambda o: setattr(o, "recorded_by", user)),
+        "hunting_quotas": (sf.QuotaForm, s.sm.HuntingQuota, "hunts.manage", s.QuotaSerializer, None),
+        "resource_permits": (sf.PermitForm, s.sm.ResourcePermit, "permits.manage", s.PermitSerializer, lambda o: setattr(o, "applied_by", user)),
+        "farms": (sf.FarmForm, s.sm.Farm, "farms.manage", s.FarmSerializer, None),
+        "water_points": (sf.WaterPointForm, s.sm.WaterPoint, "water.manage", s.WaterPointSerializer, None),
+        "beneficiaries": (sf.BeneficiaryForm, s.sm.Beneficiary, "welfare.manage", s.BeneficiarySerializer, None),
+    }
+    if reg not in kinds:
+        raise ValidationError("Unknown register.")
+    form_cls, model, cap, ser, prepare = kinds[reg]
+    fields = p.get("fields") or {}
+    if reg == "resource_permits" and p.get("id") and model.objects.filter(pk=p["id"]).exclude(status="APPLIED").exists():
+        raise ValidationError("A decided permit cannot be changed.")
+    return _form_save(user, {"id": p.get("id"), **fields}, form_cls, model, cap, reg, ser, prepare)
+
+
+def op_fine_issue(user, p):
+    from finance.models import ClientAccount
+
+    fine = fin.issue_fine(user, offence=_get(s.Offence, p["offence"]), offender_name=p["offender_name"], location=p["location"],
+                          amount=p.get("amount") or None, account=_get(ClientAccount, p["account"]) if p.get("account") else None,
+                          national_id=p.get("national_id", ""), phone=p.get("phone", ""), vehicle_reg=p.get("vehicle_reg", ""),
+                          ward=p.get("ward") or None, notes=p.get("notes", ""), fine_id=p.get("id"))
+    return "fines", s.FineSerializer(fine).data
+
+
+def op_fine_decide(user, p):
+    fine = fin.decide_fine(user, _get(s.Fine, p["fine"]), p.get("action"), p.get("reason", ""))
+    return "fines", s.FineSerializer(fine).data
+
+
+def op_hunt_book(user, p):
+    from finance.models import ClientAccount
+    from social import services as sv
+
+    hunt = sv.book_hunt(user, quota=_get(s.sm.HuntingQuota, p["quota"]), operator=_get(ClientAccount, p["operator"]), client_name=p["client_name"],
+                        trophy_fee=p.get("trophy_fee") or None, hunt_id=p.get("id"), professional_hunter=p.get("professional_hunter", ""),
+                        client_nationality=p.get("client_nationality", ""), hunt_date=p.get("hunt_date") or None)
+    return "trophy_hunts", s.HuntSerializer(hunt).data
+
+
+def op_hunt_action(user, p):
+    from social import services as sv
+
+    hunt = sv.hunt_action(user, _get(s.sm.TrophyHunt, p["hunt"]), p.get("action"), hunt_date=p.get("hunt_date") or None,
+                          trophy_details=p.get("trophy_details", ""))
+    return "trophy_hunts", s.HuntSerializer(hunt).data
+
+
+def op_permit_decide(user, p):
+    from social import services as sv
+
+    permit = sv.decide_permit(user, _get(s.sm.ResourcePermit, p["permit"]), p.get("action"), p.get("note", ""))
+    return "resource_permits", s.PermitSerializer(permit).data
+
+
+def op_extraction_record(user, p):
+    from social import services as sv
+
+    permit = _get(s.sm.ResourcePermit, p["permit"])
+    sv.record_extraction(user, permit, quantity=p["quantity"], date=p.get("date") or None, vehicle_reg=p.get("vehicle_reg", ""),
+                         destination=p.get("destination", ""), notes=p.get("notes", ""), extraction_id=p.get("id"))
+    permit.refresh_from_db()
+    return "resource_permits", s.PermitSerializer(permit).data
+
+
+def op_assistance_give(user, p):
+    from social import services as sv
+
+    b = _get(s.sm.Beneficiary, p["beneficiary"])
+    sv.give_assistance(user, b, kind=p["kind"], description=p.get("description", ""), value=p.get("value") or 0, programme=p.get("programme", ""),
+                       assistance_id=p.get("id"))
+    b.refresh_from_db()
+    return "beneficiaries", s.BeneficiarySerializer(b).data
+
+
 STAFF_OPS = {
+    "register.save": op_register_save,
+    "fine.issue": op_fine_issue,
+    "fine.decide": op_fine_decide,
+    "hunt.book": op_hunt_book,
+    "hunt.action": op_hunt_action,
+    "permit.decide": op_permit_decide,
+    "extraction.record": op_extraction_record,
+    "assistance.give": op_assistance_give,
     "licence.apply": op_licence_apply,      # Finance captures applications at the counter / in the field
     "salary.update": op_salary_update,
     "payroll.run": op_payroll_run,

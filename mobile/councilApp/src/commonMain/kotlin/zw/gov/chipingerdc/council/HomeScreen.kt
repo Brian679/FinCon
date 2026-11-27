@@ -98,6 +98,12 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("budget.view")) add(Tile("Budget vs actual", Screen.Budget))
         if (me.can("finance.reports", "reports.executive")) add(Tile("Financial reports", Screen.FinanceReport))
         if (me.can("procurement.order", "finance.view_all")) add(Tile("Purchase orders", Screen.Orders))
+        if (me.can("fines.view")) add(Tile("Fines & penalties", Screen.Register("fines"), add = if (me.can("fines.issue")) Screen.NewFine else null))
+        if (me.department != "SOCIAL") {
+            if (me.can("hunts.view")) add(Tile("CAMPFIRE trophy fees", Screen.Register("trophy_hunts")))
+            if (me.can("permits.view")) add(Tile("Sand, mining & forestry permits", Screen.Register("resource_permits")))
+            if (me.can("farms.view")) add(Tile("Farms register (farm levy)", Screen.Register("farms")))
+        }
     }
     val admin = buildList {
         if (me.can("meetings.view")) { add(Tile("Council meetings", Screen.Meetings)); add(Tile("Resolutions", Screen.Resolutions)) }
@@ -112,7 +118,23 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("incidents.view")) add(Tile("Incidents & disasters", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
         if ((me.department == "SOCIAL" || seesAll) && me.can("activities.manage", "activities.verify", "dept.overview_all"))
             add(Tile("Community programmes", Screen.Activities, add = if (me.can("activities.manage")) Screen.NewActivity else null))
-        if (me.can("licence.inspect")) add(Tile("Shop health inspections", Screen.Licences))
+        if (me.can("licence.inspect")) add(Tile("Health certificate inspections", Screen.Licences))
+        if (me.can("welfare.view", "welfare.manage")) add(Tile("Social welfare – vulnerable households", Screen.Register("beneficiaries"),
+            add = if (me.can("welfare.manage")) Screen.RegisterForm("beneficiaries", null) else null))
+        if (me.can("water.view", "water.manage")) add(Tile("Water points (WASH)", Screen.Register("water_points"),
+            add = if (me.can("water.manage")) Screen.RegisterForm("water_points", null) else null))
+        // CAMPFIRE
+        if (me.can("wildlife.view", "wildlife.manage")) add(Tile("CAMPFIRE – wildlife database", Screen.Register("wildlife"),
+            add = if (me.can("wildlife.manage")) Screen.RegisterForm("wildlife", null) else null))
+        if (me.can("hunts.view", "hunts.manage")) {
+            add(Tile("CAMPFIRE – hunting quotas", Screen.Register("hunting_quotas"), add = if (me.can("hunts.manage")) Screen.RegisterForm("hunting_quotas", null) else null))
+            add(Tile("CAMPFIRE – trophy hunts", Screen.Register("trophy_hunts"), add = if (me.can("hunts.manage")) Screen.NewHunt else null))
+        }
+        // natural resources & agriculture
+        if (me.can("permits.view", "permits.manage")) add(Tile("Sand, mining & forestry permits", Screen.Register("resource_permits"),
+            add = if (me.can("permits.manage")) Screen.RegisterForm("resource_permits", null) else null))
+        if (me.can("farms.view", "farms.manage")) add(Tile("Agricultural farms", Screen.Register("farms"),
+            add = if (me.can("farms.manage")) Screen.RegisterForm("farms", null) else null))
     }
     val tech = buildList {
         if (me.can("projects.view")) add(Tile("Projects", Screen.Projects))
@@ -137,6 +159,8 @@ fun CouncilMenu(ctx: Ctx) {
         if (me.can("complaints.view_all", "complaints.manage", "complaints.department") || complaints.isNotEmpty())
             add("Customer care" to listOf(Tile(if (me.can("complaints.view_all", "complaints.manage", "complaints.department")) "Complaints, compliments & suggestions"
                 else "Complaints given to me", Screen.Complaints, unacked, if (me.can("complaints.manage", "complaints.department", "complaints.view_all")) Screen.NewComplaint else null)))
+        if (me.can("fines.issue") && me.department != "FINANCE" && !seesAll)
+            add("By-law enforcement" to listOf(Tile("Fines I have issued", Screen.Register("fines"), add = Screen.NewFine)))
         if (me.can("audit.view_trail")) add("Governance" to listOf(Tile("Audit trail", Screen.AuditTrail)))
     }.filter { it.second.isNotEmpty() }
 

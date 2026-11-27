@@ -59,6 +59,10 @@ In development (`localhost`) both run together: client site at `/`, staff site a
 | **Administration** | Council secretariat (council & committee meetings, agendas, minutes, **resolutions tracker** with responsible officer and due date), policies & by-laws register, ICT helpdesk, staff user management (ICT administrator only), HR leave, staff directory, correspondence register (7 working days), procurement |
 | **Internal Audit** | Read access to all finance data and the audit trail, audit findings with management responses, **risk register** (likelihood × impact, owners, mitigation, review dates) |
 | **Social Services** (incl. WASH, Natural Resources, Public Safety) | Housing & stand allocation (officer shortlists → Director allocates), **incidents & disasters** (fires, floods, human-wildlife conflict…, households/casualties/losses, response log, Director signs off), **community programmes** (hygiene promotion, environmental campaigns, fireguards, land reclamation, safety awareness, drills, WDC / village-assembly consultations – officer reports → HOD verifies), borehole/ablution condition, water faults, health inspections |
+| **Social Services – CAMPFIRE** | **Wildlife database** (counts, aerial surveys, sightings, camera traps, mortalities, poaching / snares, problem animal control, by species and ward), **hunting quotas** per year, species and ward / concession, **trophy hunts** booked against the quota (a full quota is refused) → animal taken → trophy fee billed to the safari operator → PAID when received; **CAMPFIRE revenue by ward** with the community (ward) share (55 % by default) and the council's share |
+| **Social Services – natural resources** | **Sand / gravel, clay, small-scale mining, timber, firewood and thatch permits**: application (with the EMA / Mines / Forestry Commission reference) → decided by someone other than the officer who captured it → permit fee (quantity × fee per unit) billed → **ACTIVE when paid**; loads checked at the site are recorded against the permitted quantity – over-extraction is refused and should be fined; suspend / reinstate; permits expire automatically |
+| **Social Services – agriculture, water & welfare** | **Agricultural farms register** (owner, farm / plot number, ward, hectares, A1 / A2 / communal / estate…, crops, cattle, goats, irrigation, water source, GPS) – each farm is also a council property, so it is billed the **farm levy per hectare**; **water points** (boreholes, wells, piped schemes – working / broken / under repair, households served, last serviced, water test); **social welfare** register of vulnerable households with every bit of **assistance** given (food, cash, BEAM school fees, medical, shelter, pauper burials) |
+| **Fines & penalties** | **Offence schedule** with standard fines (trading without a licence, illegal vending, food without a health certificate, dumping, building without plans, illegal sand extraction / mining / tree cutting, veld fires, poaching, stray livestock, rank violations …). Officers (EHO, natural resources, public safety, building inspector, revenue collectors…) issue fines in the app or on the website; the fine is billed to the offender's account (opened from the ID or phone if needed), sent by SMS and becomes PAID when paid; waiving needs the Treasurer / CEO and never the issuing officer; unpaid fines can be referred to court. **Late payment penalties** (a % of what is overdue, once a month, never on fines) from the billing runs page |
 | **Technical Services** | Projects with progress reports, **building plans / development control** (technical review → Engineer decision → site inspections → completion certificate, fee must be paid, 30-working-day clock), road/lighting/building service requests, infrastructure condition |
 | **Every Head of Department** | **Department overview**: all staff with their open/overdue tasks and leave, everything waiting for the HOD (requisitions, leave, activity reports), department budget use, complaints and service requests, audit findings, risks, resolutions and broken assets. Assign tasks to their staff. The CEO and auditors can open any department. |
 | **Clients' rights / Feedback & complaints** | Complaints, compliments, suggestions & enquiries from every channel on the charter (CEO, suggestion box, offices, email, phone, consultations, social media) plus portal & app; 48-hour acknowledgement clock, breach flags and CEO/HOD alerts |
@@ -73,10 +77,10 @@ What a user sees and can do is decided by their **role**, which belongs to a dep
 |---|---|
 | Office of the CEO | Chief Executive Officer, Executive Assistant |
 | Administration | Administration Officer (HOD), HR Officer, Procurement Officer, Records Clerk, Receptionist / Customer Care, **ICT / System Administrator** |
-| Any department | **Intern / Attachment student** – placed in a department when the account is made; does the tasks, faults and memos of that department only, and cannot request funds or raise requisitions |
+| Any department | **Intern / Attachment student** – placed in a department when the account is made; does the tasks, faults and memos of that department, and can request funds and raise requisitions (approved by their HOD as usual) |
 | Finance | **Treasurer** (HOD – oversees everything in Finance), **Accountant**, Revenue Clerk / Cashier, Expenditure Clerk |
 | Internal Audit | Chief Internal Auditor (HOD), Internal Auditor |
-| Social Services | Director of Social Services (HOD), Social Services Officer, Environmental Health Officer, Natural Resources Officer, Public Safety Officer |
+| Social Services | Director of Social Services (HOD), Social Services Officer (welfare, farms), Environmental Health Officer (WASH, water points), Natural Resources Officer (CAMPFIRE, permits, farms), Public Safety Officer |
 | Technical Services | District Engineer (HOD), Technical Officer, Building Inspector |
 
 Roles map to *capabilities* in one file (`backend/accounts/roles.py`), so changing who may do what is a one-line change.
@@ -213,7 +217,8 @@ Open http://localhost:8000. Demo password for every demo user: **`Chipinge@2026`
 | `treasurer`, `accountant`, `cashier`, `exp.clerk` | Finance |
 | `admin.officer`, `hr.officer`, `procurement`, `registry` | Administration |
 | `chief.auditor`, `auditor` | Internal Audit |
-| `social.director`, `social.officer`, `eho` | Social Services |
+| `social.director`, `social.officer`, `eho`, `natres.officer` | Social Services (`natres.officer` = Natural Resources / CAMPFIRE) |
+| `intern` | Intern in Technical Services |
 | `engineer`, `tech.officer` | Technical Services |
 | `resident` | Client portal / client app (linked to account of Johannes Mhlanga) |
 

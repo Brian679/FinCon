@@ -60,6 +60,23 @@ BUDGET = [
     ("C-720", "Capital: boreholes", "SOCIAL", "CAPITAL", 60000),
 ]
 
+# Offence schedule (standard fines, USD) – council may change these on the website
+OFFENCES = [
+    ("TRD-01", "Trading without a valid licence", "Trading By-laws s.4", 50),
+    ("TRD-02", "Illegal vending / trading outside a designated site", "Trading By-laws s.9", 20),
+    ("HLT-01", "Selling food without a health certificate", "Public Health By-laws", 40),
+    ("HLT-02", "Illegal dumping of refuse", "Public Health By-laws", 30),
+    ("BLD-01", "Building without approved plans", "Building By-laws s.12", 150),
+    ("NR-01", "Illegal sand / gravel extraction", "Natural Resources By-laws", 200),
+    ("NR-02", "Illegal gold panning / mining", "Natural Resources By-laws", 300),
+    ("NR-03", "Illegal tree cutting / charcoal burning", "Natural Resources By-laws", 100),
+    ("NR-04", "Starting a veld fire", "Natural Resources By-laws", 150),
+    ("NR-05", "Over-extraction beyond permit", "Natural Resources By-laws", 150),
+    ("WL-01", "Poaching / snaring", "CAMPFIRE By-laws", 500),
+    ("LV-01", "Stray livestock in township", "Pound By-laws", 15),
+    ("TRF-01", "Illegal parking / rank violation", "Traffic & Ranks By-laws", 10),
+]
+
 REVENUE_HEADS = [
     # code, name, category, amount, frequency, vote
     ("RATES", "Property / land rates", "RATES", 0, "MONTHLY", "I-100"),
@@ -79,6 +96,9 @@ REVENUE_HEADS = [
     ("WATER", "Water & sanitation charges", "WATER", 0, "MONTHLY", "I-140"),
     ("STAND", "Stand purchase instalment", "LAND", 0, "ONCE", "I-150"),
     ("FINES", "By-law fines & penalties", "FINES", 0, "ONCE", "I-130"),
+    ("PENALTY", "Late payment penalties", "FINES", 0, "ONCE", "I-130"),
+    ("TROPHY", "CAMPFIRE trophy fees", "FEES", 0, "ONCE", "I-130"),
+    ("NAT-RES", "Natural resources permits & royalties", "FEES", 0, "ONCE", "I-130"),
     ("SUNDRY", "Sundry income", "OTHER", 0, "ONCE", "I-130"),
 ]
 
@@ -104,6 +124,7 @@ DEMO_STAFF = [
     ("social.director", "Memory", "Sibanda", "SOCIAL_HEAD"),
     ("social.officer", "Tapiwa", "Marufu", "SOCIAL_OFFICER"),
     ("eho", "Gift", "Matanda", "HEALTH_OFFICER"),
+    ("natres.officer", "Tonderai", "Mhike", "NATURAL_RESOURCES_OFFICER"),
     ("engineer", "Takudzwa", "Nyathi", "ENGINEER"),
     ("tech.officer", "Prosper", "Mlambo", "TECHNICAL_OFFICER"),
 ]
@@ -132,6 +153,10 @@ class Command(BaseCommand):
         for code, name, cat, amount, freq, vote in REVENUE_HEADS:
             RevenueHead.objects.get_or_create(code=code, defaults=dict(name=name, category=cat, default_amount=Decimal(amount), frequency=freq,
                                                                        budget_line=votes.get(vote), per_hectare=code == "FARM-LEVY"))
+        from finance.models import Offence
+
+        for code, name, by_law, fine in OFFENCES:
+            Offence.objects.get_or_create(code=code, defaults=dict(name=name, by_law=by_law, default_fine=Decimal(fine)))
         if not BankAccount.objects.exists():
             BankAccount.objects.create(name="Main revenue account (USD)", bank="CBZ Bank Chipinge", account_number="0000000000001", currency="USD")
             BankAccount.objects.create(name="Main revenue account (ZWG)", bank="CBZ Bank Chipinge", account_number="0000000000002", currency="ZWG")
@@ -298,6 +323,7 @@ class Command(BaseCommand):
         self._demo_requests(u)
         self._demo_payroll(u)
         self._demo_farms_and_intern(u)
+        self._demo_social(u)
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""
@@ -449,6 +475,98 @@ class Command(BaseCommand):
                                  ("Update the road condition register", "Enter last week's inspection notes into the register.", 9)):
             wf.create_task(u["engineer"], title=title, description=desc, assigned_to=u["intern"], department="TECH",
                            due_date=timezone.localdate() + timezone.timedelta(days=due))
+
+    def _demo_social(self, u):
+        """Demo CAMPFIRE, natural resources, farms, water points, welfare and fines (illustrative only)."""
+        from datetime import timedelta
+
+        from finance import services as fin
+        from finance.models import ClientAccount as Acc, Offence
+        from social import services as sv
+        from social.models import Beneficiary, Farm, HuntingQuota, ResourcePermit, WaterPoint, WildlifeRecord
+
+        today = timezone.localdate()
+        nro = u["natres.officer"]
+        for sp, rt, ward, place, n, days in (("ELEPHANT", "AERIAL", 29, "Save Valley boundary, Mahenye", 46, 60), ("BUFFALO", "AERIAL", 29, "Mahenye", 120, 60),
+                                             ("HIPPO", "GROUND", 25, "Save River, Chisumbanje", 18, 30), ("CROC", "GROUND", 25, "Save River pools", 35, 30),
+                                             ("LION", "SIGHTING", 29, "Mahenye ward 29 – cattle kraal", 3, 8), ("ELEPHANT", "PAC", 25, "Chinyamukwakwa fields", 5, 4),
+                                             ("KUDU", "POACHING", 26, "Tamandai – 6 snares removed", 1, 2), ("IMPALA", "CAMERA", 29, "Mahenye camp", 22, 12)):
+            WildlifeRecord.objects.create(species=sp, record_type=rt, ward=ward, location=place, count=n, date=today - timedelta(days=days),
+                                          recorded_by=nro, created_by=nro)
+        quotas = {}
+        for sp, ward, conc, q, fee in (("ELEPHANT", 29, "Mahenye CAMPFIRE area", 3, 25000), ("BUFFALO", 29, "Mahenye CAMPFIRE area", 8, 3500),
+                                       ("LEOPARD", 29, "Mahenye CAMPFIRE area", 2, 5500), ("CROC", 25, "Save River", 4, 2500),
+                                       ("HIPPO", 25, "Save River", 2, 3000)):
+            quotas[sp] = HuntingQuota.objects.create(year=today.year, species=sp, ward=ward, concession=conc, quota=q, trophy_fee=Decimal(fee),
+                                                     created_by=nro)
+        operator = Acc.objects.create(name="Save Valley Safaris (Pvt) Ltd", account_type="BUS", phone="0772551100", email="bookings@example.com")
+        h1 = sv.book_hunt(nro, quota=quotas["BUFFALO"], operator=operator, client_name="J. Miller", client_nationality="USA",
+                          professional_hunter="T. Hove", hunt_date=today - timedelta(days=20))
+        sv.hunt_action(nro, h1, "hunted", trophy_details="Bull, 42 inch spread")
+        fin.issue_receipt(u["collector"], revenue_head=h1.bill.revenue_head, amount=h1.trophy_fee, account=operator, bill=h1.bill,
+                          method="BANK", reference="RTGS-SVS-118")
+        h2 = sv.book_hunt(nro, quota=quotas["ELEPHANT"], operator=operator, client_name="H. Schmidt", client_nationality="Germany",
+                          professional_hunter="T. Hove", hunt_date=today - timedelta(days=6))
+        sv.hunt_action(nro, h2, "hunted", trophy_details="Bull, tusks 28 kg / 26 kg")
+        sv.book_hunt(nro, quota=quotas["CROC"], operator=operator, client_name="P. Novak", client_nationality="Czech Republic",
+                     hunt_date=today + timedelta(days=12))
+        sand_co = Acc.objects.create(name="Mutema Builders & Sand Supply", account_type="BUS", phone="0773441200")
+        p1 = ResourcePermit.objects.create(permit_type="SAND", holder=sand_co, ward=12, location="Musikavanhu river bed, Mutema", unit="M3",
+                                           quantity_allowed=Decimal("200"), unit_fee=Decimal("3"), valid_from=today - timedelta(days=30),
+                                           valid_to=today + timedelta(days=150), ema_reference="EMA/MAN/SND/2026/044", applied_by=nro, created_by=nro,
+                                           conditions="Max depth 1.5 m; no extraction within 50 m of the bridge; rehabilitate pits monthly.")
+        sv.decide_permit(u["social.director"], p1, "approve", "EMA approval seen")
+        p1.refresh_from_db()
+        fin.issue_receipt(u["collector"], revenue_head=p1.bill.revenue_head, amount=p1.fee, account=sand_co, bill=p1.bill)
+        for d, q, reg in ((20, "12", "ACX 4471"), (12, "12", "ACX 4471"), (3, "18", "AEF 2290")):
+            sv.record_extraction(nro, p1, quantity=q, date=today - timedelta(days=d), vehicle_reg=reg, destination="Chipinge town")
+        miner = Acc.objects.create(name="Tanganda Gold Syndicate", account_type="BUS", phone="0779120033")
+        ResourcePermit.objects.create(permit_type="MINING", holder=miner, ward=8, location="Tanganda – claim TG/14", unit="MONTH",
+                                      quantity_allowed=Decimal("6"), unit_fee=Decimal("75"), valid_from=today, valid_to=today + timedelta(days=180),
+                                      ema_reference="MMCZ/PRO/2026/310", applied_by=nro, created_by=nro)
+        timber = Acc.objects.create(name="Chipinge Timbers", account_type="BUS", phone="0772339900")
+        p3 = ResourcePermit.objects.create(permit_type="TIMBER", holder=timber, ward=3, location="Chirinda forest buffer block C", unit="M3",
+                                           quantity_allowed=Decimal("40"), unit_fee=Decimal("12"), valid_from=today, valid_to=today + timedelta(days=90),
+                                           ema_reference="FC/HAR/2026/017", applied_by=nro, created_by=nro)
+        sv.decide_permit(u["social.director"], p3, "approve", "Forestry Commission harvesting plan attached")
+        farms = [("Chako Estates", "Chako Estates (Pvt) Ltd", "MS-F12", 22, "Middle Sabi farms", 120, "ESTATE", "PLANT", "Macadamia, coffee", 0, 0, 80),
+                 ("Mlambo Plot 31", "S. Mlambo", "MS-F31", 22, "Middle Sabi farms", 8, "IRRIG", "CROPS", "Wheat, maize, sugar beans", 6, 10, 8),
+                 ("Tanganda Co-op Farm 4", "Tanganda Farmers Co-operative", "TG-F4", 8, "Tanganda farms", 45, "A2", "MIXED", "Tea, maize", 60, 40, 10),
+                 ("Dhliwayo A1 plot", "R. Dhliwayo", "CB-F9", 25, "Chibuwe farms", 12.5, "A1", "MIXED", "Cotton, sorghum", 14, 22, 0)]
+        for name, owner, number, ward, place, ha, ftype, act, crops, cattle, goats, irr in farms:
+            acc = Acc.objects.filter(name=owner).first()
+            prop = acc.properties.filter(stand_number=number).first() if acc else None
+            f = Farm(name=name, owner=acc, farm_number=number, ward=ward, location=place, hectares=Decimal(str(ha)), farm_type=ftype, activity=act,
+                     main_crops=crops, cattle=cattle, goats_sheep=goats, irrigated_hectares=Decimal(irr), created_by=nro)
+            f.property = prop
+            f.save()
+        eho = u["eho"]
+        for name, kind, ward, village, hh, status, days in (("Chibuwe Primary School borehole", "BOREHOLE", 25, "Chibuwe", 140, "WORKING", 40),
+                                                             ("Mahenye clinic solar borehole", "SOLAR", 29, "Mahenye", 220, "WORKING", 15),
+                                                             ("Chinyamukwakwa village well", "WELL", 25, "Chinyamukwakwa", 60, "BROKEN", 210),
+                                                             ("Checheche piped scheme", "PIPED", 22, "Checheche", 900, "REPAIR", 3),
+                                                             ("Tamandai bush pump", "BOREHOLE", 26, "Tamandai", 85, "DRY", 95)):
+            WaterPoint.objects.create(name=name, point_type=kind, ward=ward, village=village, households_served=hh, status=status,
+                                      last_serviced=today - timedelta(days=days), committee_contact="Chair – 077x xxx xxx", created_by=eho,
+                                      notes="Pump rods rusted – parts requested" if status == "BROKEN" else "")
+        so = u["social.officer"]
+        for name, cat, ward, village, size in (("Gogo E. Sithole", "ELDERLY", 25, "Chibuwe", 4), ("T. Mapfumo (aged 16)", "CHILD", 26, "Tamandai", 3),
+                                               ("J. Mlambo", "DISABLED", 22, "Checheche", 6), ("Chinyamukwakwa flood household 7", "DISASTER", 25,
+                                                                                                "Chinyamukwakwa", 8)):
+            b = Beneficiary.objects.create(name=name, category=cat, ward=ward, village=village, household_size=size, created_by=so)
+            sv.give_assistance(so, b, kind="FOOD", description="50 kg maize meal, 2 L cooking oil", value="38", programme="Drought relief 2026",
+                               date=today - timedelta(days=10))
+        b.refresh_from_db()
+        sv.give_assistance(so, b, kind="SHELTER", description="20 iron sheets, 2 bags cement", value="260", programme="Flood recovery")
+        fines = [(u["natres.officer"], "NR-01", "B. Ncube", "63-555123B13", "0774112233", "Save River bridge – 2 loads", "ADG 1180"),
+                 (u["eho"], "HLT-01", "Mai Rudo fast foods", "", "0771009988", "Checheche rank", ""),
+                 (u["collector"], "TRD-02", "K. Dube", "", "0778667700", "Chipinge CBD pavement", "")]
+        issued = []
+        for officer, code, name, nid, phone, place, reg in fines:
+            issued.append(fin.issue_fine(officer, offence=Offence.objects.get(code=code), offender_name=name, national_id=nid, phone=phone,
+                                         location=place, vehicle_reg=reg))
+        fin.issue_receipt(u["collector"], revenue_head=issued[2].bill.revenue_head, amount=issued[2].amount, account=issued[2].account,
+                          bill=issued[2].bill)
 
     def _demo_payroll(self, u):
         """Demo salaries and two months of payroll (illustrative amounts only – not real council salaries)."""
