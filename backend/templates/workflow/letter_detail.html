@@ -4,11 +4,6 @@
 {% endblock %}
 {% block actions %}
 {% if can_route %}
-<div class="module"><h2>What to do with this letter</h2><div class="p-2 d-grid gap-2">
-<a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'task' %}">Give task to a department</a>
-<a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'respond' %}">Reply to sender</a>
-<a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'forward' %}">Send to another officer</a>
-<form method="post" class="d-grid">{% csrf_token %}<button class="btn btn-outline-primary" name="action" value="file">File it</button></form>
-</div></div>
+<div class="module"><div class="p-2 d-grid"><a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'task' %}">Give task</a></div></div>
 {% endif %}
 {% endblock %}

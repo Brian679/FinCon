@@ -5,21 +5,11 @@
 <div class="module"><h2>Letter {{ object.reference }}</h2><p class="p-2 mb-0"><strong>{{ object.subject }}</strong><br><span class="quiet">From {{ object.sender }} · received {{ object.date_received|date:"d M Y" }}</span></p></div>
 <div class="module"><form method="post" action="{% url 'workflow:letter' object.pk %}" class="p-2">{% csrf_token %}
 <input type="hidden" name="action" value="{{ action }}">
-{% if action == "task" %}
-<label class="form-label">Department</label><select name="department" class="form-select mb-2" required><option value="">—</option>{% for v, l in departments %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
-<label class="form-label">Officer (optional – the head of department if empty)</label><select name="to_user" class="form-select mb-2"><option value="">—</option>{% for s in staff %}<option value="{{ s.pk }}">{{ s.get_full_name }} – {{ s.get_role_display }}</option>{% endfor %}</select>
+<label class="form-label">Who will do it</label><select name="to_user" class="form-select mb-2" required><option value="">—</option>{% for s in staff %}<option value="{{ s.pk }}">{{ s.get_full_name }} – {{ s.get_role_display }}</option>{% endfor %}</select>
 <label class="form-label">What must be done</label><input name="title" class="form-control mb-2" value="{{ object.subject }}">
 <label class="form-label">Due date</label><input type="date" name="due_date" class="form-control mb-2">
 <label class="form-label">Instructions</label><textarea name="note" class="form-control mb-2" rows="3"></textarea>
 <div class="submit-row m-0"><button class="btn btn-primary">Give task</button></div>
-{% elif action == "respond" %}
-<label class="form-label">What was replied</label><textarea name="note" class="form-control mb-2" rows="5" required></textarea>
-<div class="submit-row m-0"><button class="btn btn-primary">Save reply</button></div>
-{% else %}
-<label class="form-label">Send to</label><select name="to_user" class="form-select mb-2" required><option value="">—</option>{% for s in staff %}<option value="{{ s.pk }}">{{ s.get_full_name }} – {{ s.get_role_display }}</option>{% endfor %}</select>
-<label class="form-label">Note</label><input name="note" class="form-control mb-2">
-<div class="submit-row m-0"><button class="btn btn-primary">Send</button></div>
-{% endif %}
 </form></div>
 <p><a href="{% url 'workflow:letter' object.pk %}">‹ Back to the letter</a></p>
 </div></div>

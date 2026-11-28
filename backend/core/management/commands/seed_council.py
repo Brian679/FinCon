@@ -437,7 +437,7 @@ class Command(BaseCommand):
                                       date_received=today - timedelta(days=i))
             att.add(rec, "correspondence", c, scan(f"{c.reference} scan.pdf"), "SCAN")
             made.append(c)
-        wf.route_letter(ceo, made[3], "task", department="TECH", title="Prepare the road section costing for the PDC",
+        wf.route_letter(ceo, made[3], "task", to_user=u["engineer"], title="Prepare the road section costing for the PDC",
                         due_date=today + timedelta(days=7), note="Give the PDC the costed works plan.")
         wf.take_phone_message(rec, caller_name="Mr T. Dube (ZINWA)", caller_phone="0772 410 553", message="About the borehole drilling letter – wants a meeting date.",
                               for_user=u["engineer"])

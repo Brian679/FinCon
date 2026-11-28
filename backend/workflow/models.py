@@ -219,7 +219,7 @@ class Correspondence(SyncModel):
     class Status(models.TextChoices):
         RECEIVED = "RECEIVED", "Received"
         ASSIGNED = "ASSIGNED", "Assigned"
-        TASKED = "TASKED", "Task given to a department"
+        TASKED = "TASKED", "Filed – task given"
         RESPONDED = "RESPONDED", "Responded"
         FILED = "FILED", "Filed (no response needed)"
 

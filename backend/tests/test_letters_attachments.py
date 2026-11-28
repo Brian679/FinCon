@@ -60,16 +60,18 @@ class LettersAndCallsTests(CouncilTestCase):
     def test_ceo_turns_the_letter_into_a_department_task(self):
         c = self.letter()
         with self.assertRaises(PermissionDenied):
-            wf.route_letter(self.user("tech.officer"), c, "task", department="TECH")
-        wf.route_letter(self.user("ceo"), c, "task", department="TECH", note="Prepare the ward 12 figures.")
+            wf.route_letter(self.user("tech.officer"), c, "task", to_user=self.user("engineer"))
+        with self.assertRaises(ValidationError):
+            wf.route_letter(self.user("ceo"), c, "task", department="TECH")      # a task goes to a person
+        wf.route_letter(self.user("ceo"), c, "task", to_user=self.user("tech.officer"), note="Prepare the ward 12 figures.")
         c.refresh_from_db()
         self.assertEqual(c.status, Correspondence.Status.TASKED)
         self.assertEqual(c.task.department, "TECH")
-        self.assertEqual(c.task.assigned_to, self.user("engineer"))       # the head of the department
+        self.assertEqual(c.task.assigned_to, self.user("tech.officer"))
         self.assertTrue(Task.objects.filter(pk=c.task_id, description__contains="ward 12").exists())
         self.assertNotIn(c, wf.in_tray(self.user("ceo")))
-        # the head of the department now sees the letter
-        self.assertTrue(att.can_view(self.user("engineer"), "correspondence", c))
+        # the officer given the task now sees the letter and its scan
+        self.assertTrue(att.can_view(self.user("tech.officer"), "correspondence", c))
 
     def test_forward_file_and_respond(self):
         c = self.letter()
@@ -98,7 +100,7 @@ class LettersAndCallsTests(CouncilTestCase):
         link = ceo.post(f"/api/v1/attachments/{up.data['id']}/link/").data["url"]
         self.assertEqual(self.client.get(link).status_code, 200)
         self.assertEqual(self.api("tech.officer").post(f"/api/v1/attachments/{up.data['id']}/link/").status_code, 403)
-        r = self.push(ceo, "letter.route", {"id": cid, "action": "task", "department": "TECH"})
+        r = self.push(ceo, "letter.route", {"id": cid, "action": "task", "to_user": self.user("engineer").pk})
         self.assertEqual(r["status"], "applied", r)
         self.assertEqual(r["record"]["status"], "TASKED")
 
@@ -189,7 +191,7 @@ class WebPagesTests(CouncilTestCase):
         f = att.for_object("correspondence", c).first()
         self.assertEqual(ceo.get(f"/staff/files/{f.pk}/").status_code, 200)
         self.assertEqual(self.web("tech.officer").get(f"/staff/files/{f.pk}/").status_code, 403)
-        ceo.post(f"/staff/correspondence/{c.pk}/view/", {"action": "task", "department": "TECH", "note": "Cost it"})
+        ceo.post(f"/staff/correspondence/{c.pk}/view/", {"action": "task", "to_user": self.user("engineer").pk, "note": "Cost it"})
         c.refresh_from_db()
         self.assertEqual(c.status, Correspondence.Status.TASKED)
 
@@ -244,10 +246,11 @@ class LetterActionPagesTests(CouncilTestCase):
         w = Client()
         w.login(username="ceo", password=PW)
         page = w.get(f"/staff/correspondence/{c.pk}/view/")
-        self.assertContains(page, "Give task to a department")
-        self.assertNotContains(page, "What must be done")
-        for a in ("task", "respond", "forward"):
-            self.assertEqual(w.get(f"/staff/correspondence/{c.pk}/{a}/").status_code, 200)
-        w.post(f"/staff/correspondence/{c.pk}/view/", {"action": "respond", "note": "Noted, thank you."})
+        self.assertContains(page, "Give task")
+        self.assertNotContains(page, "File it")
+        self.assertNotContains(page, "Reply to sender")
+        self.assertContains(w.get(f"/staff/correspondence/{c.pk}/task/"), "Who will do it")
+        w.post(f"/staff/correspondence/{c.pk}/view/", {"action": "task", "to_user": self.user("treasurer").pk, "note": "Handle"})
         c.refresh_from_db()
-        self.assertEqual(c.status, Correspondence.Status.RESPONDED)
+        self.assertEqual(c.status, Correspondence.Status.TASKED)
+        self.assertEqual(c.task.assigned_to, self.user("treasurer"))

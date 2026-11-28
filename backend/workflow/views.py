@@ -211,7 +211,7 @@ def letter_new(request):
     return render(request, "generic/form.html", {"form": form, "title": "Incoming letter – scan and send", "multipart": True})
 
 
-LETTER_ACTIONS = {"task": "Give task to a department", "respond": "Reply to sender", "forward": "Send to another officer"}
+LETTER_ACTIONS = {"task": "Give task"}
 
 
 @staff_required

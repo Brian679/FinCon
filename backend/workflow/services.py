@@ -275,15 +275,13 @@ def route_letter(user, c, action, *, to_user=None, department="", title="", due_
             or (user.is_head and c.department == user.department)):
         raise PermissionDenied("This letter was not sent to you.")
     if action == "task":
-        dept = department or (to_user.department if to_user else "")
-        if dept not in Department.values:
-            raise ValidationError("Choose the department.")
         if to_user is None:
-            to_user = next((u for u in User.objects.filter(department=dept, is_active=True, user_type=User.UserType.STAFF) if u.is_head), None)
+            raise ValidationError("Choose who will do the task.")
+        dept = to_user.department or department or c.department
         task = create_task(user, title=(title or f"Letter {c.reference}: {c.subject}")[:200], department=dept, assigned_to=to_user,
                            description=f"Letter {c.reference} from {c.sender} (received {c.date_received:%d %b %Y}). {note}".strip() +
-                           "\nThe scanned letter is attached to the letter in the in-tray.", due_date=due_date or None)
-        c.task, c.department, c.assigned_to, c.status = task, dept, to_user, Correspondence.Status.TASKED
+                           "\nThe scanned letter is on the letter page.", due_date=due_date or None)
+        c.task, c.department, c.assigned_to, c.status = task, dept, to_user, Correspondence.Status.TASKED     # filed with the task
     elif action == "forward":
         if to_user is None:
             raise ValidationError("Choose who to send it to.")
