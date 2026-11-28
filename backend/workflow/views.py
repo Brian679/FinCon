@@ -228,10 +228,10 @@ def letter_detail(request, pk):
     u = request.user
     can_route = (c.addressed_to_id == u.pk or c.assigned_to_id == u.pk or u.has_cap("correspondence.manage") or u.sees_all_departments()
                  or (u.is_head and c.department == u.department))
-    rows = [("From", c.sender), ("Contact", c.sender_contact), ("Subject", c.subject), ("Received", c.date_received),
+    rows = [("From", c.sender), ("Contact", c.sender_contact), ("Subject", c.subject), ("Received", f"{c.date_received:%d %b %Y}"),
             ("Received by", c.created_by.get_full_name() if c.created_by_id else ""), ("Sent to", c.addressed_to.get_full_name() if c.addressed_to_id else ""),
             ("Department", c.get_department_display()), ("Assigned to", c.assigned_to.get_full_name() if c.assigned_to_id else ""),
-            ("Notes", c.routing_note), ("Reply due", c.response_due), ("Reply", c.response_summary), ("File reference", c.file_reference)]
+            ("Notes", c.routing_note), ("Reply due", f"{timezone.localtime(c.response_due):%d %b %Y}" if c.response_due else ""), ("Reply", c.response_summary), ("File reference", c.file_reference)]
     return render(request, "workflow/letter_detail.html", {
         "object": c, "title": f"Letter {c.reference}", "status_text": c.get_status_display(), "status_badge": "secondary",
         "field_rows": [(k, v) for k, v in rows if v not in (None, "")], "files": att.for_object("correspondence", c), "attach_kind": "correspondence",

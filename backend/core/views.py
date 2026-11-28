@@ -115,8 +115,8 @@ def dashboard(request):
     from workflow.models import PhoneMessage
 
     ctx["in_tray"] = list(_wf.in_tray(user).select_related("created_by")[:8])
-    ctx["calls"] = list(_wf.phone_message_scope(user, PhoneMessage.objects.alive()).filter(status=PhoneMessage.Status.NEW)
-                        .exclude(taken_by=user)[:6]) if not user.has_cap("calls.log") else []
+    mine = Q(for_user=user) | (Q(for_user__isnull=True, for_department=user.department) if user.is_head else Q(pk__in=[]))
+    ctx["calls"] = list(PhoneMessage.objects.alive().filter(mine, status=PhoneMessage.Status.NEW)[:6]) if not user.has_cap("calls.log") else []
     dept_filter = Q() if user.sees_all_departments() else Q(department=user.department)
     from workflow.services import complaint_scope
 

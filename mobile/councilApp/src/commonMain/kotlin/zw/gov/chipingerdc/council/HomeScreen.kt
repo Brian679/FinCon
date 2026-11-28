@@ -236,7 +236,7 @@ fun HomeScreen(ctx: Ctx) {
     val letters by sdk.observe(Entities.CORRESPONDENCE, zw.gov.chipingerdc.shared.model.Correspondence.serializer()).collectAsState(initial = emptyList())
     val calls by sdk.observe(Entities.PHONE_MESSAGES, zw.gov.chipingerdc.shared.model.PhoneMessage.serializer()).collectAsState(initial = emptyList())
     val mail = inTray(me, letters)
-    val openCalls = calls.filter { it.status == "NEW" }
+    val openCalls = calls.filter { it.status == "NEW" && (it.forUser == me.id || (it.forUser == null && me.isHead && it.forDepartment == me.department)) }
     val reception = me.can("calls.log", "correspondence.manage")
 
     AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
