@@ -1,5 +1,10 @@
 package zw.gov.chipingerdc.shared.ui
 
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -114,17 +119,63 @@ fun AppScreen(
             } else Spacer(Modifier.weight(1f))
             if (sync != null) SyncStatus(sync, pending, onSync)
         }
-        if (sync?.online == false || sync?.needsLogin == true) {
-            val text = if (sync.needsLogin) "Session expired – log in again to sync your work."
-            else "You are offline. Showing data saved on this phone" + if (pending > 0) "; $pending change(s) will be sent when you reconnect." else "."
-            Message(text, MessageKind.WARNING, Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp))
+        // Responsive body: full width on phones, a centred column of at most MAX_CONTENT_WIDTH on tablets and desktops.
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            CompositionLocalProvider(LocalWidthClass provides widthClass(maxWidth)) {
+                Column(Modifier.align(Alignment.TopCenter).widthIn(max = MAX_CONTENT_WIDTH).fillMaxWidth().fillMaxHeight()) {
+                    if (sync?.online == false || sync?.needsLogin == true) {
+                        val text = if (sync.needsLogin) "Session expired – log in again to sync your work."
+                        else "You are offline. Showing data saved on this phone" + if (pending > 0) "; $pending change(s) will be sent when you reconnect." else "."
+                        Message(text, MessageKind.WARNING, Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp))
+                    }
+                    // h1 (light, quiet)
+                    Text(title, fontSize = 20.sp, fontWeight = FontWeight.Light, color = CrdcColors.Muted,
+                        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Column(Modifier.fillMaxSize(), content = content)
+                }
+            }
         }
-        // h1 (light, quiet)
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Light, color = CrdcColors.Muted,
-            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-        Column(Modifier.fillMaxSize(), content = content)
     }
 }
+
+/** Screen width classes (as in Material window size classes): phones, large phones / small tablets, tablets & desktops. */
+enum class WidthClass { COMPACT, MEDIUM, EXPANDED }
+
+fun widthClass(width: Dp): WidthClass = when {
+    width < 600.dp -> WidthClass.COMPACT
+    width < 900.dp -> WidthClass.MEDIUM
+    else -> WidthClass.EXPANDED
+}
+
+/** The width class of the screen area the current screen is drawn in. */
+val LocalWidthClass = compositionLocalOf { WidthClass.COMPACT }
+
+/** Widest a screen's content gets – wider windows show it centred (like the website's content column). */
+val MAX_CONTENT_WIDTH = 1040.dp
+
+/**
+ * Tiles (figures, shortcuts) laid out in as many columns as fit: 2 on a phone, 3 on a large phone in landscape or a small
+ * tablet, up to [maxColumns] on tablets and desktops. Each cell gets the Modifier to size it.
+ */
+@Composable
+fun AdaptiveGrid(cells: List<@Composable (Modifier) -> Unit>, minCellWidth: Dp = 160.dp, maxColumns: Int = 4, spacing: Dp = 8.dp) {
+    if (cells.isEmpty()) return
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val fit = ((maxWidth + spacing) / (minCellWidth + spacing)).toInt()
+        val cols = fit.coerceIn(1, maxColumns).coerceAtMost(cells.size).coerceAtLeast(if (maxWidth >= 260.dp && cells.size > 1) 2 else 1)
+        Column(verticalArrangement = Arrangement.spacedBy(spacing)) {
+            cells.chunked(cols).forEach { row ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                    row.forEach { it(Modifier.weight(1f)) }
+                    repeat(cols - row.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+    }
+}
+
+/** Width of a slide-in menu: never more than 85 % of the screen (small phones), never more than 320 dp. */
+fun drawerWidth(screenWidth: Dp): Dp = minOf(320.dp, screenWidth * 0.85f)
 
 @Composable
 private fun SyncStatus(state: SyncState, pending: Long, onSync: (() -> Unit)?) {
@@ -228,7 +279,8 @@ fun StatusChip(text: String, code: String = text) {
 @Composable
 fun KeyValue(label: String, value: String?) {
     Row(Modifier.fillMaxWidth().bottomRule().padding(vertical = 6.dp)) {
-        Text("$label:", color = CrdcColors.Medium, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.width(130.dp))
+        Text("$label:", color = CrdcColors.Medium, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(if (LocalWidthClass.current == WidthClass.COMPACT) 120.dp else 170.dp))
         Text(value?.ifBlank { "—" } ?: "—", fontSize = 13.sp, color = CrdcColors.Body, modifier = Modifier.weight(1f))
     }
 }
@@ -481,4 +533,10 @@ fun ActionPanel(title: String, fields: List<FieldSpec>, buttons: List<Pair<Strin
         }
         if (note != null) Text(note, fontSize = 11.sp, color = CrdcColors.Muted)
     }
+}
+
+/** A screen's main action button above its list, with the same side margins as the list. */
+@Composable
+fun TopAction(content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) { content() }
 }

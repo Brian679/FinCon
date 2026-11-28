@@ -323,7 +323,7 @@ fun RegisterListScreen(ctx: Ctx, key: String) {
     var q by remember { mutableStateOf("") }
     val list = all.filter { q.isBlank() || it.toString().contains(q, ignoreCase = true) }
     AppScreen(spec.title, onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        if (canManage(ctx, spec)) PrimaryButton("+ New ${spec.noun}", onClick = { ctx.go(spec.newScreen ?: Screen.RegisterForm(key, null)) })
+        if (canManage(ctx, spec)) zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ New ${spec.noun}", onClick = { ctx.go(spec.newScreen ?: Screen.RegisterForm(key, null)) }) }
         ListScreen {
             item { Field("Search", q, { q = it }) }
             if (key == "farms" && all.isNotEmpty()) item {

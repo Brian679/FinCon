@@ -95,7 +95,7 @@ fun FundsScreen(ctx: Ctx) {
         else -> all.filter { it.requestedBy == me.id }
     }
     AppScreen("Requests for funds", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ New request (T&S, advance, purchase …)", onClick = { ctx.go(Screen.NewFunds) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ New request (T&S, advance, purchase …)", onClick = { ctx.go(Screen.NewFunds) }) }
         Tabs(tabs, tab) { tab = it }
         ListScreen {
             if (shown.isEmpty()) item { Empty("No requests here.") }
@@ -323,7 +323,7 @@ fun MemosScreen(ctx: Ctx) {
     val received = all.filter { it.sender != me.id }
     val shown = if (tab == "in") received else all.filter { it.sender == me.id }
     AppScreen("Memos", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Send memo / request to a department", onClick = { ctx.go(Screen.NewMemo) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Send memo / request to a department", onClick = { ctx.go(Screen.NewMemo) }) }
         Tabs(listOf("in" to "Received (${received.count { it.status == "SENT" }} new)", "out" to "Sent"), tab) { tab = it }
         ListScreen {
             if (shown.isEmpty()) item { Empty("No memos.") }

@@ -208,7 +208,7 @@ fun NewTaskScreen(ctx: Ctx) {
 fun RequisitionsScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.REQUISITIONS, Requisition.serializer()).collectAsState(initial = emptyList())
     AppScreen("Requisitions", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ New purchase requisition", onClick = { ctx.go(Screen.NewRequisition) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ New purchase requisition", onClick = { ctx.go(Screen.NewRequisition) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No requisitions.") }
             items(list, key = { it.id }) { r ->

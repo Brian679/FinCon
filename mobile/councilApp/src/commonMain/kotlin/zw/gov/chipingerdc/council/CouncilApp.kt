@@ -217,7 +217,7 @@ fun CouncilRouter(ctx: Ctx, profileOpen: Boolean = false, menuOpen: Boolean = fa
                 val drawer = rememberDrawerState(if (menuOpen) DrawerValue.Open else DrawerValue.Closed)
                 val scope = rememberCoroutineScope()
                 ModalNavigationDrawer(drawerState = drawer, drawerContent = {
-                    ModalDrawerSheet(Modifier.width(320.dp), drawerContainerColor = androidx.compose.ui.graphics.Color.White,
+                    ModalDrawerSheet(Modifier.width(zw.gov.chipingerdc.shared.ui.drawerWidth(maxWidth)), drawerContainerColor = androidx.compose.ui.graphics.Color.White,
                         // the panel draws its own header under the status bar – do not add the inset twice
                         windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
                         CompositionLocalProvider(LocalProfile provides null) {

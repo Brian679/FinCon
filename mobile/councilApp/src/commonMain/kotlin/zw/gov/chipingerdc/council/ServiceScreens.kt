@@ -107,7 +107,7 @@ fun ComplaintsScreen(ctx: Ctx) {
     var q by remember { mutableStateOf("") }
     val list by ctx.sdk.search(Entities.COMPLAINTS, q, Complaint.serializer()).collectAsState(initial = emptyList())
     AppScreen("Complaints & feedback", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Record complaint / feedback", onClick = { ctx.go(Screen.NewComplaint) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Record complaint / feedback", onClick = { ctx.go(Screen.NewComplaint) }) }
         Field("Search", q, { q = it }, Modifier.padding(12.dp))
         ListScreen {
             if (list.isEmpty()) item { Empty("No complaints.") }
@@ -204,7 +204,7 @@ fun RequestsScreen(ctx: Ctx) {
     var q by remember { mutableStateOf("") }
     val list by ctx.sdk.search(Entities.SERVICE_REQUESTS, q, ServiceRequest.serializer()).collectAsState(initial = emptyList())
     AppScreen("Service requests & faults", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Log fault / service request", onClick = { ctx.go(Screen.NewRequest) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Log fault / service request", onClick = { ctx.go(Screen.NewRequest) }) }
         Field("Search", q, { q = it }, Modifier.padding(12.dp))
         ListScreen {
             if (list.isEmpty()) item { Empty("No service requests.") }

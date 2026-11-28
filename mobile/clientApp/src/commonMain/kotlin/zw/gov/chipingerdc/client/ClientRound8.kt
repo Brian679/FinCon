@@ -111,18 +111,21 @@ fun ClientHome(ctx: CCtx) {
             }
             val inProgress = certs.count { it.status in listOf("FEE_DUE", "PROCESSING") }
             val waiting = stands.firstOrNull { it.status in listOf("FEE_DUE", "RECEIVED", "SHORTLISTED", "APPROVED") }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Licences", licences.count { it.status == "ISSUED" }.toString(), "valid", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.Licences) }
-                Kpi("Permits", permits.count { it.str("status") == "ACTIVE" }.toString(), "valid", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.Permits) }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Letters", certs.count { it.status == "ISSUED" }.toString(), if (inProgress > 0) "$inProgress in progress" else "issued",
-                    if (inProgress > 0) CrdcColors.Warning else CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.Certificates) }
-                Kpi("Stand application", when (waiting?.status) {
-                    "FEE_DUE" -> "Not submitted"; "APPROVED" -> "Approved"; null -> "–"; else -> waiting.waitingPosition?.let { "No. $it" } ?: "Waiting"
-                }, waiting?.reference ?: "none", if (waiting?.status in listOf("FEE_DUE", "APPROVED")) CrdcColors.Warning else CrdcColors.Green,
-                    Modifier.weight(1f)) { ctx.go(CScreen.Stands) }
-            }
+            zw.gov.chipingerdc.shared.ui.AdaptiveGrid(listOf(
+                { m -> Kpi("Licences", licences.count { it.status == "ISSUED" }.toString(), "valid", CrdcColors.Green, m) { ctx.go(CScreen.Licences) } },
+                { m -> Kpi("Permits", permits.count { it.str("status") == "ACTIVE" }.toString(), "valid", CrdcColors.Green, m) { ctx.go(CScreen.Permits) } },
+                { m ->
+                    Kpi("Letters", certs.count { it.status == "ISSUED" }.toString(), if (inProgress > 0) "$inProgress in progress" else "issued",
+                        if (inProgress > 0) CrdcColors.Warning else CrdcColors.Green, m) { ctx.go(CScreen.Certificates) }
+                },
+                { m ->
+                    Kpi("Stand application", when (waiting?.status) {
+                        "FEE_DUE" -> "Not submitted"; "APPROVED" -> "Approved"; null -> "–"; else -> waiting.waitingPosition?.let { "No. $it" } ?: "Waiting"
+                    }, waiting?.reference ?: "none", if (waiting?.status in listOf("FEE_DUE", "APPROVED")) CrdcColors.Warning else CrdcColors.Green, m) {
+                        ctx.go(CScreen.Stands)
+                    }
+                },
+            ))
             notices.maxByOrNull { it.str("publish_from") }?.let { n ->
                 RowCard("Notice: ${n.str("title")}", prettyDate(n.str("publish_from")), null, null, null) { ctx.go(CScreen.Notices) }
             }

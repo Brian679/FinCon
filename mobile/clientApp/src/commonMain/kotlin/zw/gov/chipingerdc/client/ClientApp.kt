@@ -157,7 +157,7 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false, menuOpen: Boolean = fa
                     if (menuOpen) androidx.compose.material3.DrawerValue.Open else androidx.compose.material3.DrawerValue.Closed)
                 val scope = androidx.compose.runtime.rememberCoroutineScope()
                 androidx.compose.material3.ModalNavigationDrawer(drawerState = drawer, drawerContent = {
-                    androidx.compose.material3.ModalDrawerSheet(Modifier.width(320.dp), drawerContainerColor = androidx.compose.ui.graphics.Color.White,
+                    androidx.compose.material3.ModalDrawerSheet(Modifier.width(zw.gov.chipingerdc.shared.ui.drawerWidth(maxWidth)), drawerContainerColor = androidx.compose.ui.graphics.Color.White,
                         windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
                         CompositionLocalProvider(LocalProfile provides null) {
                             AppScreen("Menu") {

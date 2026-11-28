@@ -59,7 +59,7 @@ fun MyStandsScreen(ctx: CCtx) {
     val people by sdk.observe(Entities.STAND_BENEFICIARIES, zw.gov.chipingerdc.shared.model.StandBeneficiary.serializer()).collectAsState(initial = emptyList())
     val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
     AppScreen("My stands, shops & farms", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Add a stand / shop / farm", onClick = { ctx.go(CScreen.RegisterStand) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Add a stand / shop / farm", onClick = { ctx.go(CScreen.RegisterStand) }) }
         ListScreen {
             item { Text("Linked stands", fontSize = 13.sp, color = CrdcColors.Muted) }
             if (props.isEmpty()) item { Empty("No stands linked yet.") }

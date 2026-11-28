@@ -62,7 +62,7 @@ fun StandsScreen(ctx: Ctx) {
     var q by remember { mutableStateOf("") }
     val list by ctx.sdk.search(Entities.STANDS, q, StandApplication.serializer()).collectAsState(initial = emptyList())
     AppScreen("Stand applications", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        if (ctx.me.can("stands.manage")) PrimaryButton("+ Capture application", onClick = { ctx.go(Screen.NewStand) })
+        if (ctx.me.can("stands.manage")) zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Capture application", onClick = { ctx.go(Screen.NewStand) }) }
         Field("Search", q, { q = it }, Modifier.padding(12.dp))
         ListScreen {
             if (list.isEmpty()) item { Empty("No applications.") }
@@ -125,7 +125,7 @@ fun FindingsScreen(ctx: Ctx) {
 fun LeaveScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.LEAVE, LeaveRequest.serializer()).collectAsState(initial = emptyList())
     AppScreen("Leave", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Apply for leave", onClick = { ctx.go(Screen.NewLeave) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Apply for leave", onClick = { ctx.go(Screen.NewLeave) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No leave applications.") }
             items(list, key = { it.id }) { l ->

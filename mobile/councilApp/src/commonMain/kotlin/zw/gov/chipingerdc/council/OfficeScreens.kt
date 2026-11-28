@@ -75,7 +75,7 @@ fun VouchersScreen(ctx: Ctx) {
         else -> list
     }
     AppScreen("Payment vouchers", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        if (ctx.me.can("voucher.prepare")) PrimaryButton("+ Prepare payment voucher", onClick = { ctx.go(Screen.NewVoucher(null)) })
+        if (ctx.me.can("voucher.prepare")) zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Prepare payment voucher", onClick = { ctx.go(Screen.NewVoucher(null)) }) }
         Tabs(listOf("OPEN" to "In approval / to pay", "PAID" to "Paid", "ALL" to "All"), show) { show = it }
         ListScreen {
             if (shown.isEmpty()) item { Empty("No vouchers.") }
@@ -279,7 +279,7 @@ fun IssueOrderPanel(ctx: Ctx, r: Requisition) {
 fun CorrespondenceScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.CORRESPONDENCE, Correspondence.serializer()).collectAsState(initial = emptyList())
     AppScreen("Correspondence register", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Record incoming letter", onClick = { ctx.go(Screen.NewCorrespondence) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Record incoming letter", onClick = { ctx.go(Screen.NewCorrespondence) }) }
         ListScreen {
             item { InfoBox("Letters are answered within 7 working days.") }
             if (list.isEmpty()) item { Empty("No letters.") }

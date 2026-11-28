@@ -249,9 +249,7 @@ fun HomeScreen(ctx: Ctx) {
                     Kpi("Complaints to handle", openComplaints.size.toString(), "${openComplaints.count { it.acknowledgedAt == null }} not acknowledged", CrdcColors.Danger, m) { ctx.go(Screen.Complaints) }
                 }
             }
-            figures.chunked(2).forEach { row ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) { row.forEach { it(Modifier.weight(1f)) } }
-            }
+            zw.gov.chipingerdc.shared.ui.AdaptiveGrid(figures)
             // 2. what needs me – each list shows its own count
             SectionCard("Waiting for my approval (${approvals.size})") {
                 if (approvals.isEmpty()) Empty("Nothing waiting for you.")

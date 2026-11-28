@@ -259,7 +259,7 @@ fun ReceiptScreen(ctx: CCtx, id: String) {
 fun LicencesScreen(ctx: CCtx) {
     val list by ctx.sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
     AppScreen("My licences", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Apply / renew a licence", onClick = { ctx.go(CScreen.ApplyLicence) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Apply / renew a licence", onClick = { ctx.go(CScreen.ApplyLicence) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No licences yet.") }
             items(list, key = { it.id }) { l ->
@@ -341,7 +341,7 @@ fun ApplyLicenceScreen(ctx: CCtx) {
 fun ProblemsScreen(ctx: CCtx) {
     val list by ctx.sdk.observe(Entities.SERVICE_REQUESTS, ServiceRequest.serializer()).collectAsState(initial = emptyList())
     AppScreen("Problems I reported", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Report a problem", onClick = { ctx.go(CScreen.ReportProblem) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Report a problem", onClick = { ctx.go(CScreen.ReportProblem) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("Nothing reported yet.") }
             items(list, key = { it.id }) { s ->

@@ -53,7 +53,7 @@ private fun JsonObject.list(k: String) = (this[k] as? JsonArray)?.map { it.jsonO
 fun FinesScreen(ctx: CCtx) {
     val fines by ctx.sdk.observe(Entities.FINES, JsonObject.serializer()).collectAsState(initial = emptyList())
     AppScreen("My fines", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("Find a fine by its number", onClick = { ctx.go(CScreen.FindFine) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("Find a fine by its number", onClick = { ctx.go(CScreen.FindFine) }) }
         ListScreen {
             if (fines.isEmpty()) item {
                 EmptyState("No fines.", "", "Add a fine by its number") { ctx.go(CScreen.FindFine) }
@@ -114,7 +114,7 @@ private val TARIFF = listOf(
 fun PermitsScreen(ctx: CCtx) {
     val permits by ctx.sdk.observe(Entities.RESOURCE_PERMITS, JsonObject.serializer()).collectAsState(initial = emptyList())
     AppScreen("Sand & natural resource permits", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Apply for a permit", onClick = { ctx.go(CScreen.ApplyPermit) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Apply for a permit", onClick = { ctx.go(CScreen.ApplyPermit) }) }
         ListScreen {
             if (permits.isEmpty()) item {
                 EmptyState("No permits yet.", "")

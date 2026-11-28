@@ -90,7 +90,7 @@ fun StandDetailScreen(ctx: Ctx, id: String) {
 fun IncidentsScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.INCIDENTS, Incident.serializer()).collectAsState(initial = emptyList())
     AppScreen("Incidents & disasters", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        if (ctx.me.can("incidents.manage")) PrimaryButton("+ Report incident", color = CrdcColors.Danger, onClick = { ctx.go(Screen.NewIncident) })
+        if (ctx.me.can("incidents.manage")) zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Report incident", color = CrdcColors.Danger, onClick = { ctx.go(Screen.NewIncident) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No incidents.") }
             items(list, key = { it.id }) { i ->
@@ -174,7 +174,7 @@ fun IncidentDetailScreen(ctx: Ctx, id: String) {
 fun ActivitiesScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.ACTIVITIES, CommunityActivity.serializer()).collectAsState(initial = emptyList())
     AppScreen("Community programmes & campaigns", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        if (ctx.me.can("activities.manage")) PrimaryButton("+ Plan / record an activity", onClick = { ctx.go(Screen.NewActivity) })
+        if (ctx.me.can("activities.manage")) zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Plan / record an activity", onClick = { ctx.go(Screen.NewActivity) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No activities.") }
             items(list.sortedByDescending { it.date }, key = { it.id }) { a ->
@@ -423,7 +423,7 @@ fun RisksScreen(ctx: Ctx) {
 fun MeetingsScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.MEETINGS, CouncilMeeting.serializer()).collectAsState(initial = emptyList())
     AppScreen("Council meetings", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("Resolutions tracker", color = CrdcColors.Blue, onClick = { ctx.go(Screen.Resolutions) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("Resolutions tracker", color = CrdcColors.Blue, onClick = { ctx.go(Screen.Resolutions) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No meetings.") }
             items(list.sortedByDescending { it.date }, key = { it.id }) { m ->
@@ -494,7 +494,7 @@ fun ResolutionDetailScreen(ctx: Ctx, id: String) {
 fun TicketsScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.ICT_TICKETS, IctTicket.serializer()).collectAsState(initial = emptyList())
     AppScreen("ICT helpdesk", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Raise a ticket", onClick = { ctx.go(Screen.NewTicket) })
+        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Raise a ticket", onClick = { ctx.go(Screen.NewTicket) }) }
         ListScreen {
             if (list.isEmpty()) item { Empty("No tickets.") }
             items(list, key = { it.id }) { t ->
