@@ -264,7 +264,7 @@ data class Certificate(
     val statusLabel: String = "", val decidedByName: String = "", val decidedAt: String? = null, val decisionNote: String = "",
     val validUntil: String? = null, val createdAt: String = "", val localNote: String? = null,
     val beneficiary: String? = null, val subjectName: String = "", val subjectId: String = "", val subjectPhone: String = "",
-    val subjectRelationship: String = "",
+    val subjectRelationship: String = "", val decidedByRole: String = "",
 )
 
 /** A person connected to a stand / house / shop / farm (the owner's children, spouse, relatives, shop manager …). */

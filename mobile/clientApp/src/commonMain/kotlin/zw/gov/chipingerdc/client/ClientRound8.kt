@@ -480,11 +480,6 @@ fun AppSettingsScreen(ctx: CCtx) {
                 Toggle("Show my balance on the dashboard", ClientPrefs.showBalance) { ClientPrefs.showBalance = it; ClientPrefs.save(ctx.sdk) }
                 Toggle("Larger text", ClientPrefs.largeText) { ClientPrefs.largeText = it; ClientPrefs.save(ctx.sdk) }
             }
-            SectionCard("Data") {
-                Toggle("Update automatically when online", ClientPrefs.autoSync) { ClientPrefs.autoSync = it; ClientPrefs.save(ctx.sdk) }
-                KeyValue("Last updated", prettyDate(ctx.sync.lastSync))
-                PrimaryButton("Update now", busy = ctx.sync.running, onClick = { ctx.syncNow() })
-            }
             SectionCard("About") {
                 KeyValue("App", "Chipinge RDC online services")
                 KeyValue("Version", "1.0")

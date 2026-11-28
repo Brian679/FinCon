@@ -785,6 +785,7 @@ class CertificateSerializer(SyncSerializer):
     fee = serializers.DecimalField(source="fee_bill.amount", max_digits=14, decimal_places=2, read_only=True, default=None)
     fee_paid = serializers.SerializerMethodField()
     decided_by_name = serializers.SerializerMethodField()
+    decided_by_role = serializers.SerializerMethodField()
 
     class Meta:
         model = CertificateRequest
@@ -792,7 +793,7 @@ class CertificateSerializer(SyncSerializer):
                                                    "property", "stand_number", "property_label", "applicant_name", "national_id", "phone", "address",
                                                    "ward", "purpose", "other_party_name", "other_party_id", "event_date", "place", "beneficiary", "subject_name", "subject_id", "subject_phone",
                                                    "subject_relationship", "fee_bill", "fee",
-                                                   "fee_paid", "status", "status_label", "decided_by_name", "decided_at", "decision_note", "valid_until",
+                                                   "fee_paid", "status", "status_label", "decided_by_name", "decided_by_role", "decided_at", "decision_note", "valid_until",
                                                    "created_at"])
 
     def get_property_label(self, obj):
@@ -803,6 +804,9 @@ class CertificateSerializer(SyncSerializer):
 
     def get_decided_by_name(self, obj):
         return obj.decided_by.get_full_name() if obj.decided_by_id else ""
+
+    def get_decided_by_role(self, obj):
+        return obj.decided_by.get_role_display() if obj.decided_by_id else ""
 
 
 from finance.models import StandBeneficiary  # noqa: E402
