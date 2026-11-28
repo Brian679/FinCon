@@ -7,7 +7,12 @@
 <h2 class="h4 my-3">{{ c.get_kind_display|upper }}</h2></div>
 <p class="text-end">No. <strong>{{ c.number }}</strong><br>{{ c.decided_at|date:"d F Y" }}</p>
 <p>TO WHOM IT MAY CONCERN</p>
-{% if c.kind == 'RESIDENCE' %}
+{% if c.kind == 'RESIDENCE' and c.subject_name %}
+<p>This is to confirm that <strong>{{ c.subject_name }}</strong>, National ID <strong>{{ c.subject_id }}</strong>{% if c.subject_relationship %}
+({{ c.subject_relationship|lower }} of {{ c.property.account.name }}){% endif %}, resides at
+<strong>{{ c.address }}</strong>{% if c.ward %}, Ward {{ c.ward }}{% endif %}, within the area of Chipinge Rural District Council.</p>
+{% if c.purpose %}<p>This letter is issued for: {{ c.purpose }}.</p>{% endif %}
+{% elif c.kind == 'RESIDENCE' %}
 <p>This is to confirm that <strong>{{ c.applicant_name }}</strong>, National ID <strong>{{ c.national_id }}</strong>, resides at
 <strong>{{ c.address }}</strong>{% if c.ward %}, Ward {{ c.ward }}{% endif %}, within the area of Chipinge Rural District Council.</p>
 {% if c.purpose %}<p>This letter is issued for: {{ c.purpose }}.</p>{% endif %}

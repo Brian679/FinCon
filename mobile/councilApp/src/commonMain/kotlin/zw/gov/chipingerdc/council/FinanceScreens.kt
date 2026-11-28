@@ -225,8 +225,9 @@ fun AccountDetailScreen(ctx: Ctx, id: String) {
             if (ctx.me.can("receipt.create")) PrimaryButton("Receive payment", onClick = { ctx.go(Screen.NewReceiptFor(acc.id, null)) })
             SectionCard("Properties / stands") {
                 props.filter { it.account == acc.id }.forEach {
-                    if (it.hectares != null) KeyValue("Farm ${it.standNumber}", "${it.location} · ${it.hectares} ha · farm levy per hectare")
-                    else KeyValue("Stand ${it.standNumber}", "${it.location} · ${it.landUseLabel} · $${money(it.monthlyRates)}/month")
+                    RowCard(if (it.hectares != null) "Farm ${it.standNumber}" else "Stand ${it.standNumber}",
+                        if (it.hectares != null) "${it.location} · ${it.hectares} ha" else "${it.location} · ${it.landUseLabel} · $${money(it.monthlyRates)}/month",
+                        null, null, null) { ctx.go(Screen.StandRecord(it.id)) }
                 }
             }
             SectionCard("Unpaid / recent bills") {

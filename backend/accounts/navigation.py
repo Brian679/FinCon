@@ -100,6 +100,8 @@ def build_nav(user):
         general.append(_item("Leave applications to approve", "departments:leave"))
     if c("certificates.issue"):
         general.append(_item("Letters & certificates to issue", "finance:certificates"))
+    if c("accounts.manage", "growth.manage", "land.manage", "finance.view_all", "land.view", "claims.review", "certificates.issue", "receipt.create"):
+        general.append(_item("Stands, houses & farms (owners & beneficiaries)", "finance:stands"))
     if c("resolutions.update") and not c("meetings.view"):
         general.append(_item("Council resolutions for the department", "departments:resolutions"))
     sections.append({"title": user.get_department_display() or "My department", "items": general, "own": True})

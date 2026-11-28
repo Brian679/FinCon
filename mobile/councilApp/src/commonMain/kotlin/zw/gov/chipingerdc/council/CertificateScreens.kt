@@ -55,6 +55,7 @@ fun CertificateDetailScreen(ctx: Ctx, id: String) {
         ScrollColumn {
             SectionCard("${c.reference} – ${c.kindLabel}") {
                 KeyValue("Applicant", c.applicantName); KeyValue("National ID", c.nationalId); KeyValue("Phone", c.phone)
+                if (c.subjectName.isNotBlank()) KeyValue("Letter is for", "${c.subjectName} · ${c.subjectId} · ${c.subjectRelationship} · ${c.subjectPhone}")
                 if (c.propertyLabel.isNotBlank()) KeyValue("Stand", c.propertyLabel)
                 if (c.address.isNotBlank()) KeyValue("Address", c.address)
                 KeyValue("Account", "${c.accountNumber} · balance $${money(c.accountBalance)}")

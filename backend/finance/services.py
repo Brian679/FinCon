@@ -1303,7 +1303,7 @@ def can_issue_certificate(user, cert):
 
 
 def request_certificate(user, *, kind, property=None, purpose="", address="", ward=None, other_party_name="", other_party_id="", event_date=None,
-                        place="", req_id=None):
+                        place="", req_id=None, beneficiary=None, subject_name="", subject_id="", subject_phone="", subject_relationship=""):
     from .models import CertificateRequest, RevenueHead, Tenancy
 
     if not user.is_client:
@@ -1326,12 +1326,29 @@ def request_certificate(user, *, kind, property=None, purpose="", address="", wa
         raise ValidationError("Enter the name of the deceased, the date of death and the cemetery.")
     if kind == "RESIDENCE" and not (address or property):
         raise ValidationError("Enter where you live.")
+    # Proof of residence for someone on the stand: a saved beneficiary, or a new person (saved to the stand for next time).
+    if kind == "RESIDENCE" and (beneficiary is not None or subject_name):
+        if property is None:
+            raise ValidationError("Choose the stand the person lives at.")
+        if beneficiary is not None and beneficiary.property_id != property.pk:
+            raise ValidationError("That person is not listed on this stand.")
+        if beneficiary is None:
+            beneficiary = save_stand_beneficiary(user, property, full_name=subject_name, relationship=subject_relationship or "OTHER",
+                                                 national_id=subject_id, phone=subject_phone)
+        subject_name, subject_id = beneficiary.full_name, beneficiary.national_id
+        subject_phone, subject_relationship = beneficiary.phone, beneficiary.get_relationship_display().split(" (")[0]
+        if not subject_id:
+            raise ValidationError("Enter the person's National ID.")
+    else:
+        beneficiary, subject_name, subject_id, subject_phone, subject_relationship = None, "", "", "", ""
     account = property.account if property is not None and owned.filter(pk=property.pk).exists() else client_own_account(user)
     kwargs = {"id": req_id} if req_id else {}
     c = CertificateRequest.objects.create(kind=kind, user=user, account=account, property=property, applicant_name=user.get_full_name() or user.username,
                                           national_id=user.national_id, phone=user.phone, address=address or (str(property) if property else ""),
                                           ward=ward or user.ward, purpose=purpose, other_party_name=other_party_name, other_party_id=other_party_id,
-                                          event_date=event_date or None, place=place, created_by=user, **kwargs)
+                                          event_date=event_date or None, place=place, beneficiary=beneficiary, subject_name=subject_name,
+                                          subject_id=subject_id, subject_phone=subject_phone, subject_relationship=subject_relationship,
+                                          created_by=user, **kwargs)
     head = RevenueHead.objects.filter(code=head_code, is_active=True).first()
     if head and head.default_amount > 0:
         c.fee_bill = Bill.objects.create(account=account, revenue_head=head, amount=head.default_amount, created_by=user,
@@ -1392,3 +1409,59 @@ def certificate_action(user, c, action, note=""):
     notify_client(users=[c.user] if c.user_id else [], phone=c.phone, subject=subject, body=body, account_number=c.account.account_number, sent_by=user)
     audit.log(AuditLog.Action.APPROVE if action == "issue" else AuditLog.Action.REJECT, c, user=user, message=f"{action}: {note}")
     return c
+
+
+
+# ------------------------------------------------------- stand beneficiaries
+STAND_STAFF_CAPS = ("accounts.manage", "growth.manage", "land.manage")
+STAND_VIEW_CAPS = STAND_STAFF_CAPS + ("finance.view_all", "land.view", "claims.review", "certificates.issue", "receipt.create")
+
+
+def stands_of(user):
+    """Stands a resident may keep beneficiaries for: the ones they own and the ones they rent."""
+    from .models import Tenancy
+
+    rented = Tenancy.objects.filter(user=user, is_active=True).values("property")
+    return Property.objects.alive().filter(Q(account__portal_users=user) | Q(pk__in=rented)).distinct()
+
+
+def _check_stand(user, prop):
+    if user.is_client:
+        if not stands_of(user).filter(pk=prop.pk).exists():
+            raise PermissionDenied("That stand is not linked to your profile.")
+    elif not user.has_cap(*STAND_STAFF_CAPS):
+        raise PermissionDenied("You cannot change stand records.")
+
+
+def save_stand_beneficiary(user, prop, *, full_name, relationship, national_id="", phone="", date_of_birth=None, lives_here=True, notes="", ben_id=None):
+    from .models import StandBeneficiary
+
+    _check_stand(user, prop)
+    full_name = (full_name or "").strip()
+    if not full_name:
+        raise ValidationError("Enter the person's full name.")
+    if relationship not in StandBeneficiary.Relationship.values:
+        raise ValidationError("Choose how the person is related to you.")
+    b = StandBeneficiary.objects.alive().filter(pk=ben_id, property=prop).first() if ben_id else None
+    if b is None and national_id:
+        b = StandBeneficiary.objects.alive().filter(property=prop, national_id__iexact=national_id.strip(), is_active=True).first()
+    fields = dict(full_name=full_name, relationship=relationship, national_id=(national_id or "").strip().upper(), phone=phone or "",
+                  date_of_birth=date_of_birth or None, lives_here=bool(lives_here), notes=notes or "", is_active=True)
+    if b is None:
+        kwargs = {"id": ben_id} if ben_id else {}
+        b = StandBeneficiary.objects.create(property=prop, added_by=user, created_by=user, **fields, **kwargs)
+        audit.log(AuditLog.Action.CREATE, b, user=user, message=f"Beneficiary added to {prop}")
+    else:
+        for k, v in fields.items():
+            setattr(b, k, v)
+        b.save()
+        audit.log(AuditLog.Action.UPDATE, b, user=user, message=f"Beneficiary updated on {prop}")
+    return b
+
+
+def remove_stand_beneficiary(user, b):
+    _check_stand(user, b.property)
+    b.is_active = False
+    b.save(update_fields=["is_active", "updated_at"])
+    audit.log(AuditLog.Action.DELETE, b, user=user, message=f"Beneficiary removed from {b.property}")
+    return b

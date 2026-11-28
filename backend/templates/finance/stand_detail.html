@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ p }}</h1>
+<div class="module"><h2>Stand</h2><table class="table table-sm">
+<tr><th>Stand number</th><td>{{ p.stand_number }}</td></tr>
+<tr><th>Place</th><td>{{ p.area|default:p.location }}{% if p.ward %}, ward {{ p.ward }}{% endif %}</td></tr>
+<tr><th>Use</th><td>{{ p.get_land_use_display }}{% if p.hectares %} · {{ p.hectares }} ha{% endif %}</td></tr>
+{% if p.business_name %}<tr><th>Shop / business</th><td>{{ p.business_name }}</td></tr>{% endif %}
+<tr><th>Owner</th><td><a href="{% url 'finance:account' p.account.pk %}">{{ p.account.name }}</a> · {{ p.account.account_number }} · {{ p.account.phone }}</td></tr>
+{% for t in tenants %}<tr><th>Rented by</th><td>{{ t.tenant.name }} · {{ t.tenant.account_number }}{% if t.business_name %} · {{ t.business_name }}{% endif %}</td></tr>{% endfor %}
+</table></div>
+
+<div class="module"><h2>Beneficiaries ({{ beneficiaries|length }})</h2>
+<table class="table table-sm"><tr><th>Name</th><th>Relationship</th><th>National ID</th><th>Date of birth</th><th>Phone</th><th>Lives / works here</th><th>Added by</th>{% if can_edit %}<th></th>{% endif %}</tr>
+{% for b in beneficiaries %}<tr><td>{{ b.full_name }}</td><td>{{ b.get_relationship_display }}</td><td>{{ b.national_id }}</td><td>{{ b.date_of_birth|default:"" }}</td>
+<td>{{ b.phone }}</td><td>{{ b.lives_here|yesno:"Yes,No" }}</td><td>{{ b.added_by.get_full_name|default:"" }}</td>
+{% if can_edit %}<td><form method="post">{% csrf_token %}<button class="btn btn-sm btn-outline-danger" name="remove" value="{{ b.pk }}">Remove</button></form></td>{% endif %}</tr>
+{% empty %}<tr><td colspan="8" class="text-muted">None recorded.</td></tr>{% endfor %}</table>
+{% if former %}<p class="small text-muted">Removed: {% for b in former %}{{ b.full_name }}{% if not forloop.last %}, {% endif %}{% endfor %}</p>{% endif %}
+</div>
+
+{% if can_edit %}
+<div class="module"><h2>Add a beneficiary</h2>
+<form method="post" class="row g-2">{% csrf_token %}
+<div class="col-md-4"><input class="form-control" name="full_name" placeholder="Full name" required></div>
+<div class="col-md-3"><select class="form-select" name="relationship">{% for v, l in relationships %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select></div>
+<div class="col-md-2"><input class="form-control" name="national_id" placeholder="National ID"></div>
+<div class="col-md-3"><input class="form-control" name="phone" placeholder="Phone"></div>
+<div class="col-md-3"><input class="form-control" type="date" name="date_of_birth"></div>
+<div class="col-md-5"><input class="form-control" name="notes" placeholder="Notes"></div>
+<div class="col-md-2"><label><input type="checkbox" name="lives_here" checked> Lives / works here</label></div>
+<div class="col-md-2"><button class="btn btn-primary">Save</button></div>
+</form></div>
+{% endif %}
+
+{% if letters %}<div class="module"><h2>Letters & certificates for this stand</h2><table class="table table-sm">
+{% for c in letters %}<tr><td>{{ c.reference }}</td><td>{{ c.get_kind_display }}</td><td>{{ c.subject_name|default:c.applicant_name }}</td><td>{{ c.number }}</td><td>{{ c.get_status_display }}</td></tr>{% endfor %}
+</table></div>{% endif %}
+{% endblock %}

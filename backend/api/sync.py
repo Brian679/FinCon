@@ -109,6 +109,8 @@ def staff_entities(user):
         "service_requests": (wf.request_scope(user, ServiceRequest.objects.all()), s.ServiceRequestSerializer),
         "stands": (StandApplication.objects.all(), s.StandApplicationSerializer) if c("stands.view") else None,
         "certificates": (_certificates_for_office(user), s.CertificateSerializer) if c("certificates.issue") else None,
+        "stand_beneficiaries": (s.StandBeneficiary.objects.select_related("property__account", "added_by"), s.StandBeneficiarySerializer)
+        if c(*fin.STAND_VIEW_CAPS) else None,
         "projects": (Project.objects.all(), s.ProjectSerializer) if c("projects.view") else None,
         "audit_findings": (_finding_scope(user), s.AuditFindingSerializer) if _finding_scope(user) is not None else None,
         "leave": (_leave_scope(user).select_related("employee"), s.LeaveRequestSerializer),
@@ -231,6 +233,8 @@ def client_entities(user):
         "tenancies": (s.Tenancy.objects.filter(tenant__in=accounts).select_related("property__area", "tenant"), s.TenancySerializer),
         "certificates": (s.CertificateRequest.objects.filter(user=user).select_related("property", "fee_bill", "account"), s.CertificateSerializer),
         "beneficiaries": (s.sm.Beneficiary.objects.filter(user=user).prefetch_related("assistance"), s.BeneficiarySerializer),
+        "stand_beneficiaries": (s.StandBeneficiary.objects.filter(property__in=fin.stands_of(user)).select_related("property__account", "added_by"),
+                                s.StandBeneficiarySerializer),
     }
 
 
@@ -895,6 +899,8 @@ def op_record_action(user, p):
 
 
 STAFF_OPS = {
+    "stand_beneficiary.save": lambda user, p: op_stand_beneficiary_save(user, p),
+    "stand_beneficiary.remove": lambda user, p: op_stand_beneficiary_remove(user, p),
     "beneficiary.assess": lambda user, p: op_beneficiary_assess(user, p),
     "certificate.action": lambda user, p: op_certificate_action(user, p),
     "work.action": op_work_action,
@@ -996,11 +1002,27 @@ def op_beneficiary_assess(user, p):
     return "beneficiaries", s.BeneficiarySerializer(b).data
 
 
+def op_stand_beneficiary_save(user, p):
+    b = fin.save_stand_beneficiary(user, _get(Property, p["property"]), full_name=p.get("full_name", ""), relationship=p.get("relationship", ""),
+                                   national_id=p.get("national_id", ""), phone=p.get("phone", ""),
+                                   date_of_birth=parse_date(p["date_of_birth"]) if p.get("date_of_birth") else None,
+                                   lives_here=p.get("lives_here", True) not in (False, "false", "0"), notes=p.get("notes", ""), ben_id=p.get("id"))
+    return "stand_beneficiaries", s.StandBeneficiarySerializer(b).data
+
+
+def op_stand_beneficiary_remove(user, p):
+    b = fin.remove_stand_beneficiary(user, _get(s.StandBeneficiary, p["beneficiary"]))
+    return "stand_beneficiaries", s.StandBeneficiarySerializer(b).data
+
+
 def op_certificate_request(user, p):
     prop = _get(Property, p["property"]) if p.get("property") else None
     c = fin.request_certificate(user, kind=p.get("kind", ""), property=prop, purpose=p.get("purpose", ""), address=p.get("address", ""),
                                 ward=p.get("ward") or None, other_party_name=p.get("other_party_name", ""), other_party_id=p.get("other_party_id", ""),
-                                event_date=parse_date(p["event_date"]) if p.get("event_date") else None, place=p.get("place", ""), req_id=p.get("id"))
+                                event_date=parse_date(p["event_date"]) if p.get("event_date") else None, place=p.get("place", ""), req_id=p.get("id"),
+                                beneficiary=_get(s.StandBeneficiary, p["beneficiary"]) if p.get("beneficiary") else None,
+                                subject_name=p.get("subject_name", ""), subject_id=p.get("subject_id", ""), subject_phone=p.get("subject_phone", ""),
+                                subject_relationship=p.get("subject_relationship", ""))
     return "certificates", s.CertificateSerializer(c).data
 
 
@@ -1010,6 +1032,8 @@ def op_certificate_action(user, p):
 
 
 CLIENT_OPS = {
+    "stand_beneficiary.save": op_stand_beneficiary_save,
+    "stand_beneficiary.remove": op_stand_beneficiary_remove,
     "assistance.apply": op_assistance_apply,
     "certificate.request": op_certificate_request,
     "permit.apply": op_client_permit_apply,

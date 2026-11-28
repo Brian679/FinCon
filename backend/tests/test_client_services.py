@@ -128,3 +128,38 @@ class WelfareTests(CouncilTestCase):
         self.assertEqual(mine.count(), 1)
         self.assertEqual(ents["beneficiaries"][1](mine.first()).data["assistance_total"], "35.00")
         self.assertFalse(sync.entities_for(User.objects.get(username="resident"))["beneficiaries"][0].exists())   # others' records stay private
+
+
+class StandBeneficiaryTests(CouncilTestCase):
+    def test_owner_keeps_beneficiaries_council_sees_them_and_letter_for_a_son(self):
+        from finance.models import StandBeneficiary
+
+        tsitsi = User.objects.get(username="tsitsi")
+        house = Property.objects.get(stand_number="612")
+        self.assertEqual(StandBeneficiary.objects.filter(property=house, is_active=True).count(), 3)       # seeded: son, daughter, spouse
+        res = sync.push(tsitsi, [{"op_id": str(uuid.uuid4()), "type": "stand_beneficiary.save", "payload": {
+            "id": str(uuid.uuid4()), "property": str(house.pk), "full_name": "Gogo Mapfumo", "relationship": "PARENT", "national_id": "63-100200G63"}}])[0]
+        self.assertEqual(res["status"], "applied", res)
+        with self.assertRaises(PermissionDenied):                                                        # not her stand
+            fin.save_stand_beneficiary(tsitsi, Property.objects.get(stand_number="101"), full_name="X", relationship="CHILD")
+        with self.assertRaises(PermissionDenied):                                                        # staff without the right
+            fin.save_stand_beneficiary(self.user("eho"), house, full_name="X", relationship="CHILD")
+        staff = sync.entities_for(self.user("cashier"))["stand_beneficiaries"][0]
+        self.assertEqual(staff.filter(property=house, is_active=True).count(), 4)                         # the council sees the same list
+        self.assertFalse(sync.entities_for(User.objects.get(username="resident"))["stand_beneficiaries"][0].filter(property=house).exists())
+        # proof of residence for someone typed in on the request: saved to the stand and named on the letter
+        c = fin.request_certificate(tsitsi, kind="RESIDENCE", property=house, purpose="School", subject_name="Rutendo Mapfumo",
+                                    subject_id="63-990011R63", subject_relationship="CHILD")
+        self.assertEqual((c.subject_name, c.subject_id), ("Rutendo Mapfumo", "63-990011R63"))
+        self.assertEqual(StandBeneficiary.objects.filter(property=house, full_name="Rutendo Mapfumo", is_active=True).count(), 2)  # new ID -> new record
+        son = CertificateRequest.objects.get(user=tsitsi, kind="RESIDENCE", subject_name="Tafadzwa Mapfumo")
+        fin.issue_receipt(self.user("cashier"), revenue_head=son.fee_bill.revenue_head, amount=son.fee_bill.amount, account=son.account, bill=son.fee_bill)
+        son.refresh_from_db()
+        admin = User.objects.filter(role="ADMIN_OFFICER").first()
+        fin.certificate_action(admin, son, "issue")
+        self.client.force_login(admin)
+        page = self.client.get(f"/staff/finance/certificates/{son.pk}/print/")
+        self.assertContains(page, "Tafadzwa Mapfumo")
+        self.assertContains(page, "63-556677T63")
+        self.client.force_login(self.user("cashier"))
+        self.assertContains(self.client.get(f"/staff/finance/stands/{house.pk}/"), "Tafadzwa Mapfumo")

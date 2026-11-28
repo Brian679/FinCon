@@ -962,6 +962,12 @@ class CertificateRequest(SyncModel):
     ward = models.PositiveSmallIntegerField(null=True, blank=True)
     purpose = models.CharField(max_length=255, blank=True, help_text="What the letter is for (bank, school, passport, sale …)")
     other_party_name = models.CharField(max_length=200, blank=True, help_text="New owner (cession) or deceased (burial order)")
+    # Proof of residence for someone on the stand (a son, spouse, relative) rather than the account holder.
+    beneficiary = models.ForeignKey("StandBeneficiary", null=True, blank=True, on_delete=models.SET_NULL, related_name="certificates")
+    subject_name = models.CharField(max_length=200, blank=True, help_text="Person the letter is for")
+    subject_id = models.CharField(max_length=30, blank=True)
+    subject_phone = models.CharField(max_length=30, blank=True)
+    subject_relationship = models.CharField(max_length=60, blank=True)
     other_party_id = models.CharField(max_length=30, blank=True)
     event_date = models.DateField(null=True, blank=True, help_text="Date of death (burial order) or of the sale (cession)")
     place = models.CharField(max_length=200, blank=True, help_text="Cemetery (burial order)")
@@ -982,3 +988,39 @@ class CertificateRequest(SyncModel):
         if not self.reference:
             self.reference = SequenceCounter.next("CRT")
         super().save(*args, **kwargs)
+
+
+
+class StandBeneficiary(SyncModel):
+    """A person connected to a stand, house, shop or farm: the owner's children, spouse, relatives, a shop manager, an heir.
+    Kept by the owner (or the renter) in the app and by the council; used e.g. for a proof-of-residence letter in their name."""
+
+    class Relationship(models.TextChoices):
+        SPOUSE = "SPOUSE", "Spouse"
+        CHILD = "CHILD", "Child (son / daughter)"
+        PARENT = "PARENT", "Parent"
+        SIBLING = "SIBLING", "Brother / sister"
+        RELATIVE = "RELATIVE", "Other relative"
+        DEPENDANT = "DEPENDANT", "Dependant"
+        CO_OWNER = "CO_OWNER", "Co-owner / business partner"
+        MANAGER = "MANAGER", "Shop manager / employee"
+        HEIR = "HEIR", "Heir / next of kin"
+        OTHER = "OTHER", "Other"
+
+    property = models.ForeignKey(Property, on_delete=models.PROTECT, related_name="beneficiaries")
+    full_name = models.CharField(max_length=200)
+    relationship = models.CharField(max_length=10, choices=Relationship.choices)
+    national_id = models.CharField(max_length=30, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
+    lives_here = models.BooleanField(default=True, help_text="Lives / works at this stand")
+    notes = models.CharField(max_length=255, blank=True)
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["property", "full_name"]
+        verbose_name_plural = "stand beneficiaries"
+
+    def __str__(self):
+        return f"{self.full_name} ({self.get_relationship_display()}) – {self.property}"

@@ -63,6 +63,9 @@ sealed interface Screen {
     data object Projects : Screen
     data object Stands : Screen
     data object Certificates : Screen
+    data object StandRecords : Screen
+    data class StandRecord(val id: String) : Screen
+    data class StandPersonForm(val propertyId: String, val id: String?) : Screen
     data class CertificateDetail(val id: String) : Screen
     data object NewStand : Screen
     data object Findings : Screen
@@ -258,6 +261,9 @@ private fun CouncilScreens(ctx: Ctx) {
         Screen.Projects -> ProjectsScreen(ctx)
         Screen.Stands -> StandsScreen(ctx)
         Screen.Certificates -> CertificatesToIssueScreen(ctx)
+        Screen.StandRecords -> StandRecordsScreen(ctx)
+        is Screen.StandRecord -> StandRecordScreen(ctx, s.id)
+        is Screen.StandPersonForm -> StandPersonFormScreen(ctx, s.propertyId, s.id)
         is Screen.CertificateDetail -> CertificateDetailScreen(ctx, s.id)
         Screen.NewStand -> StandFormScreen(ctx)
         Screen.Findings -> FindingsScreen(ctx)

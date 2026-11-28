@@ -56,18 +56,22 @@ fun MyStandsScreen(ctx: CCtx) {
     val bills by sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
     val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
     val rented by sdk.observe(Entities.TENANCIES, Tenancy.serializer()).collectAsState(initial = emptyList())
+    val people by sdk.observe(Entities.STAND_BENEFICIARIES, zw.gov.chipingerdc.shared.model.StandBeneficiary.serializer()).collectAsState(initial = emptyList())
     val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
     AppScreen("My stands, shops & farms", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         PrimaryButton("+ Add a stand / shop / farm", onClick = { ctx.go(CScreen.RegisterStand) })
         ListScreen {
             item { Text("Linked stands", fontSize = 13.sp, color = CrdcColors.Muted) }
             if (props.isEmpty()) item { Empty("No stands linked yet.") }
-            items(props, key = { it.id }) { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills) }
+            items(props, key = { it.id }) { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills, people.count { it.property == p.id && it.isActive }) }
             if (rented.isNotEmpty()) {
                 item { Text("Places I rent", fontSize = 13.sp, color = CrdcColors.Muted) }
                 items(rented, key = { it.id }) { t ->
                     RowCard("Stand ${t.standNumber} · ${t.areaName.ifBlank { t.location }}", "${t.businessName.ifBlank { t.landUse }}\nMy account ${t.tenantAccountNumber}" +
-                        (t.startDate?.let { " · since ${prettyDate(it)}" } ?: ""), null, if (t.isActive) "Renting" else "Ended", if (t.isActive) "ACTIVE" else "ENDED")
+                        (t.startDate?.let { " · since ${prettyDate(it)}" } ?: "") + "\nBeneficiaries: ${people.count { it.property == t.property && it.isActive }}",
+                        null, if (t.isActive) "Renting" else "Ended", if (t.isActive) "ACTIVE" else "ENDED") {
+                        ctx.go(CScreen.StandPeople(t.property, "Stand ${t.standNumber} · ${t.areaName.ifBlank { t.location }}"))
+                    }
                 }
             }
             if (leases.isNotEmpty()) {
@@ -183,7 +187,7 @@ fun NewPlanScreen(ctx: CCtx) {
 
 /** One shop / stand with its paid-up position – updated as soon as the council records a payment. */
 @Composable
-fun ShopCard(ctx: CCtx, r: ShopStatus, bills: List<Bill>) {
+fun ShopCard(ctx: CCtx, r: ShopStatus, bills: List<Bill>, people: Int = 0) {
     val p = r.property
     SectionCard("Stand ${p.standNumber} · ${p.areaName.ifBlank { p.location }}") {
         Text(p.businessName.ifBlank { p.landUseLabel }, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
@@ -200,5 +204,6 @@ fun ShopCard(ctx: CCtx, r: ShopStatus, bills: List<Bill>) {
             if (r.total > 0) PrimaryButton("Pay USD ${money(r.total.toString())}", onClick = { ctx.go(CScreen.PayBills(due)) })
             if (r.licence in listOf("NONE", "EXPIRED")) SecondaryButton("Apply / renew shop licence", { ctx.go(CScreen.ApplyLicence) })
         }
+        SecondaryButton("Beneficiaries ($people)", { ctx.go(CScreen.StandPeople(p.id, "Stand ${p.standNumber} · ${p.areaName.ifBlank { p.location }}")) })
     }
 }

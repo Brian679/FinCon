@@ -1173,7 +1173,8 @@ class CertificateDetail(GenericDetailView):
     model = CertificateRequest
     required_caps = ("certificates.issue",)
     template_name = "finance/certificate_detail.html"
-    fields = [("Kind", "kind"), ("Applicant", "applicant_name"), ("National ID", "national_id"), ("Phone", "phone"), ("Address", "address"),
+    fields = [("Kind", "kind"), ("Applicant", "applicant_name"), ("Letter is for", "subject_name"), ("Their National ID", "subject_id"),
+              ("Their phone", "subject_phone"), ("Relationship", "subject_relationship"), ("National ID", "national_id"), ("Phone", "phone"), ("Address", "address"),
               ("Ward", "ward"), ("Stand", "property"), ("Account", "account"), ("Purpose", "purpose"), ("New owner / deceased", "other_party_name"),
               ("Their National ID", "other_party_id"), ("Date (death / sale)", "event_date"), ("Cemetery", "place"), ("Fee", "fee_bill"),
               ("Certificate no.", "number"), ("Valid until", "valid_until"), ("Decided by", "decided_by"), ("Decision note", "decision_note")]
@@ -1195,3 +1196,43 @@ def certificate_action(request, pk):
 def certificate_print(request, pk):
     c = get_object_or_404(_office_certificates(request.user, CertificateRequest.objects.all()), pk=pk, status=CertificateRequest.Status.ISSUED)
     return render(request, "finance/certificate_print.html", {"c": c})
+
+
+
+# ------------------------------------------------------- stands & beneficiaries
+from .models import StandBeneficiary  # noqa: E402
+
+
+class StandList(GenericListView):
+    model = Property
+    required_caps = services.STAND_VIEW_CAPS
+    title = "Stands, houses, shops & farms – owners and beneficiaries"
+    columns = [("Stand", "stand_number"), ("Place", "location"), ("Ward", "ward"), ("Use", "land_use"), ("Owner", "account"),
+               ("Shop / business", "business_name")]
+    search_fields = ["stand_number", "location", "business_name", "account__name", "account__account_number", "beneficiaries__full_name",
+                     "beneficiaries__national_id"]
+    filter_field = "land_use"
+    detail_url_name = "finance:stand"
+
+
+@cap_required(*services.STAND_VIEW_CAPS)
+def stand_detail(request, pk):
+    from .models import Tenancy
+
+    prop = get_object_or_404(Property.objects.alive().select_related("account", "area"), pk=pk)
+    if request.method == "POST":
+        if request.POST.get("remove"):
+            b = get_object_or_404(StandBeneficiary, pk=request.POST["remove"], property=prop)
+            run_action(request, services.remove_stand_beneficiary, b, success="Removed.")
+        else:
+            run_action(request, services.save_stand_beneficiary, prop, full_name=request.POST.get("full_name", ""),
+                       relationship=request.POST.get("relationship", ""), national_id=request.POST.get("national_id", ""),
+                       phone=request.POST.get("phone", ""), date_of_birth=request.POST.get("date_of_birth") or None,
+                       lives_here=bool(request.POST.get("lives_here")), notes=request.POST.get("notes", ""), success="Saved.")
+        return redirect("finance:stand", pk=pk)
+    return render(request, "finance/stand_detail.html", {
+        "title": str(prop), "p": prop, "beneficiaries": prop.beneficiaries.alive().filter(is_active=True).select_related("added_by"),
+        "former": prop.beneficiaries.alive().filter(is_active=False), "tenants": Tenancy.objects.filter(property=prop, is_active=True).select_related("tenant"),
+        "relationships": StandBeneficiary.Relationship.choices, "can_edit": request.user.has_cap(*services.STAND_STAFF_CAPS),
+        "letters": prop.certificate_requests.alive().order_by("-created_at")[:20],
+    })

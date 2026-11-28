@@ -320,7 +320,7 @@ class WaterEdit(GenericUpdateView):
 class BeneficiaryList(GenericListView):
     model = Beneficiary
     required_caps = ("welfare.view", "welfare.manage")
-    title = "Social welfare – vulnerable households"
+    title = "Social welfare – vulnerable households & applications for assistance"
     columns = [("Ref.", "reference"), ("Head of household", "name"), ("Ward", "ward"), ("Village", "village"), ("Household", "household_size"),
                ("Category", "category"), ("Help asked for", "need"), ("Status", "status")]
     search_fields = ["reference", "name", "national_id", "village"]

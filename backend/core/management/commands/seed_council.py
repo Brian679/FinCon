@@ -366,7 +366,7 @@ class Command(BaseCommand):
     def _demo_many_places(self, u):
         """A resident with several places on two accounts: her house, two shops (one through her company), a farm and a fine –
         all owed in one list in the app and paid at once. She also asks for a proof-of-residence letter (illustrative only)."""
-        from datetime import timedelta
+        from datetime import date, timedelta
 
         from finance import services as fin
         from finance.models import Bill, ClientAccount as Acc, Offence, Property, RevenueHead
@@ -402,7 +402,15 @@ class Command(BaseCommand):
                        location="Chipinge CBD – loading bay", vehicle_reg="AEZ 4412")
         for acc in (own, company):
             acc.recalculate()
-        fin.request_certificate(tsitsi, kind="RESIDENCE", property=house, purpose="Opening a bank account")
+        # the people on her stands, and a proof of residence for her son (asked from her account)
+        son = fin.save_stand_beneficiary(tsitsi, house, full_name="Tafadzwa Mapfumo", relationship="CHILD", national_id="63-556677T63",
+                                         phone="0779123456", date_of_birth=date(2003, 5, 14))
+        fin.save_stand_beneficiary(tsitsi, house, full_name="Rutendo Mapfumo", relationship="CHILD", date_of_birth=date(2012, 9, 2))
+        fin.save_stand_beneficiary(tsitsi, house, full_name="Simba Mapfumo", relationship="SPOUSE", national_id="63-334455S63", phone="0772334455")
+        fin.save_stand_beneficiary(tsitsi, shop, full_name="Blessing Dube", relationship="MANAGER", national_id="63-221100B63", phone="0783221100",
+                                   notes="Runs the tuck shop")
+        fin.save_stand_beneficiary(tsitsi, farm, full_name="Simba Mapfumo", relationship="CO_OWNER", national_id="63-334455S63", phone="0772334455")
+        fin.request_certificate(tsitsi, kind="RESIDENCE", property=house, purpose="Opening a bank account", beneficiary=son)
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""

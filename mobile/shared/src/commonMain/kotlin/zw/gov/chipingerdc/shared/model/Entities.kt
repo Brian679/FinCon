@@ -30,6 +30,7 @@ object Entities {
     const val CLAIMS = "claims"
     const val TENANCIES = "tenancies"
     const val CERTIFICATES = "certificates"
+    const val STAND_BENEFICIARIES = "stand_beneficiaries"
     const val ASSETS = "assets"
     const val INCIDENTS = "incidents"
     const val ACTIVITIES = "activities"
@@ -252,6 +253,17 @@ data class Certificate(
     val place: String = "", val feeBill: String? = null, val fee: String? = null, val feePaid: Boolean = false, val status: String = "",
     val statusLabel: String = "", val decidedByName: String = "", val decidedAt: String? = null, val decisionNote: String = "",
     val validUntil: String? = null, val createdAt: String = "", val localNote: String? = null,
+    val beneficiary: String? = null, val subjectName: String = "", val subjectId: String = "", val subjectPhone: String = "",
+    val subjectRelationship: String = "",
+)
+
+/** A person connected to a stand / house / shop / farm (the owner's children, spouse, relatives, shop manager …). */
+@Serializable
+data class StandBeneficiary(
+    val id: String, val property: String = "", val standNumber: String = "", val propertyLabel: String = "", val ownerName: String = "",
+    val accountNumber: String = "", val fullName: String = "", val relationship: String = "", val relationshipLabel: String = "",
+    val nationalId: String = "", val dateOfBirth: String? = null, val phone: String = "", val livesHere: Boolean = true, val notes: String = "",
+    val addedByName: String = "", val isActive: Boolean = true,
 )
 
 @Serializable
@@ -481,6 +493,9 @@ object Choices {
         "FOOD" to "Not enough food", "OTHER" to "Other")
     val welfareNeeds = listOf("FOOD" to "Food aid", "CASH" to "Cash transfer", "SCHOOL" to "School fees (BEAM)", "MEDICAL" to "Medical / assisted treatment",
         "SHELTER" to "Shelter / building materials", "BURIAL" to "Pauper burial", "OTHER" to "Other")
+    val relationships2 = listOf("CHILD" to "Child (son / daughter)", "SPOUSE" to "Spouse", "PARENT" to "Parent", "SIBLING" to "Brother / sister",
+        "RELATIVE" to "Other relative", "DEPENDANT" to "Dependant", "CO_OWNER" to "Co-owner / business partner", "MANAGER" to "Shop manager / employee",
+        "HEIR" to "Heir / next of kin", "OTHER" to "Other")
     val certificateKinds = listOf("RESIDENCE" to "Proof of residence letter", "CLEARANCE" to "Rates clearance certificate",
         "OWNERSHIP" to "Stand ownership confirmation letter", "CESSION" to "Transfer (cession) of a stand", "BURIAL" to "Burial order")
 }

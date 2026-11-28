@@ -161,7 +161,7 @@ val REGISTERS: Map<String, RegisterSpec> = listOf(
             RField("notes", "Faults / repairs", "multiline")),
         line = { it.s("name") to "${it.s("reference")} · ${it.s("point_type_label")} · ${it.s("village")}, ward ${ward(it)}\n${it.s("households_served")} households · serviced ${prettyDate(it.s("last_serviced"))}" },
         tone = { when (it.s("status")) { "WORKING" -> "ACTIVE"; "BROKEN", "DECOM" -> "BROKEN"; else -> "IN_PROGRESS" } }),
-    RegisterSpec("beneficiaries", Entities.BENEFICIARIES, "Beneficiaries (social welfare)", "beneficiary", listOf("welfare.view", "welfare.manage"),
+    RegisterSpec("beneficiaries", Entities.BENEFICIARIES, "Social welfare", "household", listOf("welfare.view", "welfare.manage"),
         listOf("welfare.manage"),
         listOf(RField("name", "Head of household", required = true), RField("national_id", "National ID"), RField("phone", "Phone"),
             RField("ward", "Ward", "int"), RField("village", "Village", required = true), RField("household_size", "Household size", "int"),

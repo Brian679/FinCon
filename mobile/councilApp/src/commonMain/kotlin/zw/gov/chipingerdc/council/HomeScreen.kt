@@ -85,6 +85,8 @@ fun CouncilMenu(ctx: Ctx) {
         add(Tile("ICT support", Screen.Tickets, add = Screen.NewTicket))
         if (me.can("leave.approve")) add(Tile("Leave applications to approve", Screen.Leave))
         if (me.can("certificates.issue")) add(Tile("Letters & certificates to issue", Screen.Certificates))
+        if (me.can("accounts.manage", "growth.manage", "finance.view_all", "receipt.create", "claims.review"))
+            add(Tile("Stands, houses & farms – beneficiaries", Screen.StandRecords))
         if (me.can("resolutions.update") && !me.can("meetings.view")) add(Tile("Council resolutions for the department", Screen.Resolutions))
     }
     fun reg(label: String, key: String, cap: String) = Tile(label, Screen.Register(key), add = if (me.can(cap)) (REGISTERS[key]?.newScreen ?: Screen.RegisterForm(key, null)) else null)
@@ -129,7 +131,7 @@ fun CouncilMenu(ctx: Ctx) {
     val communityStaff = me.can("welfare.view", "welfare.manage", "dept.overview_all")
     val social = buildList {
         // Community Development Officer
-        if (me.can("welfare.view", "welfare.manage")) add(reg("Beneficiaries – social welfare", "beneficiaries", "welfare.manage"))
+        if (me.can("welfare.view", "welfare.manage")) add(reg("Social welfare – households & applications", "beneficiaries", "welfare.manage"))
         if (me.can("facilities.view", "facilities.manage")) add(reg("Schools & clinics development", "social_facilities", "facilities.manage"))
         if (me.can("incidents.view") && communityStaff) add(Tile("Disasters & incidents", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
         if ((me.department == "SOCIAL" || seesAll) && me.can("activities.manage", "activities.verify", "dept.overview_all"))

@@ -807,7 +807,8 @@ class CertificateSerializer(SyncSerializer):
         model = CertificateRequest
         fields = _sync_fields(CertificateRequest, ["reference", "number", "kind", "kind_label", "user", "account", "account_number", "account_balance",
                                                    "property", "stand_number", "property_label", "applicant_name", "national_id", "phone", "address",
-                                                   "ward", "purpose", "other_party_name", "other_party_id", "event_date", "place", "fee_bill", "fee",
+                                                   "ward", "purpose", "other_party_name", "other_party_id", "event_date", "place", "beneficiary", "subject_name", "subject_id", "subject_phone",
+                                                   "subject_relationship", "fee_bill", "fee",
                                                    "fee_paid", "status", "status_label", "decided_by_name", "decided_at", "decision_note", "valid_until",
                                                    "created_at"])
 
@@ -819,3 +820,27 @@ class CertificateSerializer(SyncSerializer):
 
     def get_decided_by_name(self, obj):
         return obj.decided_by.get_full_name() if obj.decided_by_id else ""
+
+
+from finance.models import StandBeneficiary  # noqa: E402
+
+
+class StandBeneficiarySerializer(SyncSerializer):
+    relationship_label = serializers.CharField(source="get_relationship_display", read_only=True)
+    stand_number = serializers.CharField(source="property.stand_number", read_only=True)
+    property_label = serializers.SerializerMethodField()
+    owner_name = serializers.CharField(source="property.account.name", read_only=True)
+    account_number = serializers.CharField(source="property.account.account_number", read_only=True)
+    added_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StandBeneficiary
+        fields = _sync_fields(StandBeneficiary, ["property", "stand_number", "property_label", "owner_name", "account_number", "full_name", "relationship",
+                                                 "relationship_label", "national_id", "date_of_birth", "phone", "lives_here", "notes", "added_by_name",
+                                                 "is_active"])
+
+    def get_property_label(self, obj):
+        return str(obj.property)
+
+    def get_added_by_name(self, obj):
+        return obj.added_by.get_full_name() if obj.added_by_id else ""

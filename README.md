@@ -304,3 +304,11 @@ BEAM school fees, medical, shelter, pauper burial), village, household size, chi
 is notified, visits the household and approves or rejects (staff web *Beneficiaries* register and council app). Approved
 households are beneficiaries: each assistance given is recorded and the resident sees it in the app with the total received.
 Demo: `esther` (beneficiary, assisted) and `tendai.m` (application waiting), password `Chipinge@2026`.
+
+### Stand beneficiaries
+
+Every stand, house, shop or farm can list the people connected to it – children, spouse, parents, relatives, a co-owner, the shop
+manager, the heir – with National ID, date of birth and phone. Owners (and renters, for the place they rent) keep the list in the
+residents' app (*My stands, shops & farms → Beneficiaries*); revenue, Growth Points and land staff see and edit it in the council app
+and on the web (*Stands, houses & farms*, searchable by a beneficiary's name or ID). A proof of residence can be requested for any
+of them from the owner's account; someone typed in on the request is saved to the stand. Demo: `tsitsi`, stand 612.
