@@ -376,6 +376,20 @@ class Beneficiary(SyncModel):
     category = models.CharField(max_length=10, choices=Category.choices)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
+    # Residents can apply in the app; a Community Development Officer assesses the household (home visit) and approves.
+    status = models.CharField(max_length=10, choices=[("APPLIED", "Application – to be assessed"), ("APPROVED", "Beneficiary"),
+                                                      ("REJECTED", "Not approved"), ("CLOSED", "No longer supported")],
+                              default="APPROVED", db_index=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="welfare_records",
+                             help_text="The resident's app account, when they applied themselves")
+    need = models.CharField(max_length=10, blank=True, choices=[("FOOD", "Food aid"), ("CASH", "Cash transfer"), ("SCHOOL", "School fees (BEAM)"),
+                                                                ("MEDICAL", "Medical / assisted treatment"), ("SHELTER", "Shelter / building materials"),
+                                                                ("BURIAL", "Pauper burial"), ("OTHER", "Other")], help_text="Help asked for")
+    reason = models.TextField(blank=True, help_text="Why the household needs help (in the applicant's words)")
+    children = models.PositiveSmallIntegerField(default=0, help_text="Children under 18 in the household")
+    assessed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    assessed_at = models.DateTimeField(null=True, blank=True)
+    assessment_note = models.TextField(blank=True)
 
     class Meta:
         ordering = ["ward", "village", "name"]

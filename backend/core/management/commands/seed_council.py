@@ -339,6 +339,29 @@ class Command(BaseCommand):
         self._demo_charter_registers(u)
         self._demo_admin(u)
         self._demo_many_places(u)
+        self._demo_welfare_applications(u)
+
+    def _demo_welfare_applications(self, u):
+        """Residents apply for social assistance in the app: one approved and helped, one waiting for the home visit (illustrative)."""
+        from social import services as sv
+
+        User = get_user_model()
+        people = []
+        for username, first, last, phone, nid, ward in (("esther", "Esther", "Sithole", "0717000666", "63-778811E63", 7),
+                                                         ("tendai.m", "Tendai", "Moyo", "0718000777", "63-889922T63", 12)):
+            p, _ = User.objects.get_or_create(username=username, defaults=dict(first_name=first, last_name=last, phone=phone, national_id=nid,
+                                                                               user_type=User.UserType.CLIENT, ward=ward))
+            p.set_password("Chipinge@2026")
+            p.save()
+            people.append(p)
+        officer = User.objects.filter(role="SOCIAL_OFFICER").first() or u["social.director"]
+        esther = sv.apply_for_assistance(people[0], category="ELDERLY", need="FOOD", village="Mutema, Chief Mutema area", ward=7, household_size=3,
+                                         children=2, reason="I am 74 and look after two grandchildren. No income since my son died.")
+        sv.assess_beneficiary(officer, esther, "approve", note="Home visit done – no income, two school-going grandchildren.")
+        sv.give_assistance(officer, esther, kind="FOOD", description="50 kg maize meal, 2 L cooking oil, 2 kg beans", value="42", programme="Drought relief 2026")
+        sv.give_assistance(officer, esther, kind="SCHOOL", description="Term 1 school fees – 2 children (BEAM)", value="60", programme="BEAM 2026")
+        sv.apply_for_assistance(people[1], category="DISASTER", need="SHELTER", village="Chisumbanje, Ward 12", ward=12, household_size=6, children=4,
+                                reason="Our house was destroyed by the storm on 20 November. We are staying with neighbours.")
 
     def _demo_many_places(self, u):
         """A resident with several places on two accounts: her house, two shops (one through her company), a farm and a fine –

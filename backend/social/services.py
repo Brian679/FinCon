@@ -11,7 +11,7 @@ from finance.models import Bill, RevenueHead
 from finance.models import q2
 from finance.services import _record, _require, client_people, notify, users_with_cap
 
-from .models import Assistance, Extraction, HuntingQuota, ResourcePermit, TrophyHunt
+from .models import Assistance, Beneficiary, Extraction, HuntingQuota, ResourcePermit, TrophyHunt
 
 
 def _head(code, fallback_category=RevenueHead.Category.FEES):
@@ -157,14 +157,69 @@ def expire_permits(today=None):
 
 
 # ------------------------------------------------------------------- welfare
+def apply_for_assistance(user, *, category, need, village, reason, ward=None, household_size=1, children=0, beneficiary_id=None):
+    """A resident asks to be registered as a beneficiary (food aid, BEAM school fees, medical, shelter …)."""
+    from django.contrib.auth import get_user_model
+
+    if not user.is_client:
+        raise PermissionDenied("Only residents apply here; staff register households in the welfare register.")
+    if Beneficiary.objects.alive().filter(user=user, status__in=["APPLIED", "APPROVED"]).exists():
+        raise ValidationError("You already have an application or are already a beneficiary.")
+    if category not in Beneficiary.Category.values:
+        raise ValidationError("Choose the category that describes your household.")
+    if not (village and reason):
+        raise ValidationError("Enter your village and why you need help.")
+    kwargs = {"id": beneficiary_id} if beneficiary_id else {}
+    b = Beneficiary.objects.create(name=user.get_full_name() or user.username, national_id=user.national_id, phone=user.phone, ward=ward or user.ward,
+                                   village=village, household_size=max(1, int(household_size or 1)), children=int(children or 0), category=category,
+                                   need=need or "", reason=reason, status="APPLIED", is_active=False, user=user, created_by=user, **kwargs)
+    officers = [u for u in get_user_model().objects.filter(is_active=True, department="SOCIAL") if u.has_cap("welfare.manage")]
+    notify(officers, f"Application for assistance: {b.name}", f"{b.get_category_display()} · {b.village}, ward {b.ward or '-'} · {b.get_need_display()}",
+           f"/staff/social/welfare/{b.pk}/")
+    audit.log(AuditLog.Action.CREATE, b, user=user, message="Applied for social assistance")
+    return b
+
+
+def assess_beneficiary(user, b, action, note=""):
+    """After the home visit: approve (the household becomes a beneficiary) or not; close when support ends."""
+    from core.messaging import notify_client
+
+    _require(user, "welfare.manage")
+    if action in ("approve", "reject") and b.status != "APPLIED":
+        raise ValidationError("This application has already been assessed.")
+    if action == "approve":
+        b.status, b.is_active = "APPROVED", True
+        subject, body = "You are registered for social assistance", f"Reference {b.reference}. The council will contact you when assistance is given."
+    elif action == "reject":
+        if not note:
+            raise ValidationError("Give the reason.")
+        b.status, b.is_active = "REJECTED", False
+        subject, body = f"Application {b.reference} not approved", note
+    elif action == "close":
+        if b.status != "APPROVED":
+            raise ValidationError("Only an active beneficiary can be closed.")
+        b.status, b.is_active = "CLOSED", False
+        subject, body = f"Support ended – {b.reference}", note or "Your household is no longer on the support list."
+    else:
+        raise ValidationError("Unknown action.")
+    b.assessed_by, b.assessed_at, b.assessment_note = user, timezone.now(), note
+    b.save()
+    notify_client(users=[b.user] if b.user_id else [], phone=b.phone, subject=subject, body=body, sent_by=user, campaign="Social welfare")
+    audit.log(AuditLog.Action.APPROVE if action == "approve" else AuditLog.Action.REJECT if action == "reject" else AuditLog.Action.OTHER, b,
+              user=user, message=f"{action}: {note}")
+    return b
+
+
 def give_assistance(user, beneficiary, *, kind, description, value=0, programme="", date=None, assistance_id=None):
     _require(user, "welfare.manage")
-    if not beneficiary.is_active:
-        raise ValidationError("This beneficiary is no longer active.")
+    if not beneficiary.is_active or beneficiary.status != "APPROVED":
+        raise ValidationError("This household is not an active beneficiary.")
     kwargs = {"id": assistance_id} if assistance_id else {}
     a = Assistance.objects.create(beneficiary=beneficiary, kind=kind, description=description, value=q2(value or 0), programme=programme,
                                   date=date or timezone.localdate(), given_by=user, created_by=user, **kwargs)
     type(beneficiary).objects.filter(pk=beneficiary.pk).update(updated_at=timezone.now())
+    if beneficiary.user_id:
+        notify([beneficiary.user], f"Assistance given: {a.get_kind_display()}", f"{description} · {a.date:%d %b %Y}")
     return a
 
 

@@ -230,6 +230,7 @@ def client_entities(user):
         "public_notices": (_public_notices(user), s.NoticeSerializer),
         "tenancies": (s.Tenancy.objects.filter(tenant__in=accounts).select_related("property__area", "tenant"), s.TenancySerializer),
         "certificates": (s.CertificateRequest.objects.filter(user=user).select_related("property", "fee_bill", "account"), s.CertificateSerializer),
+        "beneficiaries": (s.sm.Beneficiary.objects.filter(user=user).prefetch_related("assistance"), s.BeneficiarySerializer),
     }
 
 
@@ -894,6 +895,7 @@ def op_record_action(user, p):
 
 
 STAFF_OPS = {
+    "beneficiary.assess": lambda user, p: op_beneficiary_assess(user, p),
     "certificate.action": lambda user, p: op_certificate_action(user, p),
     "work.action": op_work_action,
     "record.action": op_record_action,
@@ -978,6 +980,22 @@ def op_client_permit_apply(user, p):
     return "resource_permits", s.PermitSerializer(permit).data
 
 
+def op_assistance_apply(user, p):
+    from social import services as sv
+
+    b = sv.apply_for_assistance(user, category=p.get("category", ""), need=p.get("need", ""), village=p.get("village", ""), reason=p.get("reason", ""),
+                                ward=p.get("ward") or None, household_size=p.get("household_size") or 1, children=p.get("children") or 0,
+                                beneficiary_id=p.get("id"))
+    return "beneficiaries", s.BeneficiarySerializer(b).data
+
+
+def op_beneficiary_assess(user, p):
+    from social import services as sv
+
+    b = sv.assess_beneficiary(user, _get(s.sm.Beneficiary, p["beneficiary"]), p.get("action", ""), note=p.get("note", ""))
+    return "beneficiaries", s.BeneficiarySerializer(b).data
+
+
 def op_certificate_request(user, p):
     prop = _get(Property, p["property"]) if p.get("property") else None
     c = fin.request_certificate(user, kind=p.get("kind", ""), property=prop, purpose=p.get("purpose", ""), address=p.get("address", ""),
@@ -992,6 +1010,7 @@ def op_certificate_action(user, p):
 
 
 CLIENT_OPS = {
+    "assistance.apply": op_assistance_apply,
     "certificate.request": op_certificate_request,
     "permit.apply": op_client_permit_apply,
     "claim.create": op_claim_create,

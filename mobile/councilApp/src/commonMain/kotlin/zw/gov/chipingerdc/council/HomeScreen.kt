@@ -129,7 +129,7 @@ fun CouncilMenu(ctx: Ctx) {
     val communityStaff = me.can("welfare.view", "welfare.manage", "dept.overview_all")
     val social = buildList {
         // Community Development Officer
-        if (me.can("welfare.view", "welfare.manage")) add(reg("Social welfare – vulnerable households", "beneficiaries", "welfare.manage"))
+        if (me.can("welfare.view", "welfare.manage")) add(reg("Beneficiaries – social welfare", "beneficiaries", "welfare.manage"))
         if (me.can("facilities.view", "facilities.manage")) add(reg("Schools & clinics development", "social_facilities", "facilities.manage"))
         if (me.can("incidents.view") && communityStaff) add(Tile("Disasters & incidents", Screen.Incidents, add = if (me.can("incidents.manage")) Screen.NewIncident else null))
         if ((me.department == "SOCIAL" || seesAll) && me.can("activities.manage", "activities.verify", "dept.overview_all"))

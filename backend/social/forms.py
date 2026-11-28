@@ -76,7 +76,7 @@ class WaterPointForm(BaseModelForm):
 class BeneficiaryForm(BaseModelForm):
     class Meta:
         model = Beneficiary
-        fields = ["name", "national_id", "phone", "ward", "village", "household_size", "category", "is_active", "notes"]
+        fields = ["name", "national_id", "phone", "ward", "village", "household_size", "children", "category", "need", "is_active", "notes"]
 
 
 class AssistanceForm(BaseModelForm):

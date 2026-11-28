@@ -476,6 +476,11 @@ object Choices {
     val claimTypes = listOf("OWNER" to "I own this stand / house", "SHOP" to "I own this stand and run a shop / business on it",
         "RENT" to "I rent this house / shop from its owner", "TENANT" to "I lease these council premises")
     val relationships = listOf("NONE" to "I don't own or rent a stand yet") + claimTypes
+    val welfareCategories = listOf("ELDERLY" to "Elderly person with no support", "CHILD" to "Child-headed household",
+        "DISABLED" to "Person with disability", "CHRONIC" to "Chronically ill", "DISASTER" to "Affected by a disaster (storm, flood, fire)",
+        "FOOD" to "Not enough food", "OTHER" to "Other")
+    val welfareNeeds = listOf("FOOD" to "Food aid", "CASH" to "Cash transfer", "SCHOOL" to "School fees (BEAM)", "MEDICAL" to "Medical / assisted treatment",
+        "SHELTER" to "Shelter / building materials", "BURIAL" to "Pauper burial", "OTHER" to "Other")
     val certificateKinds = listOf("RESIDENCE" to "Proof of residence letter", "CLEARANCE" to "Rates clearance certificate",
         "OWNERSHIP" to "Stand ownership confirmation letter", "CESSION" to "Transfer (cession) of a stand", "BURIAL" to "Burial order")
 }

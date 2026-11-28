@@ -296,3 +296,11 @@ docs/            client charter photo
   to the resident; once paid the request goes to the issuing office (web: *Letters & certificates to issue*, council app tile),
   which issues it with a number and validity, and the resident opens the letter in the app.
 * Demo resident with several places: `tsitsi` / `Chipinge@2026`.
+
+### Beneficiaries (social welfare)
+
+Residents apply for assistance in the app (*Social services → Social assistance*): household type, help needed (food, cash,
+BEAM school fees, medical, shelter, pauper burial), village, household size, children and why. The Community Development Officer
+is notified, visits the household and approves or rejects (staff web *Beneficiaries* register and council app). Approved
+households are beneficiaries: each assistance given is recorded and the resident sees it in the app with the total received.
+Demo: `esther` (beneficiary, assisted) and `tendai.m` (application waiting), password `Chipinge@2026`.
