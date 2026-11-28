@@ -302,7 +302,7 @@ class FundsRequest(SyncModel):
         MOBILE = "MOBILE", "Mobile money (EcoCash / OneMoney)"
         CHEQUE = "CHEQUE", "Cheque"
 
-    PENDING = ("P_HOD", "P_ADMIN", "P_ACC", "P_TREAS", "P_CEO")
+    PENDING = ("P_HOD", "P_ADMIN", "P_CEO", "P_ACC", "P_TREAS")
     OPEN = PENDING + ("P_CONF", "P_PAY", "PAYING")
 
     reference = models.CharField(max_length=30, unique=True, editable=False)

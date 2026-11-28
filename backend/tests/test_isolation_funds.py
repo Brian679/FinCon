@@ -1,5 +1,5 @@
 """Department isolation, requests for funds / purchases (HOD -> Admin ->
-Treasurer -> CEO -> payment) and memos between departments."""
+CEO -> Accountant -> Treasurer -> payment) and memos between departments."""
 from decimal import Decimal
 
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -135,12 +135,12 @@ class FundsRequestFlowTests(CouncilTestCase):
         self.assertEqual(req.status, FundsRequest.Status.PENDING_ADMIN)
         self.assertTrue(Notification.objects.filter(recipient=officer, title__contains="Administration Officer").exists())
         fr.decide(self.user("admin.officer"), req, "approve")
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_CEO)
+        fr.decide(self.user("ceo"), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_ACCOUNTANT)
         fr.decide(self.user("accountant"), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_TREASURER)
         fr.decide(self.user("treasurer"), req, "approve")
-        self.assertEqual(req.status, FundsRequest.Status.PENDING_CEO)
-        fr.decide(self.user("ceo"), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_PAYMENT)
         self.assertTrue(Notification.objects.filter(recipient=officer, title__contains="fully approved").exists())
         # payment: voucher prepared, checked, approved again by Treasurer, paid
@@ -165,7 +165,7 @@ class FundsRequestFlowTests(CouncilTestCase):
         officer = self.user("social.officer")
         req = self.make(officer, payment=False)
         fr.submit(officer, req)
-        for name in ("social.director", "admin.officer", "accountant", "treasurer", "ceo"):
+        for name in ("social.director", "admin.officer", "ceo", "accountant", "treasurer"):
             fr.decide(self.user(name), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.COMPLETED)
 
@@ -174,7 +174,7 @@ class FundsRequestFlowTests(CouncilTestCase):
         req = self.make(hr)
         fr.submit(hr, req)
         fr.decide(self.user("admin.officer"), req, "approve")  # as HOD
-        self.assertEqual(req.status, FundsRequest.Status.PENDING_ACCOUNTANT)  # admin stage skipped
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_CEO)  # admin stage skipped
         acc = self.user("accountant")
         req2 = self.make(acc)
         fr.submit(acc, req2)
@@ -556,7 +556,7 @@ class LoopholeTests(CouncilTestCase):
         req = FundsRequest.objects.create(requested_by=clerk, created_by=clerk, request_type="ADVANCE", title="Float", purpose="Petty cash float")
         FundsRequestLine.objects.create(request=req, description="Float", quantity=1, unit_cost=Decimal("50"))
         fr.submit(clerk, req)
-        for name in ("treasurer", "admin.officer", "accountant", "ceo"):
+        for name in ("treasurer", "admin.officer", "ceo", "accountant"):
             if req.status in FundsRequest.PENDING:
                 fr.decide(self.user(name), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_PAYMENT)

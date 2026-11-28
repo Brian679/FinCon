@@ -142,8 +142,8 @@ class PurchaseChainTests(CouncilTestCase):
         att.add(officer, "funds", req, pdf("quote.pdf"), "QUOTE")
         fr.submit(officer, req)
         self.assertEqual(req.status, FundsRequest.Status.PENDING_HOD)
-        for who, nxt in (("engineer", "P_ADMIN"), ("admin.officer", "P_ACC"), ("accountant", "P_TREAS"), ("treasurer", "P_CEO"),
-                         ("ceo", "P_CONF")):
+        for who, nxt in (("engineer", "P_ADMIN"), ("admin.officer", "P_CEO"), ("ceo", "P_ACC"), ("accountant", "P_TREAS"),
+                         ("treasurer", "P_CONF")):
             fr.decide(self.user(who), req, "approve")
             self.assertEqual(req.status, nxt, who)
         with self.assertRaises(ValidationError):
@@ -215,7 +215,7 @@ class WebPagesTests(CouncilTestCase):
         w.post(f"/staff/funds/{req.pk}/action/", {"action": "submit"})
         req.refresh_from_db()
         self.assertEqual(req.status, FundsRequest.Status.PENDING_HOD)
-        for who in ("engineer", "admin.officer", "accountant", "treasurer", "ceo"):
+        for who in ("engineer", "admin.officer", "ceo", "accountant", "treasurer"):
             fr.decide(self.user(who), req, "approve")
         self.assertContains(w.get(f"/staff/funds/{req.pk}/"), "Confirm purchase")
         w.post(f"/staff/files/funds/{req.pk}/add/", {"file": pdf("inv.pdf"), "kind": "INVOICE", "next": "/"})

@@ -451,7 +451,7 @@ class Command(BaseCommand):
         att.add(u["tech.officer"], "funds", req, SimpleUploadedFile("Tyre quotation – Chipinge Motors.pdf", b"%PDF-1.4\n% quotation (demo)\n",
                                                                      content_type="application/pdf"), "QUOTE")
         fr.submit(u["tech.officer"], req)
-        for who in ("engineer", "admin.officer", "accountant", "treasurer", "ceo"):
+        for who in ("engineer", "admin.officer", "ceo", "accountant", "treasurer"):
             fr.decide(u[who], req, "approve")
 
     def _demo_requests(self, u):
@@ -493,19 +493,19 @@ class Command(BaseCommand):
         r2 = make("eho", "PURCHASE", "Water testing kits for borehole programme", "Quarterly testing of 40 community boreholes (WASH).",
                   [("Water testing kit (50 tests)", 4, 85), ("Chlorine tablets – box", 10, 12)], needed_by=today + timedelta(days=14))
         fr.submit(u["eho"], r2)
-        # 3. HR officer's workshop fees – with the Treasurer
+        # 3. HR officer's workshop fees – with the Accountant
         r3 = make("hr.officer", "TRAINING", "LGAZ HR practitioners workshop – Mutare", "Annual HR workshop; new labour law amendments.",
                   [("Registration fee", 1, 150), ("Subsistence – 2 days", 2, 30), ("Bus fare return", 1, 20)],
                   destination="Mutare", depart_date=today + timedelta(days=12), return_date=today + timedelta(days=13), travellers="Ruvimbo Mhlanga")
         fr.submit(u["hr.officer"], r3)
         fr.decide(u["admin.officer"], r3, "approve", "Approved – within training budget.")
-        fr.decide(u["accountant"], r3, "approve", "Vote 0130 (staff training) has funds.")
+        fr.decide(u["ceo"], r3, "approve", "Approved.")
         # 4. Social officer's advance – fully approved, paid
         r4 = make("social.officer", "ADVANCE", "Cash advance – drought relief food distribution, Ward 21",
                   "Transport and casual labour for food distribution to 300 households.",
                   [("Truck hire – 1 day", 1, 250), ("Casual labourers – 6 × 2 days", 12, 10)], payment_method="CASH", needed_by=today - timedelta(days=2))
         fr.submit(u["social.officer"], r4)
-        for who in ("social.director", "admin.officer", "accountant", "treasurer", "ceo"):
+        for who in ("social.director", "admin.officer", "ceo", "accountant", "treasurer"):
             fr.decide(u[who], r4, "approve")
         try:
             from finance import services as fin
@@ -524,7 +524,7 @@ class Command(BaseCommand):
         r5 = make("engineer", "FUEL", "Diesel for grader – Ward 7 road programme", "Grading of 12 km of the Ward 7 feeder road.",
                   [("Diesel (litres)", 400, 1.55)], payee_name="Zuva Petroleum Chipinge", payment_method="EFT")
         fr.submit(u["engineer"], r5)
-        for who in ("admin.officer", "accountant", "treasurer", "ceo"):
+        for who in ("admin.officer", "ceo", "accountant", "treasurer"):
             fr.decide(u[who], r5, "approve")
         # the fuel was bought: invoice attached, purchase confirmed – now with Finance to prepare the payment
         from django.core.files.uploadedfile import SimpleUploadedFile

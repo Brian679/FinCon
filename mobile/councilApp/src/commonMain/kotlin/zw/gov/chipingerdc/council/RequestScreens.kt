@@ -61,7 +61,7 @@ import zw.gov.chipingerdc.shared.ui.bottomRule
 import zw.gov.chipingerdc.shared.ui.money
 import zw.gov.chipingerdc.shared.ui.prettyDate
 
-const val FUNDS_ROUTE = "You → Head of Department → Administration Officer → Accountant → Treasurer → CEO → (purchases: invoice attached, " +
+const val FUNDS_ROUTE = "You → Head of Department → Administration Officer → CEO → Accountant → Treasurer → (purchases: invoice attached, " +
     "purchase confirmed) → payment voucher (Accountant checks, Treasurer approves the payment, CEO if large) → paid. You are notified at every step."
 
 val PURCHASE_TYPES = listOf("PURCHASE", "FUEL", "REPAIRS", "TRAINING")
@@ -232,7 +232,7 @@ fun FundsDetailScreen(ctx: Ctx, id: String) {
             }
             if (mine && r.status in listOf("RETURNED", "DRAFT")) PrimaryButton(if (r.status == "DRAFT") "Submit for approval" else "Resubmit for approval",
                 enabled = r.requestType !in PURCHASE_TYPES || r.attachments.isNotEmpty(), onClick = { act("submit", note = "Submission queued") })
-            if (mine && r.status in listOf("P_HOD", "P_ADMIN", "P_ACC", "P_TREAS", "P_CEO", "RETURNED")) SecondaryButton("Cancel request", { act("cancel", note = "Cancellation queued") })
+            if (mine && r.status in listOf("P_HOD", "P_ADMIN", "P_CEO", "P_ACC", "P_TREAS", "RETURNED")) SecondaryButton("Cancel request", { act("cancel", note = "Cancellation queued") })
             if (r.history.isNotEmpty()) SectionCard("History") {
                 r.history.forEach { h ->
                     Column(Modifier.fillMaxWidth().bottomRule().padding(vertical = 6.dp)) {

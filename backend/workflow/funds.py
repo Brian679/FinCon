@@ -1,7 +1,7 @@
 """Requests for funds / purchases raised by any department.
 
 Route: requester (with the quotation / supporting documents attached) -> Head of Department -> Administration Officer
--> Accountant -> Treasurer -> CEO -> for purchases, fuel and repairs: the purchase is confirmed (invoice / delivery note
+-> CEO -> Accountant -> Treasurer -> for purchases, fuel and repairs: the purchase is confirmed (invoice / delivery note
 attached) -> payment voucher: Finance prepares it, the Accountant checks it, the Treasurer approves the payment again (and
 the CEO authorises it when it is above the threshold), the cashier pays -> the requester is told it is done.
 
@@ -32,9 +32,9 @@ S = FundsRequest.Status
 STAGES = [
     (S.PENDING_HOD, "Head of Department"),
     (S.PENDING_ADMIN, "Administration Officer"),
+    (S.PENDING_CEO, "Chief Executive Officer"),
     (S.PENDING_ACCOUNTANT, "Accountant"),
     (S.PENDING_TREASURER, "Treasurer"),
-    (S.PENDING_CEO, "Chief Executive Officer"),
 ]
 STAGE_LABEL = dict(STAGES)
 STAGE_CAP = {S.PENDING_ADMIN: "funds.admin_approve", S.PENDING_ACCOUNTANT: "funds.accountant_approve", S.PENDING_TREASURER: "funds.treasurer_approve",
