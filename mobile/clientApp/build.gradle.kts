@@ -30,6 +30,7 @@ kotlin {
         }
         commonMain.dependencies {
             implementation(project(":shared"))
+            implementation(compose.components.resources)
         }
         val desktopMain by getting {
             dependencies {
@@ -42,6 +43,11 @@ kotlin {
             implementation(libs.androidx.work.runtime)
         }
     }
+}
+
+// Fonts bundled with the app (Liberation Serif – metric-compatible with Times New Roman, SIL Open Font License) for printed-style letters.
+compose.resources {
+    packageOfResClass = "zw.gov.chipingerdc.client.resources"
 }
 
 android {

@@ -1,6 +1,19 @@
 package zw.gov.chipingerdc.client
 
 import androidx.compose.foundation.Canvas
+import org.jetbrains.compose.resources.Font
+import zw.gov.chipingerdc.client.resources.Res
+import zw.gov.chipingerdc.client.resources.liberation_serif_bold
+import zw.gov.chipingerdc.client.resources.liberation_serif_regular
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -125,7 +138,10 @@ private fun letterBody(x: Certificate): List<AnnotatedString> {
     }
 }
 
-/** The issued letter, laid out exactly like the printed A4 copy; "Print / save as PDF (A4)" opens that copy. */
+/**
+ * The issued letter, drawn exactly like the printed A4 copy: the page is laid out in CSS pixels of an A4 sheet
+ * (794 × 1123 px – the same margins, font sizes and line spacing as the print template) and scaled to the screen width.
+ */
 @Composable
 fun CertificateViewScreen(ctx: CCtx, id: String) {
     val c by ctx.sdk.observeOne(Entities.CERTIFICATES, id, Certificate.serializer()).collectAsState(initial = null)
@@ -135,72 +151,9 @@ fun CertificateViewScreen(ctx: CCtx, id: String) {
     var error by remember { mutableStateOf<String?>(null) }
     AppScreen("Letter", onBack = ctx::back) {
         val x = c ?: return@AppScreen Empty("Not found")
-        val (title, noun) = when (x.kind) {
-            "RESIDENCE" -> "CONFIRMATION OF RESIDENCE" to "letter"; "CLEARANCE" -> "RATES CLEARANCE CERTIFICATE" to "certificate"
-            "OWNERSHIP" -> "CONFIRMATION OF STAND OWNERSHIP" to "letter"; "CESSION" -> "APPROVAL OF CESSION (TRANSFER) OF STAND" to "letter"
-            "BURIAL" -> "BURIAL ORDER" to "order"; else -> x.kindLabel.uppercase() to "letter"
-        }
-        val number = x.number.ifBlank { x.reference }
-        ScrollColumn {
-            Column(Modifier.fillMaxWidth().background(Color.White).border(1.dp, Color(0xFFCCCCCC)).padding(horizontal = 18.dp, vertical = 22.dp)) {
-                // letterhead
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    CouncilCrest(Modifier.size(52.dp))
-                    Column {
-                        Text("CHIPINGE RURAL DISTRICT COUNCIL", style = Serif.copy(fontSize = 15.sp, lineHeight = 19.sp, fontWeight = FontWeight.Bold,
-                            color = CrdcColors.Green))
-                        Text("858 E.D. Mnangagwa Street, P.O. Box 19, Chipinge, Zimbabwe\nTel: +263 227 204 5631-5 · Email: info@chipingerdc.gov.zw\n" +
-                            "Facebook: chipingerdc · X: @chipingerdc\nAll correspondence to be addressed to the Chief Executive Officer",
-                            style = Serif.copy(fontSize = 9.5.sp, lineHeight = 13.sp, color = Color(0xFF333333)))
-                    }
-                }
-                Spacer(Modifier.height(6.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(CrdcColors.Green))
-                Spacer(Modifier.height(2.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(CrdcColors.Green))
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    Column(Modifier.weight(1f)) {
-                        Text(buildAnnotatedString { append("Our ref: "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(number) } }, style = Serif.copy(fontSize = 12.sp))
-                        Text("Your ref: ${x.reference}", style = Serif.copy(fontSize = 12.sp))
-                    }
-                    Text(months(x.decidedAt ?: x.createdAt), style = Serif.copy(fontSize = 12.sp))
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("TO WHOM IT MAY CONCERN", style = Serif)
-                Spacer(Modifier.height(14.dp))
-                Text(title, Modifier.fillMaxWidth(), style = Serif.copy(fontWeight = FontWeight.Bold, fontSize = 15.sp, textAlign = TextAlign.Center,
-                    textDecoration = TextDecoration.Underline))
-                Spacer(Modifier.height(12.dp))
-                letterBody(x).forEach { p ->
-                    Text(p, style = Serif)
-                    Spacer(Modifier.height(10.dp))
-                }
-                x.validUntil?.let {
-                    Text(buildAnnotatedString { append("This $noun is valid until "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(months(it)) }; append(".") },
-                        style = Serif)
-                }
-                Spacer(Modifier.height(30.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
-                    Column(Modifier.weight(1f)) {
-                        Box(Modifier.width(170.dp).height(1.dp).background(Ink))
-                        Spacer(Modifier.height(4.dp))
-                        Text(x.decidedByName, style = Serif.copy(fontSize = 13.sp))
-                        if (x.decidedByRole.isNotBlank()) Text(x.decidedByRole, style = Serif.copy(fontSize = 11.sp, lineHeight = 15.sp, color = Grey))
-                        Text("For: Chief Executive Officer", style = Serif.copy(fontSize = 11.sp, color = Grey))
-                    }
-                    Box(Modifier.size(110.dp, 72.dp).border(1.dp, Color(0xFF999999)), contentAlignment = Alignment.Center) {
-                        Text("Council date stamp", style = Serif.copy(fontSize = 10.sp, color = Color(0xFF888888)))
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color(0xFFBBBBBB)))
-                Spacer(Modifier.height(4.dp))
-                Text("Verify this $noun with the council quoting number $number · Chipinge Rural District Council – Client Charter 2026-2030",
-                    Modifier.fillMaxWidth(), style = Serif.copy(fontSize = 9.sp, lineHeight = 12.sp, color = Grey, textAlign = TextAlign.Center))
-            }
-            error?.let { InfoBox(it, CrdcColors.Danger) }
-            PrimaryButton("Print / save as PDF (A4)", busy = busy, onClick = {
+        Column(Modifier.fillMaxWidth().background(Color(0xFFE9E9E9)).verticalScroll(rememberScrollState()).padding(vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.padding(horizontal = 12.dp)) { PrimaryButton("Print / save as PDF (A4)", busy = busy, onClick = {
                 busy = true
                 scope.launch {
                     runCatching {
@@ -209,7 +162,95 @@ fun CertificateViewScreen(ctx: CCtx, id: String) {
                     }.onFailure { error = it.message ?: "No connection. Try again when you are online." }
                     busy = false
                 }
-            })
+            }) }
+            error?.let { Box(Modifier.padding(12.dp)) { InfoBox(it, CrdcColors.Danger) } }
+            Spacer(Modifier.height(10.dp))
+            A4Letter(x, Modifier.padding(horizontal = 8.dp))
+        }
+    }
+}
+
+@Composable
+fun A4Letter(x: Certificate, modifier: Modifier = Modifier) {
+    val (title, noun) = when (x.kind) {
+        "RESIDENCE" -> "CONFIRMATION OF RESIDENCE" to "letter"; "CLEARANCE" -> "RATES CLEARANCE CERTIFICATE" to "certificate"
+        "OWNERSHIP" -> "CONFIRMATION OF STAND OWNERSHIP" to "letter"; "CESSION" -> "APPROVAL OF CESSION (TRANSFER) OF STAND" to "letter"
+        "BURIAL" -> "BURIAL ORDER" to "order"; else -> x.kindLabel.uppercase() to "letter"
+    }
+    val number = x.number.ifBlank { x.reference }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        val k = maxWidth.value / 794f                     // screen dp per A4 CSS pixel
+        fun px(v: Float) = (v * k).dp
+        val outer = LocalDensity.current
+        CompositionLocalProvider(LocalDensity provides Density(outer.density, 1f)) {   // the page keeps its size whatever the phone's text size
+            fun fs(v: Float) = (v * k).sp
+            val times = FontFamily(Font(Res.font.liberation_serif_regular, FontWeight.Normal), Font(Res.font.liberation_serif_bold, FontWeight.Bold))
+            val base = TextStyle(fontFamily = times, color = Ink, fontSize = fs(16f), lineHeight = fs(24f))
+            Column(Modifier.fillMaxWidth().height(px(1123f)).shadow(px(6f)).background(Color.White)
+                .padding(start = px(68f), end = px(68f), top = px(68f), bottom = px(45f))) {
+                // letterhead
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    CouncilCrest(Modifier.size(px(72f)))
+                    Spacer(Modifier.width(px(14f)))
+                    Column {
+                        Text("CHIPINGE RURAL DISTRICT COUNCIL", style = base.copy(fontSize = fs(22.7f), lineHeight = fs(30f), fontWeight = FontWeight.Bold,
+                            color = CrdcColors.Green, letterSpacing = fs(0.5f)))
+                        Text("858 E.D. Mnangagwa Street, P.O. Box 19, Chipinge, Zimbabwe\nTel: +263 227 204 5631-5 · Email: info@chipingerdc.gov.zw\n" +
+                            "Facebook: chipingerdc · X: @chipingerdc\nAll correspondence to be addressed to the Chief Executive Officer",
+                            style = base.copy(fontSize = fs(12.7f), lineHeight = fs(17f), color = Color(0xFF333333)))
+                    }
+                }
+                Spacer(Modifier.height(px(8f)))
+                Box(Modifier.fillMaxWidth().height(px(1f).coerceAtLeast(0.7.dp)).background(CrdcColors.Green))
+                Spacer(Modifier.height(px(1.5f).coerceAtLeast(1.dp)))
+                Box(Modifier.fillMaxWidth().height(px(1f).coerceAtLeast(0.7.dp)).background(CrdcColors.Green))
+                Spacer(Modifier.height(px(14f)))
+                Row(Modifier.fillMaxWidth()) {
+                    val ref = base.copy(fontSize = fs(14.7f), lineHeight = fs(22f))
+                    Column(Modifier.weight(1f)) {
+                        Text(buildAnnotatedString { append("Our ref: "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(number) } }, style = ref)
+                        Text("Your ref: ${x.reference}", style = ref)
+                    }
+                    Text(months(x.decidedAt ?: x.createdAt), style = ref)
+                }
+                Spacer(Modifier.height(px(10f)))
+                Text("TO WHOM IT MAY CONCERN", style = base)
+                Spacer(Modifier.height(px(11f + 18f)))
+                Text(title, Modifier.fillMaxWidth(), style = base.copy(fontSize = fs(18f), lineHeight = fs(27f), fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center, textDecoration = TextDecoration.Underline, letterSpacing = fs(0.5f)))
+                Spacer(Modifier.height(px(14f)))
+                letterBody(x).forEach { para ->
+                    Text(para, Modifier.fillMaxWidth(), style = base.copy(textAlign = TextAlign.Justify))
+                    Spacer(Modifier.height(px(11f)))
+                }
+                x.validUntil?.let {
+                    Text(buildAnnotatedString { append("This $noun is valid until "); withStyle(SpanStyle(fontWeight = FontWeight.Bold)) { append(months(it)) }; append(".") },
+                        style = base)
+                    Spacer(Modifier.height(px(11f)))
+                }
+                Spacer(Modifier.height(px(31f)))
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                    Column(Modifier.width(px(265f))) {
+                        Box(Modifier.fillMaxWidth().height(px(1f).coerceAtLeast(0.5.dp)).background(Ink))
+                        Spacer(Modifier.height(px(4f)))
+                        val small = base.copy(fontSize = fs(12.2f), lineHeight = fs(22f))
+                        Text(x.decidedByName, style = base.copy(fontSize = fs(14.7f), lineHeight = fs(22f)))
+                        if (x.decidedByRole.isNotBlank()) Text(x.decidedByRole, style = small)
+                        Text("For: Chief Executive Officer", style = small)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Box(Modifier.size(px(159f), px(113f)).drawBehind {
+                        drawRect(Color(0xFF888888), style = Stroke(width = 1f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 3f))))
+                    }, contentAlignment = Alignment.Center) {
+                        Text("Council date stamp", style = base.copy(fontSize = fs(12f), color = Color(0xFF888888)))
+                    }
+                }
+                Spacer(Modifier.weight(1f))
+                Box(Modifier.fillMaxWidth().height(px(1f).coerceAtLeast(0.5.dp)).background(Color(0xFFBBBBBB)))
+                Spacer(Modifier.height(px(5f)))
+                Text("Verify this $noun with the council quoting number $number · Chipinge Rural District Council – Client Charter 2026-2030",
+                    Modifier.fillMaxWidth(), style = base.copy(fontSize = fs(11.3f), lineHeight = fs(17f), color = Grey, textAlign = TextAlign.Center))
+            }
         }
     }
 }
