@@ -1233,9 +1233,10 @@ def settle_paid_items(account):
 
 
 # ------------------------------------------------------------ pay everything
-def start_bulk_payment(user, *, bills, method="ECOCASH", phone="", channel=Receipt.Channel.PORTAL):
-    """One mobile-money prompt for several unpaid bills – on one or more of the resident's accounts (stands, shops, farms,
-    rented places, fines …). When it is confirmed a receipt is issued for every bill."""
+def start_bulk_payment(user, *, bills, amount=None, method="ECOCASH", phone="", channel=Receipt.Channel.PORTAL):
+    """One mobile-money prompt for one or several unpaid bills – on one or more of the resident's accounts (stands, shops,
+    farms, rented places, fines …). The resident may pay less than the total (what they have today): the money goes to the
+    oldest bills first. When it is confirmed a receipt is issued for every bill paid (fully or in part)."""
     from .gateway import get_gateway
 
     bills = [b for b in bills if b.status in (Bill.Status.UNPAID, Bill.Status.PART_PAID) and b.outstanding > 0]
@@ -1246,9 +1247,16 @@ def start_bulk_payment(user, *, bills, method="ECOCASH", phone="", channel=Recei
         raise PermissionDenied("One of these bills is not on an account linked to your profile.")
     if any(not b.revenue_head.payable_online for b in bills):
         raise ValidationError("One of these charges cannot be paid online.")
+    bills.sort(key=lambda b: (b.due_date or date.max, b.created_at))
+    total = q2(sum(b.outstanding for b in bills))
+    amount = total if amount in (None, "") else q2(amount)
+    if amount < 1:
+        raise ValidationError("Enter at least USD 1.00.")
+    if amount > total:
+        raise ValidationError(f"That is more than the USD {total:,.2f} owing on these bills.")
     first = bills[0]
     payment = OnlinePayment.objects.create(account=first.account, user=user, revenue_head=first.revenue_head,
-                                           amount=q2(sum(b.outstanding for b in bills)), method=method, phone=phone, channel=channel,
+                                           amount=amount, method=method, phone=phone, channel=channel,
                                            provider=settings.PAYMENT_GATEWAY, created_by=user)
     payment.bills.set(bills)
     get_gateway().initiate(payment)

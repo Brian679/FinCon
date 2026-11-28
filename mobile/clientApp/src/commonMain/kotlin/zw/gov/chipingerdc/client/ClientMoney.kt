@@ -197,15 +197,22 @@ fun AccountsScreen(ctx: CCtx) {
 }
 
 // -------------------------------------------------------------- pay bills
-/** Pays one bill, one place's bills or everything at once – one mobile-money prompt, a receipt for every bill. */
+/** Pays one bill, a few, or everything – the resident ticks the bills and may pay less than the total (what they have
+ *  today); the money goes to the oldest bills first. One mobile-money prompt, a receipt for every bill paid. */
 @Composable
 fun PayBillsScreen(ctx: CCtx, ids: List<String>) {
     val sdk = ctx.sdk
     val scope = rememberCoroutineScope()
     val all by sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
     val fines by sdk.observe(Entities.FINES, JsonObject.serializer()).collectAsState(initial = emptyList())
-    val bills = all.filter { it.id in ids && it.isDue() }
-    val total = bills.sumOf { it.outstanding.num() }
+    val bills = all.filter { it.id in ids && it.isDue() }.sortedBy { it.dueDate }
+    var unticked by remember { mutableStateOf(setOf<String>()) }
+    val chosen = bills.filter { it.id !in unticked }
+    val total = chosen.sumOf { it.outstanding.num() }
+    var amount by remember { mutableStateOf("") }
+    var edited by remember { mutableStateOf(false) }
+    if (!edited) amount = money(total.toString()).replace(",", "")
+    val pay = amount.replace(",", "").toDoubleOrNull() ?: 0.0
     var method by remember { mutableStateOf("ECOCASH") }
     var phone by remember { mutableStateOf(ctx.me.phone) }
     var busy by remember { mutableStateOf(false) }
@@ -213,19 +220,35 @@ fun PayBillsScreen(ctx: CCtx, ids: List<String>) {
     AppScreen("Pay", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
             SectionCard(if (bills.size == 1) "1 bill" else "${bills.size} bills") {
-                bills.forEach { KeyValue(billLabel(it, fines), "$${money(it.outstanding)}") }
-                Text("Total USD ${money(total.toString())}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = CrdcColors.Green)
+                bills.forEach { b ->
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        if (bills.size > 1) androidx.compose.material3.Checkbox(checked = b.id !in unticked, onCheckedChange = { on ->
+                            unticked = if (on) unticked - b.id else unticked + b.id
+                            edited = false
+                        })
+                        androidx.compose.foundation.layout.Column(Modifier.weight(1f)) {
+                            Text(billLabel(b, fines), fontSize = 14.sp)
+                            val where = b.description.substringAfter(" – ", "").ifBlank { b.description.substringAfter(" - ", "") }
+                            if (where.isNotBlank()) Text(where, fontSize = 12.sp, color = CrdcColors.Muted)
+                        }
+                        Text("$${money(b.outstanding)}", fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                KeyValue("Owing", "USD ${money(total.toString())}")
             }
+            Field("Amount to pay (USD)", amount, { amount = it; edited = true }, number = true)
             ChoicePicker("Pay with", Choices.mobileMoney, method) { method = it }
             Field("Mobile money number", phone, { phone = it })
             error?.let { InfoBox(it, CrdcColors.Danger) }
-            PrimaryButton("Pay USD ${money(total.toString())}", busy = busy, enabled = bills.isNotEmpty() && phone.isNotBlank(), onClick = {
+            PrimaryButton("Pay USD ${money(pay.toString())}", busy = busy,
+                enabled = chosen.isNotEmpty() && phone.isNotBlank() && pay >= 1 && pay <= total + 0.001, onClick = {
                 busy = true
                 error = null
                 scope.launch {
                     runCatching {
                         val p = sdk.postJson("payments/", buildJsonObject {
-                            putJsonArray("bills") { bills.forEach { add(it.id) } }; put("method", method); put("phone", phone)
+                            putJsonArray("bills") { chosen.forEach { add(it.id) } }; put("amount", amount.replace(",", ""))
+                            put("method", method); put("phone", phone)
                         })
                         sdk.store.upsert(Entities.ONLINE_PAYMENTS, p)
                         val ref = AppJson.decodeFromJsonElement(OnlinePayment.serializer(), p).reference

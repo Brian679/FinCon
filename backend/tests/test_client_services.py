@@ -30,6 +30,19 @@ class PayEverythingTests(CouncilTestCase):
         from finance.models import Fine
         self.assertFalse(Fine.objects.filter(account__portal_users=tsitsi, status="ISSUED").exists())   # the fine is settled too
 
+    def test_pay_part_of_the_balance_oldest_bills_first(self):
+        tsitsi = User.objects.get(username="tsitsi")
+        bills = sorted(Bill.objects.filter(account__portal_users=tsitsi, status="UNPAID"), key=lambda b: (b.due_date, b.created_at))
+        with self.assertRaises(ValidationError):
+            fin.start_bulk_payment(tsitsi, bills=bills, amount="100000")                     # more than is owing
+        first = bills[0]
+        p = fin.start_bulk_payment(tsitsi, bills=bills, amount=first.outstanding + Decimal("3"))
+        fin.confirm_online_payment(p, provider_reference="SIM1")
+        first.refresh_from_db()
+        self.assertEqual(first.status, "PAID")                                               # oldest bill cleared first
+        self.assertEqual(Bill.objects.filter(pk__in=[b.pk for b in bills], status="PART").count(), 1)   # the rest goes to the next one
+        self.assertEqual(p.receipts.count(), 2)
+
     def test_cannot_pay_someone_elses_bills_in_a_batch(self):
         resident = User.objects.get(username="resident")
         other = Bill.objects.filter(status="UNPAID").exclude(account__portal_users=resident).first()
