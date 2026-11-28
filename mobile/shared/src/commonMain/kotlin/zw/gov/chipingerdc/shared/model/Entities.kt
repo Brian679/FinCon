@@ -31,6 +31,7 @@ object Entities {
     const val TENANCIES = "tenancies"
     const val CERTIFICATES = "certificates"
     const val STAND_BENEFICIARIES = "stand_beneficiaries"
+    const val AVAILABLE_STANDS = "available_stands"
     const val ASSETS = "assets"
     const val INCIDENTS = "incidents"
     const val ACTIVITIES = "activities"
@@ -101,6 +102,7 @@ data class Bill(
     val revenueHeadCategory: String = "", val description: String = "",
     val period: String = "", val amount: String = "0", val amountPaid: String = "0", val outstanding: String = "0",
     val issueDate: String = "", val dueDate: String = "", val status: String = "", val statusLabel: String = "",
+    val broughtForward: String = "0",
 )
 
 @Serializable
@@ -194,6 +196,15 @@ data class StandApplication(
     val status: String = "", val statusLabel: String = "", val allocatedStand: String = "", val createdAt: String = "",
     val account: String? = null, val feeBill: String? = null, val fee: String? = null, val depositBill: String? = null, val deposit: String? = null,
     val depositPaid: Boolean = false, val waitingPosition: Int? = null, val joinedWaitingListAt: String? = null,
+    val area: String? = null, val areaName: String = "",
+)
+
+/** A surveyed stand the council can allocate (Growth Point Manager's register). */
+@Serializable
+data class AvailableStand(
+    val id: String, val standNumber: String = "", val area: String = "", val areaName: String = "", val standType: String = "",
+    val standTypeLabel: String = "", val sizeSqm: String? = null, val price: String = "0", val status: String = "", val statusLabel: String = "",
+    val application: String? = null, val applicantName: String = "", val notes: String = "",
 )
 
 /** A house / shop the resident rents from its owner. Their own bills (licence, levies) are on their own account. */
@@ -314,7 +325,7 @@ data class BuildingPlan(val id: String, val reference: String = "", val applican
                         val description: String = "", val floorArea: String = "0", val fee: String = "0", val bill: String? = null,
                         val billStatus: String? = null, val status: String = "", val statusLabel: String = "", val reviewedById: Long? = null,
                         val reviewNotes: String = "", val decisionNotes: String = "", val inspectionLog: String = "", val dueAt: String? = null,
-                        val createdAt: String = "", val localNote: String? = null)
+                        val createdAt: String = "", val localNote: String? = null, val drawingName: String = "")
 
 @Serializable
 data class Risk(val id: String, val reference: String = "", val department: String = "", val departmentLabel: String = "", val title: String = "",

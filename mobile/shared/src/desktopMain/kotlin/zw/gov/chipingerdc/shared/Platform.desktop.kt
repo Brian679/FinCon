@@ -39,3 +39,15 @@ actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
 }
 
 actual val platformName: String = "Desktop (${System.getProperty("os.name")})"
+
+
+@Composable
+actual fun rememberFilePicker(onPicked: (PickedFile?) -> Unit): () -> Unit {
+    val callback by rememberUpdatedState(onPicked)
+    return {
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "Choose the file", java.awt.FileDialog.LOAD)
+        dialog.isVisible = true
+        val file = dialog.file?.let { File(dialog.directory, it) }
+        callback(file?.let { PickedFile(it.name, it.readBytes(), java.nio.file.Files.probeContentType(it.toPath()) ?: "application/octet-stream") })
+    }
+}

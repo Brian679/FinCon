@@ -102,5 +102,14 @@ class CouncilSdk(driverFactory: DatabaseDriverFactory, val app: AppKind, default
     suspend fun changePassword(old: String, new: String) = api.changePassword(old, new)
 
     suspend fun postJson(path: String, body: JsonObject) = api.postJson(path, body)
+
+    suspend fun uploadFile(path: String, field: String, fileName: String, bytes: ByteArray, mime: String) = api.uploadFile(path, field, fileName, bytes, mime)
+
+    /** Settings: save my own details on the server and keep the signed-in profile up to date. */
+    suspend fun updateProfile(changes: JsonObject): zw.gov.chipingerdc.shared.model.Me {
+        val me = zw.gov.chipingerdc.shared.model.AppJson.decodeFromJsonElement(zw.gov.chipingerdc.shared.model.Me.serializer(), api.postJson("me/", changes))
+        session.updateUser(me)
+        return me
+    }
     suspend fun getJson(path: String) = api.getJson(path)
 }

@@ -254,6 +254,7 @@ def build_nav(user):
             gp += [_item("Growth points – shops, houses & stands", "finance:areas"), _item("Growth point list", "finance:area_list")]
         if c("stands.manage"):
             gp.append(_item("Housing & stand allocation", "departments:stands"))
+            gp.append(_item("Stands available (by area)", "registers:available_list"))
         if c("leases.view"):
             gp.append(_item("Council premises leases", "finance:leases"))
         if c("plans.view") and dept == D.GROWTH_POINTS:

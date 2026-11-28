@@ -121,80 +121,8 @@ private class MoneyState(val accounts: List<ClientAccount>, val places: List<Pla
 }
 
 // ---------------------------------------------------------------- dashboard
-/** The dashboard: what is owed (everything, by place) and the state of the resident's licences, permits and applications. */
-@Composable
-fun ClientHome(ctx: CCtx) {
-    val m = observeMoney(ctx)
-    val licences by ctx.sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
-    val permits by ctx.sdk.observe(Entities.RESOURCE_PERMITS, JsonObject.serializer()).collectAsState(initial = emptyList())
-    val certs by ctx.sdk.observe(Entities.CERTIFICATES, Certificate.serializer()).collectAsState(initial = emptyList())
-    val stands by ctx.sdk.observe(Entities.STANDS, StandApplication.serializer()).collectAsState(initial = emptyList())
-    val notices by ctx.sdk.observe(Entities.PUBLIC_NOTICES, JsonObject.serializer()).collectAsState(initial = emptyList())
-    val placesOnly = m.places.filter { it.kind !in listOf("FINES", "OTHER") }
-    AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ScrollColumn {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("To pay", "$${money(m.total.toString())}", "${m.dueIds.size} bill(s)", if (m.total > 0) CrdcColors.Danger else CrdcColors.Green,
-                    Modifier.weight(1f)) { ctx.go(CScreen.Accounts) }
-                Kpi("My places", placesOnly.size.toString(), "stands, shops, farms", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.MyStands) }
-            }
-            if (m.total > 0) PrimaryButton("Pay everything $${money(m.total.toString())}", onClick = { ctx.go(CScreen.PayBills(m.dueIds)) })
-            if (placesOnly.isEmpty()) {
-                PrimaryButton("Add my stand / shop / farm", color = CrdcColors.Blue, onClick = { ctx.go(CScreen.RegisterStand) })
-                SecondaryButton("Link with account number", { ctx.go(CScreen.LinkAccount) })
-            } else SectionCard("My places") {
-                placesOnly.forEach { p ->
-                    RowCard(p.title, p.subtitle, if (p.total > 0) "$${money(p.total.toString())}" else "Paid up", null, null) { ctx.go(CScreen.Accounts) }
-                }
-            }
-            val letters = certs.count { it.status in listOf("FEE_DUE", "PROCESSING") }
-            val waiting = stands.firstOrNull { it.status in listOf("FEE_DUE", "RECEIVED", "SHORTLISTED") }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Licences", licences.count { it.status == "ISSUED" }.toString(), "valid", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.Licences) }
-                Kpi("Permits", permits.count { it.str("status") == "ACTIVE" }.toString(), "valid", CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.Permits) }
-            }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Kpi("Letters", certs.count { it.status == "ISSUED" }.toString(), if (letters > 0) "$letters in progress" else "issued",
-                    if (letters > 0) CrdcColors.Warning else CrdcColors.Green, Modifier.weight(1f)) { ctx.go(CScreen.Certificates) }
-                Kpi("Stand waiting list", waiting?.waitingPosition?.let { "No. $it" } ?: if (waiting != null) "Fee due" else "–",
-                    waiting?.reference ?: "not applied", if (waiting?.status == "FEE_DUE") CrdcColors.Warning else CrdcColors.Green, Modifier.weight(1f)) {
-                    ctx.go(CScreen.Stands)
-                }
-            }
-            notices.maxByOrNull { it.str("publish_from") }?.let { n ->
-                RowCard("Notice: ${n.str("title")}", prettyDate(n.str("publish_from")), null, null, null) { ctx.go(CScreen.Notices) }
-            }
-        }
-    }
-}
 
 // ----------------------------------------------------------------- my bills
-/** My bills: the balance on every place the resident is connected to, bill by bill, with fines in the same list. */
-@Composable
-fun AccountsScreen(ctx: CCtx) {
-    val m = observeMoney(ctx)
-    AppScreen("My bills", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ListScreen {
-            item { Caption(if (m.total > 0) "Total to pay: $${money(m.total.toString())}" else "Nothing to pay") }
-            if (m.total > 0) item { PrimaryButton("Pay everything $${money(m.total.toString())}", onClick = { ctx.go(CScreen.PayBills(m.dueIds)) }) }
-            if (m.places.isEmpty()) item { Empty("No stands, shops or farms linked yet.") }
-            items(m.places, key = { it.key }) { p ->
-                SectionCard(p.title) {
-                    Text(p.subtitle, fontSize = 12.sp, color = CrdcColors.Muted)
-                    if (p.bills.isEmpty()) Text("Paid up", color = CrdcColors.Success, fontWeight = FontWeight.SemiBold)
-                    p.bills.sortedBy { it.dueDate }.forEach { b ->
-                        RowCard(billLabel(b, m.fines), "${b.number}${if (b.dueDate.isNotBlank()) " · due ${prettyDate(b.dueDate)}" else ""}",
-                            "$${money(b.outstanding)}", null, null) { ctx.go(CScreen.PayBills(listOf(b.id))) }
-                    }
-                    if (p.bills.size > 1) PrimaryButton("Pay $${money(p.total.toString())}", onClick = { ctx.go(CScreen.PayBills(p.bills.map { it.id })) })
-                }
-            }
-            item { SecondaryButton("Statements", { ctx.go(CScreen.Statements) }) }
-            item { SecondaryButton("Add a stand / shop / farm", { ctx.go(CScreen.RegisterStand) }) }
-            item { SecondaryButton("Add a fine by its number", { ctx.go(CScreen.FindFine) }) }
-        }
-    }
-}
 
 // -------------------------------------------------------------- pay bills
 /** Pays one bill, a few, or everything – the resident ticks the bills and may pay less than the total (what they have
@@ -234,7 +162,6 @@ fun PayBillsScreen(ctx: CCtx, ids: List<String>) {
                         Text("$${money(b.outstanding)}", fontWeight = FontWeight.SemiBold)
                     }
                 }
-                KeyValue("Owing", "USD ${money(total.toString())}")
             }
             Field("Amount to pay (USD)", amount, { amount = it; edited = true }, number = true)
             ChoicePicker("Pay with", Choices.mobileMoney, method) { method = it }
@@ -274,7 +201,7 @@ fun StatementsScreen(ctx: CCtx) {
                     ctx.go(CScreen.Account(a.id))
                 }
             }
-            item { SecondaryButton("Link another account", { ctx.go(CScreen.LinkAccount) }) }
+            item { SecondaryButton("Add an existing account", { ctx.go(CScreen.LinkAccount) }) }
         }
     }
 }

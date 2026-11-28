@@ -79,7 +79,8 @@ OFFENCES = [
 
 REVENUE_HEADS = [
     # code, name, category, amount, frequency, vote
-    ("RATES", "Property / land rates", "RATES", 0, "MONTHLY", "I-100"),
+    ("RATES", "Rates – commercial stands (half-yearly)", "RATES", 0, "HALF", "I-100"),
+    ("RES-LEVY", "Residential stand levy (annual)", "LEVY", 60, "ANNUAL", "I-110"),
     ("DEV-LEVY", "Development levy", "LEVY", 5, "ANNUAL", "I-110"),
     ("UNIT-TAX", "Unit tax", "LEVY", 2, "ANNUAL", "I-110"),
     ("FARM-LEVY", "Farm levy (per hectare)", "LEVY", 5, "ANNUAL", "I-110"),
@@ -96,7 +97,7 @@ REVENUE_HEADS = [
     ("WATER", "Water & sanitation charges", "WATER", 0, "MONTHLY", "I-140"),
     ("STAND", "Stand purchase instalment", "LAND", 0, "ONCE", "I-150"),
     ("STAND-APP", "Stand application / waiting-list fee", "LAND", 20, "ONCE", "I-150"),
-    ("CERT-RES", "Proof of residence letter", "FEES", 5, "ONCE", "I-130"),
+    ("CERT-RES", "Proof of residence letter (free)", "FEES", 0, "ONCE", "I-130"),
     ("CERT-CLR", "Rates clearance certificate", "FEES", 10, "ONCE", "I-130"),
     ("CERT-OWN", "Stand ownership confirmation letter", "FEES", 10, "ONCE", "I-130"),
     ("CESSION", "Cession (transfer) fee", "LAND", 50, "ONCE", "I-150"),
@@ -226,10 +227,10 @@ class Command(BaseCommand):
             Supplier.objects.create(name="Manica Fuels", category="Fuel", phone="0272000003", tax_number="BP200003")
         self._demo_registers(User)
         # first month of rates
-        from finance.services import run_rates_billing
+        from finance.services import run_property_billing
 
         today = timezone.localdate()
-        run_rates_billing(User.objects.get(username="treasurer"), today.year, today.month)
+        run_property_billing(User.objects.get(username="treasurer"), today.year, 1 if today.month <= 6 else 2)
         self.stdout.write(self.style.SUCCESS(f"Demo data created. All demo users have password '{pwd}'. Client login: resident"))
 
 
@@ -338,7 +339,23 @@ class Command(BaseCommand):
         self._demo_social(u)
         self._demo_charter_registers(u)
         self._demo_admin(u)
+        self._demo_available_stands(u)
         self._demo_many_places(u)
+
+    def _demo_available_stands(self, u):
+        """Surveyed stands the Growth Point Manager can allocate (illustrative only)."""
+        from departments.models import AvailableStand
+        from finance.models import TradingArea
+
+        plan = [("Checheche", "RES", "CH-H", 41, 8, 300, 1500), ("Checheche", "COM", "CH-C", 11, 4, 450, 6000),
+                ("Chipinge", "RES", "CT-", 701, 5, 400, 2500), ("Middle Sabi", "RES", "MS-", 101, 3, 300, 1200)]
+        for name, kind, prefix, start, n, size, price in plan:
+            area = TradingArea.objects.filter(name__icontains=name).first()
+            if area is None:
+                continue
+            for i in range(n):
+                AvailableStand.objects.get_or_create(area=area, stand_number=f"{prefix}{start + i}",
+                                                     defaults=dict(stand_type=kind, size_sqm=size, price=price, created_by=u["growthpoint"]))
 
     def _demo_many_places(self, u):
         """A resident with several places on two accounts: her house, two shops (one through her company), a farm and a fine –
@@ -369,9 +386,10 @@ class Command(BaseCommand):
         today = timezone.localdate()
         period, due = f"{today.year:04d}-{today.month:02d}", today + timedelta(days=21)
         heads = {h.code: h for h in RevenueHead.objects.filter(code__in=["RATES", "DEV-LEVY", "FARM-LEVY", "LIC-SHOP"])}
-        for prop, head, amount, what in ((house, "RATES", 18, "Rates"), (shop, "RATES", 40, "Rates"), (hardware, "RATES", 55, "Rates"),
-                                         (shop, "DEV-LEVY", 5, "Development levy"), (hardware, "DEV-LEVY", 5, "Development levy"),
-                                         (farm, "FARM-LEVY", 125, "Farm levy (25 ha × $5)"), (hardware, "LIC-SHOP", 60, "Shop licence")):
+        # this year's bills come from the council's billing run (house: annual levy; shops: half-yearly rates; farm: levy per hectare)
+        fin.run_property_billing(u["treasurer"], today.year, 1 if today.month <= 6 else 2)
+        for prop, head, amount, what in ((shop, "DEV-LEVY", 5, "Development levy"), (hardware, "DEV-LEVY", 5, "Development levy"),
+                                         (hardware, "LIC-SHOP", 60, "Shop licence")):
             Bill.objects.create(account=prop.account, property=prop, revenue_head=heads[head], amount=Decimal(amount),
                                 period=period if head == "RATES" else str(today.year), description=f"{what} – {prop}", due_date=due,
                                 created_by=u["treasurer"])

@@ -43,7 +43,7 @@ class SyncTests(CouncilTestCase):
     def test_offline_receipt_push_is_idempotent(self):
         c = self.api("cashier")
         op = {"op_id": str(uuid.uuid4()), "type": "receipt.create", "created_at": "2026-11-20T10:00:00Z",
-              "payload": {"id": str(uuid.uuid4()), "account": str(self.acc.pk), "revenue_head": str(self.rates.pk), "amount": "15.00",
+              "payload": {"id": str(uuid.uuid4()), "account": str(self.acc.pk), "revenue_head": str(self.rates.pk), "amount": "180.00",
                           "currency": "USD", "method": "CASH", "captured_at": "2026-11-20T09:55:00Z"}}
         r1 = c.post("/api/v1/sync/push/", {"device_id": "phone-1", "operations": [op]}, format="json").data["results"][0]
         self.assertEqual(r1["status"], "applied", r1)
@@ -77,7 +77,7 @@ class SyncTests(CouncilTestCase):
 
     def test_online_payment_issues_receipt(self):
         c = self.api("resident", "client")
-        p = c.post("/api/v1/payments/", {"account": str(self.acc.pk), "amount": "15", "method": "ECOCASH", "phone": "0771234567"}, format="json")
+        p = c.post("/api/v1/payments/", {"account": str(self.acc.pk), "amount": "180", "method": "ECOCASH", "phone": "0771234567"}, format="json")
         self.assertEqual(p.status_code, 201, p.content)
         done = c.post(f"/api/v1/payments/{p.data['reference']}/", {"action": "confirm"}, format="json").data
         self.assertEqual(done["status"], "PAID")

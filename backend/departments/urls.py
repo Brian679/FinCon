@@ -32,6 +32,7 @@ urlpatterns = [
     path("activities/<uuid:pk>/action/", v.activity_action, name="activity_action"),
     path("technical/plans/", v.PlanList.as_view(), name="plans"),
     path("technical/plans/new/", v.plan_new, name="plan_new"),
+    path("technical/plans/<uuid:pk>/file/", v.plan_file, name="plan_file"),
     path("technical/plans/<uuid:pk>/", v.PlanDetail.as_view(), name="plan"),
     path("technical/plans/<uuid:pk>/action/", v.plan_action, name="plan_action"),
     path("assets/", v.AssetList.as_view(), name="assets"),

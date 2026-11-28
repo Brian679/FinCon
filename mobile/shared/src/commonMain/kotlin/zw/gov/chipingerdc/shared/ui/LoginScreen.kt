@@ -31,7 +31,7 @@ import zw.gov.chipingerdc.shared.CouncilSdk
 
 /** Django admin login page: grey page, white box with the green/gold header. */
 @Composable
-fun LoginScreen(sdk: CouncilSdk, subtitle: String, footer: String, onRegister: (() -> Unit)? = null) {
+fun LoginScreen(sdk: CouncilSdk, subtitle: String, footer: String, onRegister: (() -> Unit)? = null, allowServerSettings: Boolean = true) {
     val scope = rememberCoroutineScope()
     var server by remember { mutableStateOf(sdk.session.baseUrl) }
     var username by remember { mutableStateOf("") }
@@ -63,7 +63,7 @@ fun LoginScreen(sdk: CouncilSdk, subtitle: String, footer: String, onRegister: (
                         busy = false
                     }
                 })
-                Text(if (showServer) "Hide server settings" else "Server settings", color = CrdcColors.Blue, fontSize = 13.sp,
+                if (allowServerSettings) Text(if (showServer) "Hide server settings" else "Server settings", color = CrdcColors.Blue, fontSize = 13.sp,
                     modifier = Modifier.clickable { showServer = !showServer })
                 if (onRegister != null) Text("No account yet? Create one – it is free", color = CrdcColors.Blue, fontSize = 13.sp,
                     modifier = Modifier.clickable { onRegister() })

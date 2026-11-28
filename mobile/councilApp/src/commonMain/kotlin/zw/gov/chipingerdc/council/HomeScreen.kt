@@ -158,6 +158,7 @@ fun CouncilMenu(ctx: Ctx) {
     val growth = buildList {
         if (me.can("areas.view")) add(Tile("Growth points – shops, houses & stands", Screen.Areas))
         if (me.can("stands.manage")) add(Tile("Housing & stand allocation", Screen.Stands, add = Screen.NewStand))
+        if (me.can("stands.view", "stands.manage")) add(reg("Stands available (by area)", "available_stands", "stands.manage"))
         if (me.can("leases.view")) add(Tile("Council premises leases", Screen.Leases))
         if (me.can("plans.view")) add(Tile("Building plans", Screen.Plans))
         if (me.can("projects.view")) add(Tile("Housing & infrastructure projects", Screen.Projects))

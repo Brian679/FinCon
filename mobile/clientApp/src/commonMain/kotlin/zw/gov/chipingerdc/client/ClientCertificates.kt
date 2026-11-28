@@ -86,8 +86,10 @@ fun RequestCertificateScreen(ctx: CCtx) {
     var cemetery by remember { mutableStateOf("") }
     val people by ctx.sdk.observe(Entities.STAND_BENEFICIARIES, StandBeneficiary.serializer()).collectAsState(initial = emptyList())
     var forWho by remember { mutableStateOf("ME") }
+    var sFirst by remember { mutableStateOf(ctx.me.firstName) }
+    var sLast by remember { mutableStateOf(ctx.me.lastName) }
     var sName by remember { mutableStateOf("") }
-    var sId by remember { mutableStateOf("") }
+    var sId by remember { mutableStateOf(ctx.me.nationalId) }
     var sPhone by remember { mutableStateOf("") }
     var sRel by remember { mutableStateOf("CHILD") }
     val owned = props.map { it.id to "Stand ${it.standNumber} · ${it.businessName.ifBlank { it.areaName.ifBlank { it.location } }}" }
@@ -95,7 +97,7 @@ fun RequestCertificateScreen(ctx: CCtx) {
     val fee = heads.firstOrNull { it.code == FEE_HEADS[kind] }?.defaultAmount
     val dateOk = date.isBlank() || Regex("""\d{4}-\d{2}-\d{2}""").matches(date)
     val ok = dateOk && when (kind) {
-        "RESIDENCE" -> (place != null || address.isNotBlank()) && (forWho != "NEW" || (sName.isNotBlank() && sId.isNotBlank())) &&
+        "RESIDENCE" -> (place != null || address.isNotBlank()) && sFirst.isNotBlank() && sLast.isNotBlank() && sId.isNotBlank() &&
             (forWho == "ME" || place != null)
         "CESSION" -> place != null && otherName.isNotBlank() && otherId.isNotBlank()
         "BURIAL" -> otherName.isNotBlank() && date.isNotBlank() && cemetery.isNotBlank()
@@ -110,10 +112,19 @@ fun RequestCertificateScreen(ctx: CCtx) {
                     val onStand = people.filter { it.property == place?.first && it.isActive }
                     val whoChoices = listOf("ME" to "Me (${ctx.me.fullName})") + onStand.map { it.id to "${it.fullName} – ${it.relationshipLabel}" } +
                         (if (place != null) listOf("NEW" to "Someone else on this stand") else emptyList())
-                    ChoicePicker("Letter for", whoChoices, forWho) { forWho = it }
+                    ChoicePicker("Letter for", whoChoices, forWho) { who ->
+                        forWho = who
+                        val b = onStand.firstOrNull { it.id == who }
+                        when {
+                            who == "ME" -> { sFirst = ctx.me.firstName; sLast = ctx.me.lastName; sId = ctx.me.nationalId; sPhone = ctx.me.phone }
+                            b != null -> { sFirst = b.fullName.substringBeforeLast(" "); sLast = b.fullName.substringAfterLast(" ", ""); sId = b.nationalId; sPhone = b.phone; sRel = b.relationship }
+                            else -> { sFirst = ""; sLast = ""; sId = ""; sPhone = "" }
+                        }
+                    }
+                    Field("Name", sFirst, { sFirst = it })
+                    Field("Surname", sLast, { sLast = it })
+                    Field("ID number", sId, { sId = it.uppercase() })
                     if (forWho == "NEW") {
-                        Field("Full name", sName, { sName = it })
-                        Field("National ID", sId, { sId = it })
                         Field("Phone", sPhone, { sPhone = it })
                         ChoicePicker("Relationship", Choices.relationships2, sRel) { sRel = it }
                     }
@@ -133,7 +144,7 @@ fun RequestCertificateScreen(ctx: CCtx) {
                     Field("Cemetery", cemetery, { cemetery = it })
                 }
             }
-            fee?.let { KeyValue("Fee", "USD ${money(it)}") }
+            fee?.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0 }?.let { KeyValue("Fee", "USD ${money(it)}") }
             PrimaryButton("Send request", enabled = ok, onClick = {
                 val id = ctx.sdk.newId()
                 val label = Choices.certificateKinds.first { it.first == kind }.second
@@ -141,14 +152,19 @@ fun RequestCertificateScreen(ctx: CCtx) {
                     put("id", id); put("reference", "(sending)"); put("kind", kind); put("kind_label", label); put("purpose", purpose)
                     put("address", address); put("other_party_name", otherName); put("status", "FEE_DUE"); put("status_label", "Waiting to send")
                     put("property_label", place?.second ?: ""); put("created_at", ctx.sdk.nowIso()); put("updated_at", ctx.sdk.nowIso())
-                    put("subject_name", if (forWho == "NEW") sName else people.firstOrNull { it.id == forWho }?.fullName ?: "")
+                    put("subject_name", "${sFirst.trim()} ${sLast.trim()}".trim())
                 }
                 ctx.sdk.enqueue("certificate.request", label, Entities.CERTIFICATES, id, opt) {
                     put("id", id); put("kind", kind); place?.let { put("property", it.first) }; put("address", address); put("purpose", purpose)
                     put("other_party_name", otherName); put("other_party_id", otherId); if (date.isNotBlank()) put("event_date", date); put("place", cemetery)
-                    if (kind == "RESIDENCE" && forWho == "NEW") {
-                        put("subject_name", sName); put("subject_id", sId); put("subject_phone", sPhone); put("subject_relationship", sRel)
-                    } else if (kind == "RESIDENCE" && forWho != "ME") put("beneficiary", forWho)
+                    if (kind == "RESIDENCE") {
+                        put("subject_name", "${sFirst.trim()} ${sLast.trim()}".trim()); put("subject_id", sId.trim()); put("subject_phone", sPhone)
+                        when (forWho) {
+                            "ME" -> put("for_self", true)
+                            "NEW" -> put("subject_relationship", sRel)
+                            else -> put("beneficiary", forWho)
+                        }
+                    }
                 }
                 if (kind == "RESIDENCE" && forWho == "NEW") ctx.sdk.store.resetCursor(Entities.STAND_BENEFICIARIES)
                 listOf(Entities.ACCOUNTS, Entities.BILLS).forEach { ctx.sdk.store.resetCursor(it) }
@@ -172,7 +188,7 @@ fun CertificateViewScreen(ctx: CCtx, id: String) {
                 Text("TO WHOM IT MAY CONCERN", fontWeight = FontWeight.SemiBold)
                 Text(when (x.kind) {
                     "RESIDENCE" -> "This is to confirm that ${x.subjectName.ifBlank { x.applicantName }}, National ID ${x.subjectId.ifBlank { x.nationalId }}" +
-                        (if (x.subjectRelationship.isNotBlank()) " (${x.subjectRelationship.lowercase()} of ${x.applicantName})" else "") + ", resides at ${x.address}" +
+                        ", resides at ${x.address}" +
                         (x.ward?.let { ", Ward $it" } ?: "") + ", within the area of Chipinge Rural District Council."
                     "CLEARANCE" -> "All rates, levies and charges due to the council on ${x.propertyLabel}, account ${x.accountNumber}, have been paid up to the date of this certificate."
                     "OWNERSHIP" -> "${x.propertyLabel} is registered with Chipinge Rural District Council under account ${x.accountNumber} in the name of ${x.applicantName}."

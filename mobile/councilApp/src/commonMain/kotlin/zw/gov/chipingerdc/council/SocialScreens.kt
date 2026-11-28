@@ -161,6 +161,16 @@ val REGISTERS: Map<String, RegisterSpec> = listOf(
             RField("notes", "Faults / repairs", "multiline")),
         line = { it.s("name") to "${it.s("reference")} · ${it.s("point_type_label")} · ${it.s("village")}, ward ${ward(it)}\n${it.s("households_served")} households · serviced ${prettyDate(it.s("last_serviced"))}" },
         tone = { when (it.s("status")) { "WORKING" -> "ACTIVE"; "BROKEN", "DECOM" -> "BROKEN"; else -> "IN_PROGRESS" } }),
+    RegisterSpec("available_stands", Entities.AVAILABLE_STANDS, "Stands available", "stand", listOf("stands.view", "stands.manage"), listOf("stands.manage"),
+        listOf(RField("stand_number", "Stand number", required = true), RField("area", "Area (growth point / township)", "area", required = true),
+            RField("stand_type", "Type", "choice", listOf("RES" to "Residential", "COM" to "Commercial", "INST" to "Institutional", "IND" to "Industrial")),
+            RField("size_sqm", "Size (m²)", "number"), RField("price", "Price (USD)", "number"),
+            RField("status", "Status", "choice", listOf("AVAILABLE" to "Available", "RESERVED" to "Reserved", "SOLD" to "Sold / allocated")),
+            RField("notes", "Notes")),
+        line = { "Stand ${it.s("stand_number")} – ${it.s("area_name")}" to "${it.s("stand_type_label")} · ${it.s("size_sqm")} m²" +
+            (it.s("applicant_name").takeIf { n -> n.isNotBlank() }?.let { n -> "\nFor $n" } ?: "") },
+        amount = { "$" + money(it.s("price")) },
+        tone = { when (it.s("status")) { "AVAILABLE" -> "ACTIVE"; "RESERVED" -> "PENDING"; else -> "CLOSED" } }),
     RegisterSpec("fines", Entities.FINES, "Fines & penalties", "fine", listOf("fines.view", "fines.issue"), listOf("fines.issue"), emptyList(),
         line = { "${it.s("offender_name")} – ${it.s("offence_name").substringBefore(" (")}" to "${it.s("reference")} · ${prettyDate(it.s("date"))} · ${it.s("location")}\nIssued by ${it.s("issued_by_name")}" },
         amount = { "$" + money(it.s("amount")) },
@@ -344,7 +354,7 @@ fun RegisterItemScreen(ctx: Ctx, key: String, id: String) {
                 spec.fields.forEach { f ->
                     val v = when (f.kind) {
                         "choice" -> o.s(f.key + "_label").ifBlank { o.s(f.key) }
-                        "account", "ref", "staff" -> o.s(f.key + "_name")
+                        "account", "ref", "staff", "area" -> o.s(f.key + "_name")
                         "bool" -> if (o.s(f.key) == "true") "Yes" else "No"
                         "date" -> prettyDate(o.s(f.key))
                         else -> o.s(f.key)
@@ -410,6 +420,12 @@ fun RegisterFormScreen(ctx: Ctx, key: String, id: String?) {
                     "account" -> AccountField(ctx, f.label, values[f.key] ?: "", values[f.key + "_name"] ?: "") {
                         values[f.key] = it.id; values[f.key + "_name"] = it.name
                     }
+                    "area" -> {
+                        val areas by ctx.sdk.observe(Entities.TRADING_AREAS, zw.gov.chipingerdc.shared.model.TradingArea.serializer()).collectAsState(initial = emptyList())
+                        Picker(f.label + if (f.required) " *" else "", areas.sortedBy { it.name }, areas.firstOrNull { it.id == values[f.key] }, { it.name }, onSelect = {
+                            values[f.key] = it.id; values[f.key + "_name"] = it.name
+                        })
+                    }
                     "staff" -> {
                         val staff by ctx.sdk.observe(Entities.STAFF, StaffMember.serializer()).collectAsState(initial = emptyList())
                         val mine = staff.filter { it.isActive && it.department == ctx.me.department }
@@ -430,7 +446,7 @@ fun RegisterFormScreen(ctx: Ctx, key: String, id: String?) {
                     spec.fields.forEach { f ->
                         put(f.key, values[f.key] ?: "")
                         if (f.kind == "choice") put(f.key + "_label", f.choices.firstOrNull { it.first == values[f.key] }?.second ?: "")
-                        if (f.kind == "account" || f.kind == "staff") put(f.key + "_name", values[f.key + "_name"] ?: "")
+                        if (f.kind == "account" || f.kind == "staff" || f.kind == "area") put(f.key + "_name", values[f.key + "_name"] ?: "")
                     }
                     put("local_note", "Saved on this device – sent on sync")
                 }

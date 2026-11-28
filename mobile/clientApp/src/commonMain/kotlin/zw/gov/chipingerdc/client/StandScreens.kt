@@ -130,59 +130,7 @@ fun RegisterStandScreen(ctx: CCtx) {
     }
 }
 
-@Composable
-fun PlansScreen(ctx: CCtx) {
-    val list by ctx.sdk.observe(Entities.BUILDING_PLANS, BuildingPlan.serializer()).collectAsState(initial = emptyList())
-    AppScreen("My building plans", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Submit a building plan", onClick = { ctx.go(CScreen.NewPlan) })
-        ListScreen {
-            if (list.isEmpty()) item { Empty("No building plans.") }
-            items(list, key = { it.id }) { p ->
-                SectionCard("${p.developmentTypeLabel} – stand ${p.standNumber}") {
-                    Text("${p.reference} · ${p.location}", fontSize = 12.sp, color = CrdcColors.Muted)
-                    KeyValue("Status", p.statusLabel)
-                    KeyValue("Fee", "$${money(p.fee)} · ${p.billStatus?.ifBlank { null } ?: "no bill yet"}")
-                    KeyValue("Decision due", prettyDate(p.dueAt))
-                    if (p.decisionNotes.isNotBlank()) KeyValue("Council decision", p.decisionNotes)
-                    p.localNote?.let { InfoBox(it) }
-                    if (p.bill != null && p.billStatus != "PAID") PrimaryButton("Pay plan fee", onClick = { ctx.go(CScreen.PayBills(listOf(p.bill!!))) })
-                }
-            }
-        }
-    }
-}
 
-@Composable
-fun NewPlanScreen(ctx: CCtx) {
-    val accounts by ctx.sdk.observe(Entities.ACCOUNTS, ClientAccount.serializer()).collectAsState(initial = emptyList())
-    var stand by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var ward by remember { mutableStateOf("") }
-    var type by remember { mutableStateOf("RES") }
-    var description by remember { mutableStateOf("") }
-    var area by remember { mutableStateOf("") }
-    AppScreen("Submit building plan", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ScrollColumn {
-            Field("Stand number", stand, { stand = it }); Field("Location", location, { location = it }); Field("Ward", ward, { ward = it }, number = true)
-            ChoicePicker("Development", Choices.devTypes, type) { type = it }
-            Field("Description (rooms, size, materials)", description, { description = it }, singleLine = false, minLines = 3)
-            Field("Floor area (m²)", area, { area = it }, number = true)
-            PrimaryButton("Submit", enabled = stand.isNotBlank() && location.isNotBlank() && description.isNotBlank(), onClick = {
-                val id = ctx.sdk.newId()
-                val opt = buildJsonObject {
-                    put("id", id); put("reference", "(sending)"); put("stand_number", stand); put("location", location); put("development_type", type)
-                    put("status", "SUBMITTED"); put("status_label", "Waiting to send"); put("updated_at", ctx.sdk.nowIso())
-                    put("local_note", "Saved on your phone – it will be sent when you are online")
-                }
-                ctx.sdk.enqueue("plan.create", "Building plan: stand $stand", Entities.BUILDING_PLANS, id, opt) {
-                    put("id", id); put("stand_number", stand); put("location", location); ward.toIntOrNull()?.let { put("ward", it) }
-                    put("development_type", type); put("description", description); put("floor_area", area.ifBlank { "0" })
-                }
-                ctx.back()
-            })
-        }
-    }
-}
 
 
 /** One shop / stand with its paid-up position – updated as soon as the council records a payment. */

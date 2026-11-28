@@ -2,6 +2,8 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.core.exceptions import PermissionDenied
+from django.utils.html import escape
+from django.utils.safestring import mark_safe
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
@@ -107,6 +109,10 @@ class StaffDirectory(GenericListView):
 # --------------------------------------------------------- social services
 class StandList(GenericListView):
     model = StandApplication
+
+    def scope(self, qs):
+        return qs.exclude(status=StandApplication.Status.FEE_DUE)     # not submitted until the waiting-list fee is paid
+
     required_caps = ("stands.view",)
     title = "Stand applications (housing development / stand allocation)"
     columns = [("Ref.", "reference"), ("Applied", "created_at"), ("Applicant", "applicant_name"), ("National ID", "national_id"),
@@ -134,8 +140,16 @@ class StandDetail(GenericDetailView):
     template_name = "departments/stand_detail.html"
     fields = [("Applicant", "applicant_name"), ("National ID", "national_id"), ("Phone", "phone"), ("Stand type", "stand_type"),
               ("Preferred location", "preferred_location"), ("Ward", "ward"), ("Allocated stand", "allocated_stand"),
-              ("Allocated by", "allocated_by"), ("Allocated at", "allocated_at"), ("Waiting-list number", "waiting_position"),
-              ("Application fee", "fee_bill"), ("Deposit", "deposit_bill"), ("Notes", "notes")]
+              ("Area chosen", "area"), ("Allocated by", "allocated_by"), ("Allocated at", "allocated_at"), ("Waiting-list number", "waiting_position"),
+              ("Waiting-list fee", "fee_bill"), ("Stand price bill", "deposit_bill"), ("Notes", "notes")]
+
+    def get_context_data(self, **kwargs):
+        from .models import AvailableStand
+
+        ctx = super().get_context_data(**kwargs)
+        qs = AvailableStand.objects.alive().filter(status="AVAILABLE")
+        ctx["free_stands"] = qs.filter(area=self.object.area) if self.object.area_id else qs
+        return ctx
 
 
 @cap_required("stands.manage")
@@ -145,7 +159,7 @@ def stand_action(request, pk):
 
     st = get_object_or_404(StandApplication, pk=pk)
     run_action(request, services.stand_action, request.user, st, request.POST.get("action"), stand=request.POST.get("stand", ""),
-               note=request.POST.get("note", ""), deposit=request.POST.get("deposit") or None, success="Updated – the applicant has been notified.")
+               note=request.POST.get("note", ""), price=request.POST.get("price") or None, success="Updated – the applicant has been notified.")
     return redirect("departments:stand", pk=pk)
 
 
@@ -443,6 +457,8 @@ class PlanDetail(ActionDetail):
     fields = [("Applicant", "applicant_name"), ("Phone", "phone"), ("Stand", "stand_number"), ("Location", "location"), ("Ward", "ward"),
               ("Development", "development_type"), ("Description", "description"), ("Floor area (m²)", "floor_area"), ("Fee", "fee"),
               ("Fee bill", lambda p: f"{p.bill.number} – {p.bill.get_status_display()}" if p.bill else "—"), ("Charter deadline", "due_at"),
+              ("Plan file", lambda p: mark_safe(f'<a href="{reverse("departments:plan_file", args=[p.pk])}">{escape(p.drawing.name.rsplit("/", 1)[-1])}</a>')
+               if p.drawing else "Not uploaded yet"),
               ("Reviewed by", "reviewed_by"), ("Review notes", "review_notes"), ("Decided by", "decided_by"), ("Decision", "decision_notes"),
               ("Inspections", "inspection_log")]
 
@@ -841,3 +857,14 @@ def department_overview(request):
                           ("High / critical risks", sum(1 for r in Risk.objects.alive().exclude(status="CLOSED") if r.rating in ("HIGH", "CRITICAL")), "departments:risks"),
                           ("Risks due for review", Risk.objects.alive().filter(review_date__lte=today).exclude(status="CLOSED").count(), "departments:risks")]
     return render(request, "departments/overview.html", ctx)
+
+
+
+@cap_required("plans.view")
+def plan_file(request, pk):
+    from django.http import FileResponse, Http404
+
+    plan = get_object_or_404(BuildingPlan, pk=pk)
+    if not plan.drawing:
+        raise Http404
+    return FileResponse(plan.drawing.open("rb"), as_attachment=False, filename=plan.drawing.name.rsplit("/", 1)[-1])

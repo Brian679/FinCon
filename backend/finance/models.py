@@ -132,6 +132,7 @@ class RevenueHead(SyncModel):
         ONCE = "ONCE", "Once-off"
         MONTHLY = "MONTHLY", "Monthly"
         QUARTERLY = "QUARTERLY", "Quarterly"
+        HALF_YEARLY = "HALF", "Half-yearly (Jan–Jun, Jul–Dec)"
         ANNUAL = "ANNUAL", "Annual"
 
     code = models.CharField(max_length=20, unique=True)
@@ -318,6 +319,8 @@ class Bill(SyncModel):
 
     number = models.CharField(max_length=30, unique=True, editable=False)
     account = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="bills")
+    brought_forward = models.DecimalField(max_digits=14, decimal_places=2, default=0,
+                                          help_text="Unpaid balance on the same stand when this bill was raised (shown on the bill)")
     property = models.ForeignKey(Property, null=True, blank=True, on_delete=models.PROTECT, related_name="bills")
     revenue_head = models.ForeignKey(RevenueHead, on_delete=models.PROTECT, related_name="bills")
     description = models.CharField(max_length=255)

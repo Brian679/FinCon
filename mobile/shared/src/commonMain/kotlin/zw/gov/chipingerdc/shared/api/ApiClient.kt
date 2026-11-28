@@ -5,6 +5,9 @@ import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.forms.formData
+import io.ktor.client.request.forms.submitFormWithBinaryData
+import io.ktor.http.Headers
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
@@ -127,6 +130,17 @@ class ApiClient(private val session: Session, private val app: AppKind) {
         authed { t -> http.post(url(path)) { common(); bearer(t); setBody(body) } }.body()
 
     suspend fun getJson(path: String): JsonObject = authed { t -> http.get(url(path)) { common(); bearer(t) } }.body()
+
+    /** Multipart upload (e.g. a building plan file). Needs a connection. */
+    suspend fun uploadFile(path: String, field: String, fileName: String, bytes: ByteArray, mime: String): JsonObject =
+        authed { t ->
+            http.submitFormWithBinaryData(url(path), formData {
+                append(field, bytes, Headers.build {
+                    append(HttpHeaders.ContentType, mime)
+                    append(HttpHeaders.ContentDisposition, "filename=\"${fileName.replace("\"", "")}\"")
+                })
+            }) { header("X-Client-App", app.apiName); bearer(t) }
+        }.body()
 
     private fun HttpRequestBuilder.bearer(token: String) = header(HttpHeaders.Authorization, "Bearer $token")
 }

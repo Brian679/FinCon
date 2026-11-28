@@ -19,7 +19,7 @@ from core.crud import BootstrapFormMixin, GenericCreateView, GenericListView, Ge
 from finance.services import _record, notify
 from social.models import HealthInspection, SanitationFacility, SocialFacility
 
-from .models import AuditEngagement, Engagement, LandParcel, PublicLight, PublicNotice, RecordFile, Road, WorkOrder
+from .models import AuditEngagement, AvailableStand, Engagement, LandParcel, PublicLight, PublicNotice, RecordFile, Road, WorkOrder
 from .views import ActionDetail
 
 DATE = {"type": "date"}
@@ -32,6 +32,11 @@ def _form(model, fields, dates=()):
 
 # key: model, url slug, title, view caps, manage caps, list columns, form fields, date fields, filter field, search
 SPECS = {
+    "available": (AvailableStand, "growth/available-stands", "Stands available for allocation (by area)", ("stands.view", "stands.manage"),
+                  ("stands.manage",),
+                  [("Stand", "stand_number"), ("Area", "area"), ("Type", "stand_type"), ("Size (m²)", "size_sqm"), ("Price (USD)", "price"),
+                   ("Reserved for", "application"), ("Status", "status")],
+                  ["stand_number", "area", "stand_type", "size_sqm", "price", "status", "notes"], (), "status", ["stand_number", "area__name"]),
     "roads": (Road, "technical/roads", "Road network – construction, rehabilitation & maintenance", ("roads.view", "roads.manage"), ("roads.manage",),
               [("Ref.", "reference"), ("Road", "name"), ("No.", "road_number"), ("Ward", "ward"), ("Length (km)", "length_km"), ("Surface", "surface"),
                ("Last graded", "last_graded"), ("Condition", "condition")],

@@ -12,10 +12,10 @@ from .base import CouncilTestCase
 class RevenueTests(CouncilTestCase):
     def test_receipt_reduces_balance_and_allocates_to_oldest_bill(self):
         self.acc.refresh_from_db()
-        self.assertEqual(self.acc.balance, Decimal("15.00"))  # demo rates bill
+        self.assertEqual(self.acc.balance, Decimal("180.00"))  # demo residential levy: $15 a month x 12, billed once a year
         r = services.issue_receipt(self.user("cashier"), revenue_head=self.rates, amount="10", account=self.acc)
         self.acc.refresh_from_db()
-        self.assertEqual(self.acc.balance, Decimal("5.00"))
+        self.assertEqual(self.acc.balance, Decimal("170.00"))
         bill = self.acc.bills.get()
         self.assertEqual(bill.status, Bill.Status.PART_PAID)
         self.assertTrue(r.number.startswith("RCT-"))
@@ -44,15 +44,15 @@ class RevenueTests(CouncilTestCase):
         r.refresh_from_db()
         self.acc.refresh_from_db()
         self.assertEqual(r.status, Receipt.Status.VOIDED)
-        self.assertEqual(self.acc.balance, Decimal("15.00"))
+        self.assertEqual(self.acc.balance, Decimal("180.00"))
 
     def test_billing_run_is_idempotent(self):
         from django.utils import timezone
 
         t = timezone.localdate()
         created, skipped = services.run_rates_billing(self.user("treasurer"), t.year, t.month)
-        self.assertEqual(created, 0)
-        self.assertEqual(skipped, Property.objects.filter(monthly_rates__gt=0).count())
+        self.assertEqual(created, 0)                                   # already billed for this year / half-year
+        self.assertGreaterEqual(skipped, Property.objects.filter(monthly_rates__gt=0).count())
 
     def test_cashup_variance(self):
         cashier = self.user("cashier")
@@ -72,7 +72,7 @@ class LicenceTests(CouncilTestCase):
         self.assertEqual(lic.status, Licence.Status.APPROVED)      # fee billed at once – no inspection, no Treasurer
         self.assertEqual(lic.bill.amount, Decimal("60.00"))
         self.assertIsNotNone(lic.due_at)
-        services.issue_receipt(self.user("cashier"), revenue_head=self.shop, amount="75", account=self.acc)  # pays rates + licence
+        services.issue_receipt(self.user("cashier"), revenue_head=self.shop, amount="240", account=self.acc)  # pays the house levy (180) + licence (60)
         lic.refresh_from_db()
         self.assertEqual(lic.status, Licence.Status.ISSUED)
         self.assertIsNotNone(lic.expiry_date)

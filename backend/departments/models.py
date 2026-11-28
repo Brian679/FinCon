@@ -78,9 +78,10 @@ class StandApplication(SyncModel):
         INDUSTRIAL = "IND", "Industrial"
 
     class Status(models.TextChoices):
-        FEE_DUE = "FEE_DUE", "Waiting for the application fee"
+        FEE_DUE = "FEE_DUE", "Not submitted – pay the waiting-list fee"
         RECEIVED = "RECEIVED", "On the waiting list"
         SHORTLISTED = "SHORTLISTED", "Shortlisted"
+        APPROVED = "APPROVED", "Approved – pay for the stand"
         ALLOCATED = "ALLOCATED", "Stand allocated"
         REJECTED = "REJECTED", "Rejected"
         WITHDRAWN = "WITHDRAWN", "Withdrawn"
@@ -92,6 +93,8 @@ class StandApplication(SyncModel):
     phone = models.CharField(max_length=30, blank=True)
     stand_type = models.CharField(max_length=4, choices=StandType.choices, default=StandType.RESIDENTIAL)
     preferred_location = models.CharField(max_length=200)
+    area = models.ForeignKey("finance.TradingArea", null=True, blank=True, on_delete=models.SET_NULL, related_name="stand_applications",
+                             help_text="Area with stands available that the applicant chose")
     ward = models.PositiveSmallIntegerField(null=True, blank=True)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.RECEIVED, db_index=True)
     allocated_stand = models.CharField(max_length=60, blank=True)
@@ -434,6 +437,7 @@ class BuildingPlan(SyncModel):
     floor_area = models.DecimalField("Floor area (m²)", max_digits=10, decimal_places=2, default=0)
     fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     bill = models.ForeignKey("finance.Bill", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    drawing = models.FileField(upload_to="plans/%Y/", blank=True, help_text="The building plan (PDF or photos of the drawings)")
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.SUBMITTED, db_index=True)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
     review_notes = models.TextField(blank=True)
@@ -950,3 +954,30 @@ class AuditEngagement(SyncModel):
         if not self.reference:
             self.reference = SequenceCounter.next("AUD", 4)
         super().save(*args, **kwargs)
+
+
+
+class AvailableStand(SyncModel):
+    """A surveyed stand the council can allocate (Growth Point Manager's register). Residents applying for a stand choose an
+    area that still has stands available; when an application is approved a stand is reserved for it and sold once paid."""
+
+    class Status(models.TextChoices):
+        AVAILABLE = "AVAILABLE", "Available"
+        RESERVED = "RESERVED", "Reserved – waiting for payment"
+        SOLD = "SOLD", "Sold / allocated"
+
+    stand_number = models.CharField(max_length=40)
+    area = models.ForeignKey("finance.TradingArea", on_delete=models.PROTECT, related_name="available_stands")
+    stand_type = models.CharField(max_length=4, choices=StandApplication.StandType.choices, default=StandApplication.StandType.RESIDENTIAL)
+    size_sqm = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    price = models.DecimalField(max_digits=14, decimal_places=2, default=0, help_text="Selling price (USD)")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.AVAILABLE, db_index=True)
+    application = models.ForeignKey(StandApplication, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    notes = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["area__name", "stand_number"]
+        unique_together = [("area", "stand_number")]
+
+    def __str__(self):
+        return f"Stand {self.stand_number}, {self.area}"

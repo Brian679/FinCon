@@ -3,6 +3,8 @@ package zw.gov.chipingerdc.shared
 import androidx.compose.runtime.Composable
 import app.cash.sqldelight.db.SqlDriver
 import app.cash.sqldelight.driver.native.NativeSqliteDriver
+import kotlinx.cinterop.addressOf
+import kotlinx.cinterop.usePinned
 import platform.UIKit.UIDevice
 import zw.gov.chipingerdc.db.CouncilDatabase
 
@@ -16,3 +18,35 @@ actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
 }
 
 actual val platformName: String = UIDevice.currentDevice.systemName() + " " + UIDevice.currentDevice.systemVersion
+
+
+private class PlanPickerDelegate(var onPicked: (PickedFile?) -> Unit) : platform.darwin.NSObject(), platform.UIKit.UIDocumentPickerDelegateProtocol {
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    override fun documentPicker(controller: platform.UIKit.UIDocumentPickerViewController, didPickDocumentsAtURLs: List<*>) {
+        val url = didPickDocumentsAtURLs.firstOrNull() as? platform.Foundation.NSURL
+        if (url == null) { onPicked(null); return }
+        val scoped = url.startAccessingSecurityScopedResource()
+        val data = platform.Foundation.NSData.dataWithContentsOfURL(url)
+        if (scoped) url.stopAccessingSecurityScopedResource()
+        val length = data?.length?.toInt() ?: 0
+        if (data == null || length == 0) { onPicked(null); return }
+        val bytes = ByteArray(length)
+        bytes.usePinned { pinned -> platform.posix.memcpy(pinned.addressOf(0), data.bytes, data.length) }
+        onPicked(PickedFile(url.lastPathComponent ?: "plan", bytes, "application/octet-stream"))
+    }
+
+    override fun documentPickerWasCancelled(controller: platform.UIKit.UIDocumentPickerViewController) = onPicked(null)
+}
+
+@Composable
+actual fun rememberFilePicker(onPicked: (PickedFile?) -> Unit): () -> Unit {
+    val delegate = androidx.compose.runtime.remember { PlanPickerDelegate(onPicked) }
+    delegate.onPicked = onPicked
+    return {
+        val picker = platform.UIKit.UIDocumentPickerViewController(
+            forOpeningContentTypes = listOf(platform.UniformTypeIdentifiers.UTTypePDF, platform.UniformTypeIdentifiers.UTTypeImage,
+                platform.UniformTypeIdentifiers.UTTypeData), asCopy = true)
+        picker.delegate = delegate
+        platform.UIKit.UIApplication.sharedApplication.keyWindow?.rootViewController?.presentViewController(picker, animated = true, completion = null)
+    }
+}

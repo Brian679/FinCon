@@ -1,5 +1,7 @@
 """Workflows for the departmental registers. Used by the website and the
 mobile sync so the same stage-by-stage rules apply everywhere."""
+from decimal import Decimal
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
@@ -9,7 +11,8 @@ from core import audit
 from core.models import AuditLog, Department
 from finance.services import _record, notify
 
-from .models import (
+from .models import (  # noqa: I001
+    AvailableStand,
     Asset, AssetMaintenance, AuditFinding, BuildingPlan, CommunityActivity, ICTTicket, Incident, Project, Resolution, StandApplication,
 )
 
@@ -109,7 +112,12 @@ def submit_building_plan(user, **data):
     head = RevenueHead.objects.filter(code="BUILD-PLAN").first()
     plan.fee = head.default_amount if head else 0
     plan.save()
-    account = user.client_accounts.alive().first() if user.is_client else None
+    if user.is_client:
+        from finance.services import client_own_account
+
+        account = client_own_account(user)
+    else:
+        account = None
     if head and plan.fee and account is not None:
         plan.bill = Bill.objects.create(account=account, revenue_head=head, amount=plan.fee, description=f"Building plan fee {plan.reference}",
                                         due_date=timezone.localdate() + timezone.timedelta(days=14), created_by=user)
@@ -154,7 +162,13 @@ def plan_action(user, plan, action, note=""):
     else:
         raise ValidationError("Unknown action.")
     plan.save()
-    notify([plan.applicant], f"Building plan {plan.reference}: {plan.get_status_display()}", note)
+    from core.messaging import notify_client
+
+    applicant = plan.applicant
+    notify_client(users=[applicant] if applicant else [], phone=plan.phone, email=applicant.email if applicant else "", sent_by=user,
+                  subject=f"Building plan {plan.reference}: {plan.get_status_display()}", campaign="Building plans",
+                  body=note or {"APPROVED": "Your building plan has been approved. You may start building.",
+                                "REJECTED": "Your plan was returned – see the council's notes in the app."}.get(plan.status, "Your plan has moved to the next stage."))
     return plan
 
 
@@ -230,13 +244,35 @@ def respond_finding(user, f, *, response, date=None):
 
 
 @transaction.atomic
-def apply_for_stand(user, *, stand_type, preferred_location, ward=None, notes="", applicant_name="", national_id="", phone="", app_id=None):
+def stand_areas(stand_type=None):
+    """Areas that still have stands available, with how many: [(area, count)]."""
+    from django.db.models import Count
+
+    from finance.models import TradingArea
+
+    qs = AvailableStand.objects.alive().filter(status=AvailableStand.Status.AVAILABLE)
+    if stand_type:
+        qs = qs.filter(stand_type=stand_type)
+    counts = dict(qs.values_list("area").annotate(n=Count("id")))
+    return [(a, counts[a.pk]) for a in TradingArea.objects.filter(pk__in=counts.keys()).order_by("name")]
+
+
+def apply_for_stand(user, *, stand_type, preferred_location="", ward=None, notes="", applicant_name="", national_id="", phone="", app_id=None,
+                    area=None):
     """Stand application. From the residents' app the waiting-list fee is billed to the applicant's own account and the
     application joins the waiting list once it is paid; one captured at the council office joins at once (fee paid there)."""
     from finance.models import Bill, RevenueHead
     from finance.services import client_own_account
 
     kwargs = {"id": app_id} if app_id else {}
+    if area is not None:
+        if not AvailableStand.objects.alive().filter(area=area, stand_type=stand_type, status=AvailableStand.Status.AVAILABLE).exists():
+            raise ValidationError(f"No {dict(StandApplication.StandType.choices)[stand_type].lower()} stands are available in {area.name} at the moment.")
+        preferred_location = preferred_location or area.name
+        ward = ward or area.ward
+    if not preferred_location:
+        raise ValidationError("Choose the area.")
+    kwargs["area"] = area
     if user.is_client:
         if StandApplication.objects.alive().filter(applicant=user, status__in=[StandApplication.Status.FEE_DUE, StandApplication.Status.RECEIVED,
                                                                               StandApplication.Status.SHORTLISTED], stand_type=stand_type).exists():
@@ -253,8 +289,8 @@ def apply_for_stand(user, *, stand_type, preferred_location, ward=None, notes=""
                                               due_date=timezone.localdate() + timezone.timedelta(days=30))
             st.save(update_fields=["fee_bill", "updated_at"])
             acc.recalculate()
-            notify([user], f"Stand application {st.reference} received",
-                   f"Pay the waiting-list fee of USD {fee:,.2f} in the app to join the waiting list.")
+            notify([user], f"Stand application {st.reference} saved – pay USD {fee:,.2f} to submit it",
+                   "Your application is submitted and you join the waiting list as soon as the waiting-list fee is paid.")
         else:
             _join_waiting_list(st)
         return st
@@ -277,51 +313,94 @@ def _join_waiting_list(st):
 
 
 def settle_stand_fees(account):
-    """After a receipt / void on the account: a paid waiting-list fee puts the application on the waiting list."""
-    for st in StandApplication.objects.alive().filter(account=account, status=StandApplication.Status.FEE_DUE).select_related("fee_bill"):
-        if st.fee_bill_id and st.fee_bill.status == "PAID":
-            _join_waiting_list(st)
+    """After a payment: a paid waiting-list fee submits the application (waiting list); a paid stand price issues the stand."""
+    for st in StandApplication.objects.alive().filter(account=account, status=StandApplication.Status.FEE_DUE, fee_bill__status="PAID"):
+        _join_waiting_list(st)
+    for st in StandApplication.objects.alive().filter(account=account, status=StandApplication.Status.APPROVED, deposit_bill__status="PAID"):
+        _issue_stand(st)
 
 
-def stand_action(user, st, action, *, stand="", note="", deposit=None):
+def stand_action(user, st, action, *, stand="", note="", deposit=None, price=None):
+    """shortlist; approve (reserve one of the available stands in the applicant's area and bill its price – the stand
+    number is issued when it is paid); allocate (council office applicants who pay at the counter); reject."""
+    from core.messaging import notify_client
+
     _need(user, "stands.manage")
-    if action in ("shortlist", "allocate") and st.status == StandApplication.Status.FEE_DUE:
-        raise ValidationError("The application fee has not been paid yet – the applicant is not on the waiting list.")
+    price = price if price not in (None, "") else deposit
+    if action in ("shortlist", "approve", "allocate") and st.status == StandApplication.Status.FEE_DUE:
+        raise ValidationError("The waiting-list fee has not been paid – the application has not been submitted yet.")
     if action == "shortlist":
         st.status = StandApplication.Status.SHORTLISTED
-    elif action == "allocate":
+    elif action in ("approve", "allocate"):
         if not user.has_cap("stands.allocate"):
-            raise PermissionDenied("Only the Growth Point Manager can allocate stands.")
-        if not stand:
+            raise PermissionDenied("Only the Growth Point Manager can approve stand applications.")
+        if st.status not in (StandApplication.Status.RECEIVED, StandApplication.Status.SHORTLISTED):
+            raise ValidationError("This application is not on the waiting list.")
+        free = AvailableStand.objects.alive().filter(status=AvailableStand.Status.AVAILABLE)
+        av = None
+        if stand:
+            av = free.filter(stand_number__iexact=stand.strip()).filter(**({"area": st.area} if st.area_id else {})).first()
+            if av is None and st.area_id:
+                raise ValidationError(f"Stand {stand} is not available in {st.area.name}.")
+        elif st.area_id:
+            av = free.filter(area=st.area, stand_type=st.stand_type).first()
+            if av is None:
+                raise ValidationError(f"No stands left in {st.area.name}.")
+        else:
             raise ValidationError("Enter the stand number.")
-        st.status, st.allocated_stand, st.allocated_by, st.allocated_at = StandApplication.Status.ALLOCATED, stand, user, timezone.now()
-        msg = "Visit the council offices to sign the agreement of sale."
-        if deposit not in (None, "") and st.account_id:
-            from decimal import Decimal
-
+        number = av.stand_number if av else stand.strip()
+        amount = Decimal(str(price)) if price not in (None, "") else (av.price if av else Decimal(0))
+        st.allocated_stand = number
+        if av:
+            av.status, av.application = AvailableStand.Status.RESERVED, st
+            av.save()
+        if amount > 0 and st.account_id and action == "approve":
             from finance.models import Bill, RevenueHead
 
-            amount = Decimal(str(deposit))
-            if amount > 0:
-                st.deposit_bill = Bill.objects.create(account=st.account, revenue_head=RevenueHead.objects.get(code="STAND"), amount=amount, created_by=user,
-                                                      description=f"Deposit – stand {stand} ({st.reference})",
-                                                      due_date=timezone.localdate() + timezone.timedelta(days=30))
-                st.account.recalculate()
-                msg = f"Pay the deposit of USD {amount:,.2f} in the app or at the council offices, then sign the agreement of sale."
-        from core.messaging import notify_client
-
-        notify_client(users=[st.applicant] if st.applicant_id else [], phone=st.phone, subject=f"Stand allocated to you: {stand}",
-                      body=f"Good news – stand {stand} ({st.preferred_location}) has been allocated to you. {msg}", sent_by=user,
-                      campaign="Stand allocation")
+            st.deposit_bill = Bill.objects.create(account=st.account, revenue_head=RevenueHead.objects.get(code="STAND"), amount=amount, created_by=user,
+                                                  description=f"Purchase of stand {number} – {st.area.name if st.area_id else st.preferred_location} ({st.reference})",
+                                                  due_date=timezone.localdate() + timezone.timedelta(days=30))
+            st.account.recalculate()
+            st.status = StandApplication.Status.APPROVED
+            st.save()
+            notify_client(users=[st.applicant] if st.applicant_id else [], phone=st.phone, sent_by=user, campaign="Stand allocation",
+                          subject=f"Stand application {st.reference} approved",
+                          body=f"Stand {number} ({st.area or st.preferred_location}) is reserved for you. Pay USD {amount:,.2f} in the app or at the "
+                               f"council offices and the stand is issued to you.")
+        else:
+            _issue_stand(st, user)
     elif action == "reject":
         st.status = StandApplication.Status.REJECTED
-        notify([st.applicant], f"Stand application {st.reference}", note)
+        AvailableStand.objects.filter(application=st, status=AvailableStand.Status.RESERVED).update(status=AvailableStand.Status.AVAILABLE,
+                                                                                                    application=None)
+        notify_client(users=[st.applicant] if st.applicant_id else [], phone=st.phone, sent_by=user,
+                      subject=f"Stand application {st.reference} not approved", body=note or "Contact the Growth Points office for details.")
     else:
         raise ValidationError("Unknown action.")
     if note:
         st.notes = (st.notes + "\n" + note).strip()
     st.save()
     return st
+
+
+def _issue_stand(st, user=None):
+    """The stand is paid for (or allocated at the office): issue the stand number and put the stand on the applicant's account."""
+    from core.messaging import notify_client
+    from finance.models import Property
+
+    st.status, st.allocated_by, st.allocated_at = StandApplication.Status.ALLOCATED, user or st.allocated_by, timezone.now()
+    st.save()
+    av = AvailableStand.objects.filter(application=st).first()
+    if av:
+        av.status = AvailableStand.Status.SOLD
+        av.save()
+    if st.account_id and not Property.objects.alive().filter(account=st.account, stand_number=st.allocated_stand).exists():
+        use = {"RES": "RES", "COM": "COM", "IND": "IND", "INST": "INST"}.get(st.stand_type, "RES")
+        Property.objects.create(account=st.account, stand_number=st.allocated_stand, area=st.area, location=(st.area.name if st.area_id else st.preferred_location),
+                                ward=st.ward, land_use=use, size_sqm=av.size_sqm if av else None, created_by=user or st.created_by)
+    notify_client(users=[st.applicant] if st.applicant_id else [], phone=st.phone, sent_by=user, campaign="Stand allocation",
+                  subject=f"Stand {st.allocated_stand} is yours",
+                  body=f"Stand {st.allocated_stand}, {st.area or st.preferred_location} has been issued to you. It now appears under My stands.")
 
 
 @transaction.atomic
@@ -335,3 +414,24 @@ def project_update(user, p, *, progress=None, status=None, note=""):
         p.description = (p.description + f"\n{timezone.localdate()} {user.get_full_name()}: {note}").strip()
     p.save()
     return p
+
+
+
+PLAN_FILE_TYPES = (".pdf", ".jpg", ".jpeg", ".png", ".dwg", ".dxf", ".zip")
+
+
+def attach_plan_drawing(user, plan, upload):
+    """The applicant (or a reviewing officer) uploads the building plan file."""
+    if not ((user.is_client and plan.applicant_id == user.pk) or user.has_cap("plans.review")):
+        raise PermissionDenied("You cannot add files to this plan.")
+    name = (upload.name or "").lower()
+    if not name.endswith(PLAN_FILE_TYPES):
+        raise ValidationError("Send the plan as PDF, JPG, PNG, DWG, DXF or ZIP.")
+    if upload.size > 25 * 1024 * 1024:
+        raise ValidationError("The file is larger than 25 MB.")
+    plan.drawing.save(upload.name, upload, save=False)
+    plan.save(update_fields=["drawing", "updated_at"])
+    notify([u for u in User.objects.filter(is_active=True) if u.has_cap("plans.review")], f"Plan file received: {plan.reference}",
+           f"{plan.applicant_name} uploaded {upload.name}", f"/staff/technical/plans/{plan.pk}/")
+    audit.log(AuditLog.Action.UPDATE, plan, user=user, message=f"Plan file uploaded: {upload.name}")
+    return plan

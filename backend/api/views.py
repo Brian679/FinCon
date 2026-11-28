@@ -43,6 +43,33 @@ class MeView(AuditActorMixin, APIView):
     def get(self, request):
         return Response(s.MeSerializer(request.user).data)
 
+    def post(self, request):
+        """Settings: a resident edits their own details (name, phone, email, National ID, ward)."""
+        from django.core.validators import validate_email
+
+        u = request.user
+        d = request.data
+        fields = ["first_name", "last_name", "phone", "email", "ward"] + (["national_id"] if u.is_client else [])
+        try:
+            for f in fields:
+                if f not in d:
+                    continue
+                v = d.get(f)
+                if f == "ward":
+                    v = int(v) if str(v or "").strip() else None
+                else:
+                    v = (v or "").strip()
+                if f in ("first_name", "last_name", "phone") and not v:
+                    raise ValidationError(f"{f.replace('_', ' ').capitalize()} cannot be empty.")
+                if f == "email" and v:
+                    validate_email(v)
+                setattr(u, f, v)
+            u.save()
+        except (ValidationError, ValueError) as exc:
+            return Response({"detail": " ".join(exc.messages) if hasattr(exc, "messages") else "Check the ward number."}, status=400)
+        audit.log(AuditLog.Action.UPDATE, u, user=u, message="Updated own profile")
+        return Response(s.MeSerializer(u).data)
+
 
 class PasswordView(AuditActorMixin, APIView):
     """Change password from the phone (same rules as the website)."""
@@ -334,3 +361,25 @@ class DataReportView(AuditActorMixin, APIView):
         d = overview()
         return Response({"registers": [{"department": dept, "rows": [{"label": l, "count": n} for l, n in items]} for dept, items in d["registers"]],
                          "checks": [{"key": k, "title": t, "department": dept, "count": n} for k, t, dept, n in d["checks"]]})
+
+
+
+class PlanDrawingView(AuditActorMixin, APIView):
+    """POST multipart ``file``: the building plan (PDF / photos / DWG) for a plan the resident submitted."""
+    from rest_framework.parsers import MultiPartParser
+
+    parser_classes = [MultiPartParser]
+
+    def post(self, request, pk):
+        from departments.models import BuildingPlan
+        from departments.services import attach_plan_drawing
+
+        plan = get_object_or_404(BuildingPlan, pk=pk)
+        upload = request.FILES.get("file")
+        if upload is None:
+            return Response({"detail": "Choose the plan file."}, status=400)
+        try:
+            attach_plan_drawing(request.user, plan, upload)
+        except (ValidationError, PermissionDenied) as exc:
+            return Response({"detail": " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)}, status=400)
+        return Response(s.BuildingPlanSerializer(plan).data, status=201)

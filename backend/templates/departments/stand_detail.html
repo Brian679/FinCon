@@ -1,11 +1,13 @@
 {% extends "generic/detail.html" %}
-{% block actions %}{% if 'stands.manage' in user.capabilities and object.status != 'ALLOCATED' and object.status != 'REJECTED' %}
+{% block actions %}{% if 'stands.manage' in user.capabilities %}{% if object.status == 'RECEIVED' or object.status == 'SHORTLISTED' %}
 <div class="card shadow-sm mb-3"><div class="card-header">Process application</div><div class="card-body">
 <form method="post" action="{% url 'departments:stand_action' object.pk %}">{% csrf_token %}
 <input class="form-control mb-2" name="note" placeholder="Note">
-{% if object.status == 'FEE_DUE' %}<p class="small text-muted">Waiting for the applicant to pay the application fee – not yet on the waiting list.</p>{% endif %}
-{% if 'stands.allocate' in user.capabilities and object.status != 'FEE_DUE' %}<input class="form-control mb-2" name="stand" placeholder="Stand number to allocate">
-<input class="form-control mb-2" name="deposit" type="number" step="0.01" min="0" placeholder="Deposit to bill (USD, optional)">{% endif %}
-{% if object.status != 'FEE_DUE' %}<button class="btn btn-outline-primary" name="action" value="shortlist">Shortlist</button>{% endif %}
-{% if 'stands.allocate' in user.capabilities and object.status != 'FEE_DUE' %}<button class="btn btn-success" name="action" value="allocate">Allocate stand</button>{% endif %}
-<button class="btn btn-outline-danger" name="action" value="reject">Reject</button></form></div></div>{% endif %}{% endblock %}
+{% if 'stands.allocate' in user.capabilities %}
+<select class="form-select mb-2" name="stand"><option value="">Stand from {{ object.area|default:"the register" }}…</option>
+{% for s in free_stands %}<option value="{{ s.stand_number }}">{{ s.stand_number }} – {{ s.area }} · {{ s.get_stand_type_display }} · USD {{ s.price }}</option>{% endfor %}</select>
+<input class="form-control mb-2" name="price" type="number" step="0.01" min="0" placeholder="Price (USD) – blank uses the stand's price">
+{% endif %}
+{% if object.status == 'RECEIVED' %}<button class="btn btn-outline-primary" name="action" value="shortlist">Shortlist</button>{% endif %}
+{% if 'stands.allocate' in user.capabilities %}<button class="btn btn-success" name="action" value="approve">Approve – bill the stand price</button>{% endif %}
+<button class="btn btn-outline-danger" name="action" value="reject">Reject</button></form></div></div>{% endif %}{% endif %}{% endblock %}

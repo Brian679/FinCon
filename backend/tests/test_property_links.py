@@ -17,30 +17,41 @@ from .base import CouncilTestCase
 
 
 class StandWaitingListTests(CouncilTestCase):
-    def test_fee_then_waiting_list_then_allocation_with_deposit(self):
+    def test_area_fee_submits_then_approve_pay_price_stand_issued(self):
+        from departments.models import AvailableStand
+        from finance.models import TradingArea
+
         u = User.objects.create_user("applicant1", password="x", first_name="Rudo", last_name="Applicant", user_type=User.UserType.CLIENT,
                                      phone="0779001122", national_id="63-111000R63")
+        area = TradingArea.objects.filter(available_stands__status="AVAILABLE", available_stands__stand_type="RES").distinct().first()
+        self.assertIn(area, [a for a, _n in dept.stand_areas("RES")])                    # only areas with stands available are offered
         res = sync.push(u, [{"op_id": str(uuid.uuid4()), "type": "stand.create", "payload": {
-            "id": str(uuid.uuid4()), "stand_type": "RES", "preferred_location": "Checheche extension", "ward": 22}}])[0]
+            "id": str(uuid.uuid4()), "stand_type": "RES", "area": str(area.pk)}}])[0]
         self.assertEqual(res["status"], "applied", res)
         st = StandApplication.objects.get(pk=res["record"]["id"])
-        self.assertEqual(st.status, "FEE_DUE")
-        self.assertEqual(st.fee_bill.amount, Decimal("20.00"))
-        self.assertEqual(u.client_accounts.count(), 1)                                    # own account opened to bill the fee
+        self.assertEqual((st.status, st.fee_bill.amount), ("FEE_DUE", Decimal("20.00")))
         gp = self.user("growthpoint")
+        self.assertFalse(sync.entities_for(gp)["stands"][0].filter(pk=st.pk).exists())   # not submitted to the council until the fee is paid
         with self.assertRaises(ValidationError):
-            dept.stand_action(gp, st, "allocate", stand="X1")                             # not on the waiting list until the fee is paid
+            dept.stand_action(gp, st, "approve")
         fin.issue_receipt(self.user("cashier"), revenue_head=st.fee_bill.revenue_head, amount="20", account=st.account, bill=st.fee_bill)
         st.refresh_from_db()
         self.assertEqual(st.status, "RECEIVED")
-        self.assertIsNotNone(st.waiting_position)
-        self.assertTrue(Notification.objects.filter(recipient=u, title__startswith="You are on the stand waiting list").exists())
-        dept.stand_action(gp, st, "allocate", stand="CH-H40", deposit="150")
+        self.assertTrue(sync.entities_for(gp)["stands"][0].filter(pk=st.pk).exists())
+        dept.stand_action(gp, st, "approve")                                               # a stand in the chosen area is reserved, its price billed
         st.refresh_from_db()
-        self.assertEqual((st.status, st.deposit_bill.amount), ("ALLOCATED", Decimal("150.00")))
-        self.assertTrue(Notification.objects.filter(recipient=u, title="Stand allocated to you: CH-H40").exists())
+        av = AvailableStand.objects.get(application=st)
+        self.assertEqual((st.status, av.status, st.deposit_bill.amount), ("APPROVED", "RESERVED", av.price))
+        self.assertFalse(Property.objects.filter(stand_number=av.stand_number, account=st.account).exists())
+        fin.issue_receipt(self.user("cashier"), revenue_head=st.deposit_bill.revenue_head, amount=av.price, account=st.account, bill=st.deposit_bill)
+        st.refresh_from_db()
+        av.refresh_from_db()
+        self.assertEqual((st.status, av.status, st.allocated_stand), ("ALLOCATED", "SOLD", av.stand_number))
+        self.assertTrue(Property.objects.filter(stand_number=av.stand_number, account=st.account, area=area).exists())   # on the applicant's account
+        self.assertTrue(Notification.objects.filter(recipient=u, title=f"Stand {av.stand_number} is yours").exists())
         with self.assertRaises(ValidationError):
             dept.apply_for_stand(User.objects.get(username="tenant"), stand_type="RES", preferred_location="again")   # already applied (seed)
+
 
 class TenancyTests(CouncilTestCase):
     def test_renter_gets_own_account_not_the_owners(self):
@@ -63,19 +74,11 @@ class TenancyTests(CouncilTestCase):
             "premises": f"Stand {owner_shop.stand_number}"}}])[0]
         self.assertEqual(res["status"], "applied", res)                                   # licence for the rented shop on the renter's account
 
-    def test_registration_asks_how_you_are_connected(self):
+    def test_registration_needs_no_stand_number(self):
         c = APIClient()
-        shop = Property.objects.filter(stand_number="B13").first()
-        r = c.post("/api/v1/auth/register/", {"first_name": "New", "last_name": "Renter", "username": "newrenter", "email": "", "phone": "0771112233",
-                                              "national_id": "12-345678N12", "ward": 22, "password1": "Strong!Pass2026", "password2": "Strong!Pass2026",
-                                              "relationship": "RENT", "stand_number": "B13", "area": str(shop.area_id)}, format="json")
+        r = c.post("/api/v1/auth/register/", {"first_name": "New", "last_name": "Person", "username": "newperson", "email": "", "phone": "0771112233",
+                                              "national_id": "12-345678N12", "ward": 22, "password1": "Strong!Pass2026",
+                                              "password2": "Strong!Pass2026"}, format="json")
         self.assertEqual(r.status_code, 201, r.content)
-        claim = AccountClaim.objects.get(user__username="newrenter")
-        self.assertEqual((claim.claim_type, claim.status), ("RENT", "PENDING"))
-        r = c.post("/api/v1/auth/register/", {"first_name": "No", "last_name": "Stand", "username": "nostand", "phone": "0771112234",
-                                              "national_id": "12-345679N12", "password1": "Strong!Pass2026", "password2": "Strong!Pass2026",
-                                              "relationship": "OWNER"}, format="json")
-        self.assertEqual(r.status_code, 400)                                              # owner must give the stand number
-        w = Client()
-        r = w.get("/portal/register/")
-        self.assertContains(r, "I rent a house / shop from its owner")
+        self.assertFalse(AccountClaim.objects.filter(user__username="newperson").exists())
+        self.assertNotContains(Client().get("/portal/register/"), "Stand number")

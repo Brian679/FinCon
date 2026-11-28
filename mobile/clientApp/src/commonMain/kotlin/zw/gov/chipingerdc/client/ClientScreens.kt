@@ -73,57 +73,6 @@ import zw.gov.chipingerdc.shared.ui.prettyDate
 private const val ONLINE_ONLY = "This needs an internet connection. Please connect and try again."
 
 // ------------------------------------------------------------------ register
-@Composable
-fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var first by remember { mutableStateOf("") }
-    var last by remember { mutableStateOf("") }
-    var username by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
-    var nid by remember { mutableStateOf("") }
-    var ward by remember { mutableStateOf("") }
-    var p1 by remember { mutableStateOf("") }
-    var p2 by remember { mutableStateOf("") }
-    var rel by remember { mutableStateOf("NONE") }
-    var stand by remember { mutableStateOf("") }
-    var place by remember { mutableStateOf("") }
-    var business by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var msg by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    AppScreen("Create account", onBack = onDone) {
-        ScrollColumn {
-            Field("First name", first, { first = it })
-            Field("Surname", last, { last = it })
-            Field("Username", username, { username = it })
-            Field("Email", email, { email = it })
-            Field("Mobile number", phone, { phone = it })
-            Field("National ID", nid, { nid = it })
-            Field("Ward (optional)", ward, { ward = it }, number = true)
-            Caption("Your stand / property")
-            ChoicePicker("How are you connected to a stand?", Choices.relationships, rel) { rel = it }
-            if (rel != "NONE") {
-                Field("Stand number", stand, { stand = it })
-                Field("Township, village or growth point", place, { place = it })
-                if (rel != "OWNER") Field("Shop / business name (if any)", business, { business = it })
-            }
-            Field("Password (min. 8 characters)", p1, { p1 = it }, password = true)
-            Field("Confirm password", p2, { p2 = it }, password = true)
-            msg?.let { InfoBox(it.first, if (it.second) CrdcColors.Success else CrdcColors.Danger) }
-            PrimaryButton("Create account", busy = busy, enabled = listOf(first, last, username, phone, nid, p1).all { it.isNotBlank() } && p1 == p2 && (rel == "NONE" || stand.isNotBlank()), onClick = {
-                busy = true
-                scope.launch {
-                    runCatching {
-                        sdk.register(sdk.session.baseUrl, RegisterRequest(first, last, username, email, phone, nid, ward, p1, p2,
-                            relationship = rel, standNumber = stand.takeIf { rel != "NONE" } ?: "", location = place, businessName = business))
-                        sdk.login(sdk.session.baseUrl, username, p1)
-                    }.onFailure { msg = (it.message ?: ONLINE_ONLY) to false }
-                    busy = false
-                }
-            })
-        }
-    }
-}
 
 // --------------------------------------------------------------------- menu
 /** The menu (menu icon, top left), grouped by what a resident wants to do. */
@@ -150,12 +99,12 @@ fun ClientMenu(ctx: CCtx) {
             IndexRow("Sand & natural resource permits", 0, { ctx.go(CScreen.Permits) }, { ctx.go(CScreen.ApplyPermit) }),
         ),
         "Letters & certificates" to listOf(
-            IndexRow("Proof of residence, rates clearance, cession, burial order", certs.count { it.status == "FEE_DUE" },
+            IndexRow("Letters & certificates", certs.count { it.status == "FEE_DUE" },
                 { ctx.go(CScreen.Certificates) }, { ctx.go(CScreen.RequestCertificate) }),
         ),
         "Help & feedback" to listOf(
             IndexRow("Report a problem", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
-            IndexRow("Complaints & suggestions", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
+            IndexRow("Messages to the council", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
             IndexRow("Council notices", 0, { ctx.go(CScreen.Notices) }),
         ),
     )
@@ -171,35 +120,6 @@ fun ClientMenu(ctx: CCtx) {
 }
 
 // ------------------------------------------------------------ link account
-@Composable
-fun LinkAccountScreen(ctx: CCtx) {
-    val scope = rememberCoroutineScope()
-    var number by remember { mutableStateOf("") }
-    var verifier by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf<String?>(null) }
-    AppScreen("Link council account", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ScrollColumn {
-            Field("Account number (e.g. CR2026-00001)", number, { number = it })
-            Field("Phone number or National ID", verifier, { verifier = it })
-            error?.let { InfoBox(it, CrdcColors.Danger) }
-            PrimaryButton("Link account", busy = busy, enabled = number.isNotBlank() && verifier.isNotBlank(), onClick = {
-                busy = true
-                scope.launch {
-                    runCatching {
-                        val acc = ctx.sdk.postJson("client/link-account/", buildJsonObject { put("account_number", number); put("verifier", verifier) })
-                        ctx.sdk.store.upsert(Entities.ACCOUNTS, acc)
-                        // Fetch the full history of the newly linked account.
-                        listOf(Entities.ACCOUNTS, Entities.PROPERTIES, Entities.BILLS, Entities.RECEIPTS, Entities.LICENCES).forEach { ctx.sdk.store.resetCursor(it) }
-                        ctx.sdk.sync.sync()
-                        ctx.back()
-                    }.onFailure { error = it.message ?: ONLINE_ONLY }
-                    busy = false
-                }
-            })
-        }
-    }
-}
 
 // ----------------------------------------------------------------- payments
 @Composable
@@ -221,7 +141,7 @@ fun PayScreen(ctx: CCtx, accountId: String?, billId: String?) {
     AppScreen("Pay online", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
             if (bill != null) KeyValue("Bill", "${bill.number} – ${bill.description}")
-            Picker("Account", accounts, account, { "${it.accountNumber} – ${it.name} (owes $${money(it.balance)})" }, { account = it })
+            Picker("Account", accounts, account, { "${it.accountNumber} – ${it.name}" }, { account = it })
             if (bill == null) Picker("Paying for", heads, head, { it.name }, { head = it })
             Field("Amount (USD)", amount, { amount = it }, number = true)
             ChoicePicker("Pay with", Choices.mobileMoney, method) { method = it }
@@ -281,8 +201,7 @@ fun PaymentScreen(ctx: CCtx, reference: String) {
                     "PENDING" -> {
                         Text("Approve on ${p.phone}", fontWeight = FontWeight.SemiBold)
                         if (p.provider == "simulated") {
-                            InfoBox("Test mode", CrdcColors.Warning)
-                            PrimaryButton("Confirm (test mode)", onClick = { scope.launch { call("confirm") } })
+                            PrimaryButton("Confirm payment", onClick = { scope.launch { call("confirm") } })
                         } else PrimaryButton("I have approved – check status", onClick = { scope.launch { call("check") } })
                         SecondaryButton("Cancel payment", { scope.launch { call("cancel") } })
                     }
@@ -463,113 +382,9 @@ fun ReportProblemScreen(ctx: CCtx) {
     }
 }
 
-@Composable
-fun FeedbackScreen(ctx: CCtx) {
-    val list by ctx.sdk.observe(Entities.COMPLAINTS, Complaint.serializer()).collectAsState(initial = emptyList())
-    AppScreen("Complaints & feedback", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ New complaint, compliment or suggestion", onClick = { ctx.go(CScreen.NewFeedback) })
-        ListScreen {
-            if (list.isEmpty()) item { Empty("No feedback yet.") }
-            items(list, key = { it.id }) { c ->
-                RowCard(c.subject, "${c.reference} · ${c.kindLabel} · ${prettyDate(c.createdAt)}" +
-                    if (c.resolution.isNotBlank()) "\nResponse: ${c.resolution}" else "", null, c.statusLabel, c.status, c.localNote)
-            }
-        }
-    }
-}
 
-@Composable
-fun NewFeedbackScreen(ctx: CCtx) {
-    var kind by remember { mutableStateOf("COMPLAINT") }
-    var dept by remember { mutableStateOf("ADMIN") }
-    var subject by remember { mutableStateOf("") }
-    var details by remember { mutableStateOf("") }
-    AppScreen("Feedback", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ScrollColumn {
-            ChoicePicker("Type", Choices.complaintKinds, kind) { kind = it }
-            ChoicePicker("Which department?", Choices.departments, dept) { dept = it }
-            Field("Subject", subject, { subject = it })
-            Field("Details", details, { details = it }, singleLine = false, minLines = 4)
-            PrimaryButton("Send", enabled = subject.isNotBlank() && details.isNotBlank(), onClick = {
-                val id = ctx.sdk.newId()
-                val now = ctx.sdk.nowIso()
-                val optimistic = buildJsonObject {
-                    put("id", id); put("reference", "(sending)"); put("kind", kind); put("subject", subject); put("details", details)
-                    put("status", "RECEIVED"); put("status_label", "Waiting to send"); put("created_at", now); put("updated_at", now)
-                    put("local_note", "Saved on your phone – it will be sent when you are online")
-                }
-                ctx.sdk.enqueue("complaint.create", "Feedback: $subject", Entities.COMPLAINTS, id, optimistic) {
-                    put("id", id); put("kind", kind); put("department", dept); put("subject", subject); put("details", details); put("captured_at", now)
-                }
-                ctx.back()
-            })
-        }
-    }
-}
 
-@Composable
-fun StandsScreen(ctx: CCtx) {
-    val list by ctx.sdk.observe(Entities.STANDS, StandApplication.serializer()).collectAsState(initial = emptyList())
-    val bills by ctx.sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
-    fun paid(id: String?) = id != null && bills.firstOrNull { it.id == id }?.status == "PAID"
-    AppScreen("Stand applications", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ListScreen {
-            item { PrimaryButton("Apply for a stand", onClick = { ctx.go(CScreen.ApplyStand) }) }
-            if (list.isEmpty()) item { Empty("No applications.") }
-            items(list.sortedByDescending { it.createdAt }, key = { it.id }) { s ->
-                SectionCard("${s.standTypeLabel.ifBlank { "Stand" }} stand · ${s.reference}") {
-                    KeyValue("Place", s.preferredLocation + (s.ward?.let { ", ward $it" } ?: ""))
-                    Row { StatusChip(s.statusLabel, s.status) }
-                    when (s.status) {
-                        "FEE_DUE" -> {
-                            if (s.feeBill != null && !paid(s.feeBill)) PrimaryButton("Pay $${money(s.fee ?: "0")} waiting-list fee", onClick = { ctx.go(CScreen.PayBills(listOf(s.feeBill))) })
-                        }
-                        "RECEIVED", "SHORTLISTED" -> s.waitingPosition?.let {
-                            KeyValue("Waiting list", "No. $it" + (s.joinedWaitingListAt?.let { d -> " since ${prettyDate(d)}" } ?: ""))
-                        }
-                        "ALLOCATED" -> {
-                            KeyValue("Allocated stand", s.allocatedStand)
-                            if (s.depositBill != null) {
-                                if (s.depositPaid || paid(s.depositBill)) Text("Deposit of $${money(s.deposit ?: "0")} paid.", fontSize = 13.sp, color = CrdcColors.Success)
-                                else PrimaryButton("Pay deposit $${money(s.deposit ?: "0")}", onClick = { ctx.go(CScreen.PayBills(listOf(s.depositBill))) })
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
 
-@Composable
-fun ApplyStandScreen(ctx: CCtx) {
-    var type by remember { mutableStateOf("RES") }
-    var location by remember { mutableStateOf("") }
-    var ward by remember { mutableStateOf("") }
-    var nid by remember { mutableStateOf("") }
-    AppScreen("Apply for a stand", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ScrollColumn {
-            ChoicePicker("Stand type", Choices.standTypes, type) { type = it }
-            Field("Preferred location", location, { location = it })
-            Field("Ward", ward, { ward = it }, number = true)
-            Field("National ID", nid, { nid = it })
-            PrimaryButton("Submit", enabled = location.isNotBlank() && nid.isNotBlank(), onClick = {
-                val id = ctx.sdk.newId()
-                val optimistic = buildJsonObject {
-                    put("id", id); put("reference", "(sending)"); put("stand_type", type); put("preferred_location", location)
-                    put("status", "FEE_DUE"); put("status_label", "Waiting to send"); put("updated_at", ctx.sdk.nowIso())
-                }
-                ctx.sdk.enqueue("stand.create", "Stand application", Entities.STANDS, id, optimistic) {
-                    put("id", id); put("stand_type", type); put("preferred_location", location); put("national_id", nid)
-                    put("phone", ctx.me.phone); ward.toIntOrNull()?.let { put("ward", it) }
-                }
-                // the waiting-list fee bill (and the account it is on) arrive with the next sync
-                listOf(Entities.ACCOUNTS, Entities.BILLS).forEach { ctx.sdk.store.resetCursor(it) }
-                ctx.back()
-            })
-        }
-    }
-}
 
 // --------------------------------------------------------------------- misc
 @Composable
@@ -607,28 +422,3 @@ fun CharterScreen(ctx: CCtx) {
     }
 }
 
-@Composable
-fun SyncCentreScreen(ctx: CCtx) {
-    val ops by ctx.sdk.outbox.collectAsState(initial = emptyList())
-    AppScreen("Sync status", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        ListScreen {
-            item {
-                SectionCard("This phone") {
-                    KeyValue("Last sync", prettyDate(ctx.sync.lastSync))
-                    KeyValue("Waiting to send", ctx.pending.toString())
-                    ctx.sync.lastError?.let { InfoBox(it, CrdcColors.Warning) }
-                    PrimaryButton("Sync now", busy = ctx.sync.running, onClick = { ctx.syncNow() })
-                }
-            }
-            items(ops, key = { it.op_id }) { op ->
-                SectionCard(op.summary) {
-                    Text("Saved ${prettyDate(op.created_at)}", fontSize = 12.sp, color = CrdcColors.Muted)
-                    if (op.status == "REJECTED") {
-                        InfoBox("Not accepted: ${op.error}", CrdcColors.Danger)
-                        SecondaryButton("Dismiss", { ctx.sdk.dismissRejected(op.op_id) })
-                    } else Text("Waiting to send", color = CrdcColors.Blue, fontSize = 12.sp)
-                }
-            }
-        }
-    }
-}

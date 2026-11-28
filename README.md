@@ -304,3 +304,18 @@ manager, the heir – with National ID, date of birth and phone. Owners (and ren
 residents' app (*My stands, shops & farms → Beneficiaries*); revenue, Growth Points and land staff see and edit it in the council app
 and on the web (*Stands, houses & farms*, searchable by a beneficiary's name or ID). A proof of residence can be requested for any
 of them from the owner's account; someone typed in on the request is saved to the stand. Demo: `tsitsi`, stand 612.
+
+### Billing schedule, stands, building plans (round 8)
+
+* **Billing**: residential stands pay an annual residential levy (the stand's rate × 12); farms pay the annual farm levy per hectare;
+  commercial / industrial / institutional stands pay rates every six months – January–June and July–December (rate × 6). Every new
+  bill records the unpaid balance on the same stand as *brought forward*. Shop licences are issued only when the licence fee, the
+  lease and the levy are paid (a house or farm levy on the same account does not hold a shop licence back).
+* **Stand applications**: the resident chooses the stand type and an area that still has stands available (Growth Point Manager's
+  *Stands available* register). The application is submitted when the waiting-list fee is paid. On approval a stand in that area
+  is reserved and its price billed; once paid the stand number is issued and the stand is added to the resident's account.
+* **Building plans**: the plan file (PDF / photos / DWG) is uploaded with the application or later; the technical officer reviews,
+  the Engineer approves, and the applicant is told in the app and by SMS / email at every step.
+* **Proof of residence** is free; the applicant types the name, surname and ID number (for themselves or someone on their stand).
+* Residents' app: balance hidden behind an eye icon, *Settings* to edit personal details, *Add an existing account*, messages to
+  the council are a single message, no server settings on the login page, no stand questions at sign-up, no sync screen.

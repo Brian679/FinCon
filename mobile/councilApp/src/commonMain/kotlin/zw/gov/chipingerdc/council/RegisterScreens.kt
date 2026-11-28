@@ -52,30 +52,33 @@ private fun isHeadOf(ctx: Ctx, dept: String) = ctx.me.isCeo || (ctx.me.isHead &&
 @Composable
 fun StandDetailScreen(ctx: Ctx, id: String) {
     val st by ctx.sdk.observeOne(Entities.STANDS, id, StandApplication.serializer()).collectAsState(initial = null)
+    val avail by ctx.sdk.observe(Entities.AVAILABLE_STANDS, zw.gov.chipingerdc.shared.model.AvailableStand.serializer()).collectAsState(initial = emptyList())
     AppScreen("Stand application", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         val s = st ?: return@AppScreen Empty("Not found")
         ScrollColumn {
             SectionCard("${s.reference} – ${s.applicantName}") {
                 KeyValue("National ID", s.nationalId); KeyValue("Phone", s.phone); KeyValue("Stand type", s.standTypeLabel)
-                KeyValue("Preferred location", "${s.preferredLocation} · Ward ${s.ward ?: "-"}"); KeyValue("Allocated stand", s.allocatedStand)
+                KeyValue("Area", "${s.areaName.ifBlank { s.preferredLocation }} · Ward ${s.ward ?: "-"}"); KeyValue("Stand", s.allocatedStand)
                 s.waitingPosition?.let { KeyValue("Waiting-list number", it.toString()) }
                 s.fee?.let { KeyValue("Waiting-list fee", "$${money(it)}" + if (s.status == "FEE_DUE") " – not paid yet" else " – paid") }
-                s.deposit?.let { KeyValue("Deposit", "$${money(it)}" + if (s.depositPaid) " – paid" else " – not paid yet") }
+                s.deposit?.let { KeyValue("Stand price", "$${money(it)}" + if (s.depositPaid) " – paid" else " – not paid yet") }
                 Row { StatusChip(s.statusLabel, s.status) }
             }
-            if (s.status == "FEE_DUE") InfoBox("The applicant joins the waiting list once the waiting-list fee is paid.")
             if (s.status in listOf("RECEIVED", "SHORTLISTED") && ctx.me.can("stands.manage")) {
                 val buttons = buildList {
                     if (s.status == "RECEIVED") add("shortlist" to "Shortlist (officer)")
-                    if (ctx.me.can("stands.allocate")) add("allocate" to "Allocate stand (Director)")
+                    if (ctx.me.can("stands.allocate")) add("approve" to "Approve – bill the stand price")
                     add("reject" to "Reject")
                 }
-                ActionPanel("Process application", listOf(FieldSpec("allocated_stand", "Stand number to allocate"),
-                    FieldSpec("deposit", "Deposit to bill on allocation (optional)", "number"), FieldSpec("note", "Note", "multiline")),
+                val free = avail.filter { it.status == "AVAILABLE" && (s.area == null || it.area == s.area) }
+                ActionPanel("Process application", listOf(
+                    FieldSpec("allocated_stand", "Stand", "choice", listOf("" to "First free stand in the area") +
+                        free.map { it.standNumber to "${it.standNumber} – ${it.areaName} · $${money(it.price)}" }),
+                    FieldSpec("price", "Price (USD) – blank uses the stand's price", "number"), FieldSpec("note", "Note", "multiline")),
                     buttons) { action, v ->
                     ctx.sdk.enqueue("stand.action", "Stand ${s.reference}: $action", Entities.STANDS, s.id) {
                         put("stand", s.id); put("action", action); put("allocated_stand", v["allocated_stand"] ?: ""); put("note", v["note"] ?: "")
-                        v["deposit"]?.takeIf { it.isNotBlank() }?.let { put("deposit", it) }
+                        v["price"]?.takeIf { it.isNotBlank() }?.let { put("price", it) }
                     }
                 }
             }
@@ -301,6 +304,7 @@ fun PlanDetailScreen(ctx: Ctx, id: String) {
                 KeyValue("Stand", "${p.standNumber}, ${p.location}"); KeyValue("Development", p.developmentTypeLabel); KeyValue("Floor area", "${p.floorArea} m²")
                 KeyValue("Description", p.description); KeyValue("Fee", "$${money(p.fee)} · ${p.billStatus ?: "no bill"}")
                 KeyValue("Charter deadline", prettyDate(p.dueAt)); KeyValue("Review notes", p.reviewNotes); KeyValue("Decision", p.decisionNotes)
+                KeyValue("Plan file", p.drawingName.ifBlank { "Not uploaded yet" })
                 KeyValue("Inspections", p.inspectionLog); Row { StatusChip(p.statusLabel, p.status) }
                 p.localNote?.let { InfoBox(it) }
             }

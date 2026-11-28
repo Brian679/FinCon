@@ -51,7 +51,7 @@ sealed interface CScreen {
     data object ApplyStand : CScreen
     data object Notifications : CScreen
     data object Charter : CScreen
-    data object SyncCentre : CScreen
+    data object Settings : CScreen
     data object MyStands : CScreen
     data object RegisterStand : CScreen
     data object Plans : CScreen
@@ -94,7 +94,7 @@ fun ClientApp(sdk: CouncilSdk) {
         var registering by remember { mutableStateOf(false) }
         if (user == null) {
             if (registering) RegisterScreen(sdk) { registering = false }
-            else LoginScreen(sdk, "", "", onRegister = { registering = true })
+            else LoginScreen(sdk, "", "", onRegister = { registering = true }, allowServerSettings = false)
             return@CouncilTheme
         }
         val nav = remember(user.username) { Navigator<CScreen>(CScreen.Home) }
@@ -120,11 +120,11 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false, menuOpen: Boolean = fa
         badge = n, startOpen = profileOpen,
         items = listOf(
             ProfileItem("Notifications", n) { ctx.go(CScreen.Notifications) },
-            ProfileItem("Link a council account") { ctx.go(CScreen.LinkAccount) },
+            ProfileItem("Settings") { ctx.go(CScreen.Settings) },
+            ProfileItem("Add an existing account") { ctx.go(CScreen.LinkAccount) },
             ProfileItem("Statements") { ctx.go(CScreen.Statements) },
             ProfileItem("Client Charter") { ctx.go(CScreen.Charter) },
             ProfileItem("Change password") { ctx.go(CScreen.ChangePassword) },
-            ProfileItem("Sync status", ctx.pending.toInt()) { ctx.go(CScreen.SyncCentre) },
             ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
         ),
     )
@@ -186,7 +186,7 @@ private fun ClientScreens(ctx: CCtx) {
         CScreen.ApplyStand -> ApplyStandScreen(ctx)
         CScreen.Notifications -> NotificationsScreen(ctx)
         CScreen.Charter -> CharterScreen(ctx)
-        CScreen.SyncCentre -> SyncCentreScreen(ctx)
+        CScreen.Settings -> SettingsScreen(ctx)
         CScreen.MyStands -> MyStandsScreen(ctx)
         CScreen.RegisterStand -> RegisterStandScreen(ctx)
         CScreen.Plans -> PlansScreen(ctx)

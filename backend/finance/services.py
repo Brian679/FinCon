@@ -211,7 +211,62 @@ def cancel_bill(user, bill, reason):
 
 
 def run_rates_billing(user, year: int, month: int, revenue_head=None):
-    """Raise the monthly rates bill for every active property. Idempotent per period."""
+    """Billing run for the month's half-year (kept for the billing screens / jobs): see run_property_billing."""
+    return run_property_billing(user, year, 1 if month <= 6 else 2)
+
+
+HALVES = {1: ("H1", "Jan–Jun", 1), 2: ("H2", "Jul–Dec", 7)}
+
+
+@transaction.atomic
+def run_property_billing(user, year: int, half: int = 1):
+    """The council's billing schedule. Idempotent – run it as often as you like.
+
+    * Residential stands: one **annual levy** a year (the stand's rate × 12), due 31 March.
+    * Farms: the annual **farm levy** per hectare (see run_levy_billing), due 31 March.
+    * Commercial, industrial and institutional stands: **rates every six months** – January–June and July–December
+      (the stand's rate × 6), due at the end of the half's first month.
+    Any unpaid balance on the same stand is **brought forward** and printed on the new bill."""
+    _require(user, "billing.run")
+    created = skipped = 0
+    res_head = RevenueHead.objects.get(code="RES-LEVY")
+    rates_head = RevenueHead.objects.get(code="RATES")
+    tag, label, first_month = HALVES[half]
+    props = Property.objects.alive().filter(is_active=True, account__status=ClientAccount.Status.ACTIVE).select_related("account")
+    for prop in props:
+        farm = prop.land_use == Property.LandUse.AGRICULTURAL or (prop.hectares or 0) > 0
+        if farm:
+            continue                                              # farm levy below
+        if prop.land_use == Property.LandUse.RESIDENTIAL:
+            head, period = res_head, f"{year:04d}"
+            amount = q2(prop.monthly_rates * 12) if prop.monthly_rates else res_head.default_amount
+            what, due = f"Residential levy {year} – {prop}", date(year, 3, 31)
+        else:
+            head, period = rates_head, f"{year:04d}-{tag}"
+            amount = q2(prop.monthly_rates * 6)
+            what, due = f"Rates {label} {year} – {prop}", date(year, first_month, monthrange(year, first_month)[1])
+        if not amount or amount <= 0:
+            continue
+        if Bill.objects.alive().filter(property=prop, revenue_head=head, period=period).exclude(status=Bill.Status.CANCELLED).exists():
+            skipped += 1
+            continue
+        forward = q2(sum((b.outstanding for b in Bill.objects.alive().filter(property=prop, account=prop.account,
+                                                                              status__in=[Bill.Status.UNPAID, Bill.Status.PART_PAID])), Decimal(0)))
+        Bill.objects.create(account=prop.account, property=prop, revenue_head=head, period=period, amount=amount, description=what,
+                            due_date=max(due, timezone.localdate()), brought_forward=forward, created_by=user)
+        prop.account.recalculate()
+        created += 1
+    farm_head = RevenueHead.objects.filter(code="FARM-LEVY").first()
+    if farm_head:
+        c2, s2 = run_levy_billing(user, farm_head, year)
+        created, skipped = created + c2, skipped + s2
+    audit.log(AuditLog.Action.OTHER, user=user, model_label="finance.Bill",
+              message=f"Billing run {year} {label}: {created} bills raised, {skipped} already billed")
+    return created, skipped
+
+
+def _old_monthly_rates_billing(user, year: int, month: int, revenue_head=None):
+    """Former monthly rates run (no longer used)."""
     _require(user, "billing.run")
     revenue_head = revenue_head or RevenueHead.objects.get(code="RATES")
     period = f"{year:04d}-{month:02d}"
@@ -323,7 +378,9 @@ def licence_outstanding(lic):
     if lic.licence_type == Licence.LicenceType.SHOP:
         dues = Bill.objects.alive().filter(status__in=[Bill.Status.UNPAID, Bill.Status.PART_PAID],
                                            revenue_head__category__in=[RevenueHead.Category.RENT, RevenueHead.Category.LEVY])
-        dues = dues.filter(property=lic.property) if lic.property_id else dues.filter(account=lic.account)
+        # the shop's own lease and levy (a house or farm levy on the same account does not hold up a shop licence)
+        dues = dues.filter(property=lic.property) if lic.property_id else dues.filter(account=lic.account).exclude(
+            property__land_use__in=[Property.LandUse.RESIDENTIAL, Property.LandUse.AGRICULTURAL])
         for cat, label in ((RevenueHead.Category.RENT, "Lease / rent"), (RevenueHead.Category.LEVY, "Levy")):
             amt = sum((b.outstanding for b in dues if b.revenue_head.category == cat), Decimal(0))
             if amt > 0:
@@ -712,11 +769,13 @@ def run_levy_billing(user, revenue_head, year: int, *, area=None, land_use=None,
         if Bill.objects.alive().filter(account=prop.account, property=prop, revenue_head=revenue_head, period=period).exclude(status=Bill.Status.CANCELLED).exists():
             skipped += 1
             continue
+        forward = q2(sum((b.outstanding for b in Bill.objects.alive().filter(property=prop, account=prop.account,
+                                                                              status__in=[Bill.Status.UNPAID, Bill.Status.PART_PAID])), Decimal(0)))
         charge, what = amount, f"{revenue_head.name} {year} – {prop}"
         if revenue_head.per_hectare:
             charge = q2(amount * prop.hectares)
             what = f"{revenue_head.name} {year} – {prop} ({prop.hectares.normalize():f} ha × ${amount:,.2f})"
-        Bill.objects.create(account=prop.account, property=prop, revenue_head=revenue_head, period=period, amount=charge,
+        Bill.objects.create(account=prop.account, property=prop, revenue_head=revenue_head, period=period, amount=charge, brought_forward=forward,
                             description=what, due_date=date(year, 3, 31) if date(year, 3, 31) > timezone.localdate() else timezone.localdate() + timezone.timedelta(days=30),
                             created_by=user)
         prop.account.recalculate()
@@ -1303,7 +1362,8 @@ def can_issue_certificate(user, cert):
 
 
 def request_certificate(user, *, kind, property=None, purpose="", address="", ward=None, other_party_name="", other_party_id="", event_date=None,
-                        place="", req_id=None, beneficiary=None, subject_name="", subject_id="", subject_phone="", subject_relationship=""):
+                        place="", req_id=None, beneficiary=None, subject_name="", subject_id="", subject_phone="", subject_relationship="",
+                        for_self=False):
     from .models import CertificateRequest, RevenueHead, Tenancy
 
     if not user.is_client:
@@ -1327,11 +1387,21 @@ def request_certificate(user, *, kind, property=None, purpose="", address="", wa
     if kind == "RESIDENCE" and not (address or property):
         raise ValidationError("Enter where you live.")
     # Proof of residence for someone on the stand: a saved beneficiary, or a new person (saved to the stand for next time).
-    if kind == "RESIDENCE" and (beneficiary is not None or subject_name):
+    if kind == "RESIDENCE" and for_self:
+        subject_name = (subject_name or user.get_full_name()).strip()
+        subject_id = (subject_id or user.national_id or "").strip().upper()
+        subject_phone, subject_relationship, beneficiary = subject_phone or user.phone, "", None
+        if not (subject_name and subject_id):
+            raise ValidationError("Enter the name, surname and ID number.")
+    elif kind == "RESIDENCE" and (beneficiary is not None or subject_name):
         if property is None:
             raise ValidationError("Choose the stand the person lives at.")
         if beneficiary is not None and beneficiary.property_id != property.pk:
             raise ValidationError("That person is not listed on this stand.")
+        if beneficiary is not None and subject_name and (subject_name != beneficiary.full_name or (subject_id and subject_id != beneficiary.national_id)):
+            beneficiary = save_stand_beneficiary(user, property, full_name=subject_name, relationship=beneficiary.relationship,
+                                                 national_id=subject_id or beneficiary.national_id, phone=subject_phone or beneficiary.phone,
+                                                 date_of_birth=beneficiary.date_of_birth, lives_here=beneficiary.lives_here, ben_id=beneficiary.pk)
         if beneficiary is None:
             beneficiary = save_stand_beneficiary(user, property, full_name=subject_name, relationship=subject_relationship or "OTHER",
                                                  national_id=subject_id, phone=subject_phone)
@@ -1341,6 +1411,8 @@ def request_certificate(user, *, kind, property=None, purpose="", address="", wa
             raise ValidationError("Enter the person's National ID.")
     else:
         beneficiary, subject_name, subject_id, subject_phone, subject_relationship = None, "", "", "", ""
+    if kind == "RESIDENCE" and subject_id:
+        pass
     account = property.account if property is not None and owned.filter(pk=property.pk).exists() else client_own_account(user)
     kwargs = {"id": req_id} if req_id else {}
     c = CertificateRequest.objects.create(kind=kind, user=user, account=account, property=property, applicant_name=user.get_full_name() or user.username,

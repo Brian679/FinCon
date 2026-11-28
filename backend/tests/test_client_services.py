@@ -54,10 +54,7 @@ class CertificateTests(CouncilTestCase):
     def test_residence_letter_fee_then_office_then_issued(self):
         tsitsi = User.objects.get(username="tsitsi")
         c = CertificateRequest.objects.get(user=tsitsi, kind="RESIDENCE")
-        self.assertEqual((c.status, c.fee_bill.amount), ("FEE_DUE", Decimal("5.00")))
-        fin.issue_receipt(self.user("cashier"), revenue_head=c.fee_bill.revenue_head, amount="5", account=c.account, bill=c.fee_bill)
-        c.refresh_from_db()
-        self.assertEqual(c.status, "PROCESSING")
+        self.assertEqual((c.status, c.fee_bill), ("PROCESSING", None))                 # proof of residence is free: straight to the office
         with self.assertRaises(PermissionDenied):
             fin.certificate_action(self.user("cashier"), c, "issue")                          # finance does not issue residence letters
         admin = User.objects.filter(role="ADMIN_OFFICER").first()
@@ -123,13 +120,14 @@ class StandBeneficiaryTests(CouncilTestCase):
         self.assertEqual((c.subject_name, c.subject_id), ("Rutendo Mapfumo", "63-990011R63"))
         self.assertEqual(StandBeneficiary.objects.filter(property=house, full_name="Rutendo Mapfumo", is_active=True).count(), 2)  # new ID -> new record
         son = CertificateRequest.objects.get(user=tsitsi, kind="RESIDENCE", subject_name="Tafadzwa Mapfumo")
-        fin.issue_receipt(self.user("cashier"), revenue_head=son.fee_bill.revenue_head, amount=son.fee_bill.amount, account=son.account, bill=son.fee_bill)
-        son.refresh_from_db()
         admin = User.objects.filter(role="ADMIN_OFFICER").first()
         fin.certificate_action(admin, son, "issue")
         self.client.force_login(admin)
         page = self.client.get(f"/staff/finance/certificates/{son.pk}/print/")
         self.assertContains(page, "Tafadzwa Mapfumo")
         self.assertContains(page, "63-556677T63")
+        self.assertNotContains(page, "child of")
+        mine = fin.request_certificate(tsitsi, kind="RESIDENCE", property=house, for_self=True, subject_name="Tsitsi R. Mapfumo", subject_id="63-445566M63")
+        self.assertEqual((mine.subject_name, mine.beneficiary), ("Tsitsi R. Mapfumo", None))
         self.client.force_login(self.user("cashier"))
         self.assertContains(self.client.get(f"/staff/finance/stands/{house.pk}/"), "Tafadzwa Mapfumo")

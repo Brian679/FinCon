@@ -40,8 +40,8 @@ class MeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "full_name", "email", "phone", "user_type", "department", "department_label", "role", "role_label",
-                  "is_head", "must_change_password", "capabilities", "employee_number", "annual_leave_days"]
+        fields = ["id", "username", "full_name", "first_name", "last_name", "national_id", "ward", "email", "phone", "user_type", "department",
+                  "department_label", "role", "role_label", "is_head", "must_change_password", "capabilities", "employee_number", "annual_leave_days"]
 
     def get_capabilities(self, obj):
         return sorted(obj.capabilities)
@@ -104,7 +104,7 @@ class BillSerializer(SyncSerializer):
 
     class Meta:
         model = Bill
-        fields = _sync_fields(Bill, ["number", "account", "property", "revenue_head", "revenue_head_category", "description", "period", "amount",
+        fields = _sync_fields(Bill, ["brought_forward"] + ["number", "account", "property", "revenue_head", "revenue_head_category", "description", "period", "amount",
                                      "amount_paid", "outstanding",
                                      "issue_date", "due_date", "status"])
 
@@ -217,6 +217,7 @@ class ServiceRequestSerializer(SyncSerializer):
 
 class StandApplicationSerializer(SyncSerializer):
     waiting_position = serializers.IntegerField(read_only=True)
+    area_name = serializers.CharField(source="area.name", read_only=True, default="")
     fee = serializers.DecimalField(source="fee_bill.amount", max_digits=14, decimal_places=2, read_only=True, default=None)
     deposit = serializers.DecimalField(source="deposit_bill.amount", max_digits=14, decimal_places=2, read_only=True, default=None)
     deposit_paid = serializers.SerializerMethodField()
@@ -224,7 +225,7 @@ class StandApplicationSerializer(SyncSerializer):
     class Meta:
         model = StandApplication
         fields = _sync_fields(StandApplication, ["reference", "applicant_name", "national_id", "phone", "stand_type", "preferred_location", "ward",
-                                                 "status", "allocated_stand", "account", "fee_bill", "fee", "deposit_bill", "deposit", "deposit_paid",
+                                                 "status", "allocated_stand", "account", "fee_bill", "fee", "deposit_bill", "deposit", "deposit_paid", "area", "area_name",
                                                  "waiting_position", "joined_waiting_list_at"])
 
     def get_deposit_paid(self, obj):
@@ -387,10 +388,15 @@ class BuildingPlanSerializer(SyncSerializer):
     reviewed_by_id = serializers.IntegerField(source="reviewed_by.pk", read_only=True, default=None)
     bill_status = serializers.CharField(source="bill.status", read_only=True, default="")
 
+    drawing_name = serializers.SerializerMethodField()
+
+    def get_drawing_name(self, obj):
+        return obj.drawing.name.rsplit("/", 1)[-1] if obj.drawing else ""
+
     class Meta:
         model = BuildingPlan
         fields = _sync_fields(BuildingPlan, ["reference", "applicant_name", "phone", "stand_number", "location", "ward", "development_type",
-                                             "description", "floor_area", "fee", "bill", "bill_status", "status", "reviewed_by_id", "review_notes",
+                                             "description", "floor_area", "fee", "drawing_name", "bill", "bill_status", "status", "reviewed_by_id", "review_notes",
                                              "decision_notes", "inspection_log", "due_at"])
 
 
@@ -821,3 +827,18 @@ class StandBeneficiarySerializer(SyncSerializer):
 
     def get_added_by_name(self, obj):
         return obj.added_by.get_full_name() if obj.added_by_id else ""
+
+
+from departments.models import AvailableStand  # noqa: E402
+
+
+class AvailableStandSerializer(SyncSerializer):
+    area_name = serializers.CharField(source="area.name", read_only=True)
+    stand_type_label = serializers.CharField(source="get_stand_type_display", read_only=True)
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    applicant_name = serializers.CharField(source="application.applicant_name", read_only=True, default="")
+
+    class Meta:
+        model = AvailableStand
+        fields = _sync_fields(AvailableStand, ["stand_number", "area", "area_name", "stand_type", "stand_type_label", "size_sqm", "price", "status",
+                                               "status_label", "application", "applicant_name", "notes"])

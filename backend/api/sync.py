@@ -107,7 +107,8 @@ def staff_entities(user):
         "task_comments": (TaskComment.objects.filter(task__in=_task_scope(user)).select_related("author"), s.TaskCommentSerializer),
         "complaints": (wf.complaint_scope(user, Complaint.objects.all()), s.ComplaintSerializer),
         "service_requests": (wf.request_scope(user, ServiceRequest.objects.all()), s.ServiceRequestSerializer),
-        "stands": (StandApplication.objects.all(), s.StandApplicationSerializer) if c("stands.view") else None,
+        "stands": (StandApplication.objects.exclude(status="FEE_DUE"), s.StandApplicationSerializer) if c("stands.view") else None,
+        "available_stands": (s.AvailableStand.objects.select_related("area", "application"), s.AvailableStandSerializer) if c("stands.view") else None,
         "certificates": (_certificates_for_office(user), s.CertificateSerializer) if c("certificates.issue") else None,
         "stand_beneficiaries": (s.StandBeneficiary.objects.select_related("property__account", "added_by"), s.StandBeneficiarySerializer)
         if c(*fin.STAND_VIEW_CAPS) else None,
@@ -219,7 +220,9 @@ def client_entities(user):
         "licences": (Licence.objects.filter(Q(account__in=accounts) | Q(applicant=user)).distinct().select_related("account"), s.LicenceSerializer),
         "complaints": (Complaint.objects.filter(client=user), s.ComplaintSerializer),
         "service_requests": (ServiceRequest.objects.filter(reporter=user), s.ServiceRequestSerializer),
-        "stands": (StandApplication.objects.filter(applicant=user), s.StandApplicationSerializer),
+        "stands": (StandApplication.objects.filter(applicant=user).select_related("area"), s.StandApplicationSerializer),
+        "available_stands": (s.AvailableStand.objects.filter(Q(status="AVAILABLE") | Q(application__applicant=user)).select_related("area"),
+                             s.AvailableStandSerializer),
         "notifications": (Notification.objects.filter(recipient=user), s.NotificationSerializer),
         "online_payments": (OnlinePayment.objects.filter(user=user).select_related("receipt"), s.OnlinePaymentSerializer),
         "claims": (s.AccountClaim.objects.filter(user=user).select_related("area", "account"), s.ClaimSerializer),
@@ -333,6 +336,14 @@ def op_complaint_create(user, p):
     data = _clean(p, COMPLAINT_FIELDS)
     if user.is_client:
         data["channel"] = Complaint.Channel.APP
+        # residents just write a message; customer care classifies and routes it
+        msg = (data.get("details") or data.get("subject") or "").strip()
+        if not msg:
+            raise ValidationError("Write your message.")
+        data["details"] = msg
+        data.setdefault("subject", (msg[:57] + "…") if len(msg) > 60 else msg)
+        data.setdefault("kind", Complaint.Kind.ENQUIRY)
+        data.setdefault("department", "ADMIN")
     created = _dt(p.get("captured_at"))
     if created and created < timezone.now():
         data["created_at"] = created  # charter clock starts when the client actually complained
@@ -430,7 +441,11 @@ def op_leave_apply(user, p):
 
 
 def op_stand_create(user, p):
+    from finance.models import TradingArea
+
+    area = _get(TradingArea, p["area"]) if p.get("area") else None
     st = dept.apply_for_stand(user, stand_type=p.get("stand_type", "RES"), preferred_location=p.get("preferred_location", ""), ward=p.get("ward") or None,
+                              area=area,
                               notes=p.get("notes", ""), applicant_name=p.get("applicant_name", ""), national_id=p.get("national_id", ""),
                               phone=p.get("phone", ""), app_id=p.get("id"))
     return "stands", s.StandApplicationSerializer(st).data
@@ -480,7 +495,7 @@ def op_task_create(user, p):
 
 def op_stand_action(user, p):
     st = dept.stand_action(user, _get(StandApplication, p["stand"]), p["action"], stand=p.get("allocated_stand", ""), note=p.get("note", ""),
-                           deposit=p.get("deposit") or None)
+                           deposit=p.get("deposit") or None, price=p.get("price") or None)
     return "stands", s.StandApplicationSerializer(st).data
 
 
@@ -809,6 +824,7 @@ def op_register_save(user, p):
         "sanitation": (_regs.form_for("sanitation"), s.sm.SanitationFacility, "sanitation.manage", s.SanitationSerializer, None),
         "social_facilities": (_regs.form_for("facilities"), s.sm.SocialFacility, "facilities.manage", s.FacilitySerializer, None),
         "land_parcels": (_regs.form_for("land"), s.dm.LandParcel, "land.manage", s.LandParcelSerializer, None),
+        "available_stands": (_regs.form_for("available"), s.AvailableStand, "stands.manage", s.AvailableStandSerializer, None),
         "engagements": (_regs.form_for("engagements"), s.dm.Engagement, "engagements.manage", s.EngagementSerializer,
                         lambda o: setattr(o, "officer", user)),
         "public_notices": (_regs.form_for("notices"), s.dm.PublicNotice, "notices.manage", s.NoticeSerializer, lambda o: setattr(o, "posted_by", user)),
@@ -991,7 +1007,7 @@ def op_certificate_request(user, p):
                                 event_date=parse_date(p["event_date"]) if p.get("event_date") else None, place=p.get("place", ""), req_id=p.get("id"),
                                 beneficiary=_get(s.StandBeneficiary, p["beneficiary"]) if p.get("beneficiary") else None,
                                 subject_name=p.get("subject_name", ""), subject_id=p.get("subject_id", ""), subject_phone=p.get("subject_phone", ""),
-                                subject_relationship=p.get("subject_relationship", ""))
+                                subject_relationship=p.get("subject_relationship", ""), for_self=p.get("for_self") in (True, "true", "1"))
     return "certificates", s.CertificateSerializer(c).data
 
 
