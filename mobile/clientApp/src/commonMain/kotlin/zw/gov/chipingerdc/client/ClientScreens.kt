@@ -52,6 +52,7 @@ import zw.gov.chipingerdc.shared.ui.ChoicePicker
 import zw.gov.chipingerdc.shared.ui.CrdcColors
 import zw.gov.chipingerdc.shared.ui.Empty
 import zw.gov.chipingerdc.shared.ui.Field
+import zw.gov.chipingerdc.shared.ui.Caption
 import zw.gov.chipingerdc.shared.ui.IndexModule
 import zw.gov.chipingerdc.shared.ui.IndexRow
 import zw.gov.chipingerdc.shared.ui.InfoBox
@@ -160,8 +161,20 @@ fun ClientHome(ctx: CCtx) {
 @Composable
 fun AccountsScreen(ctx: CCtx) {
     val accounts by ctx.sdk.observe(Entities.ACCOUNTS, ClientAccount.serializer()).collectAsState(initial = emptyList())
-    AppScreen("My bills & statements", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    val bills by ctx.sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
+    val fines by ctx.sdk.observe(Entities.FINES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
+    fun kotlinx.serialization.json.JsonObject.str(k: String) = (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+    val unpaid = bills.count { it.status in listOf("UNPAID", "PART") }
+    val finesDue = fines.count { it.str("status") == "ISSUED" }
+    AppScreen("My bills", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
+            item {
+                IndexModule("Pay", listOf(
+                    IndexRow("Pay a bill (rates, levies, rent)", unpaid, { ctx.go(CScreen.Pay(null, null)) }),
+                    IndexRow("Pay a fine", finesDue, { ctx.go(CScreen.Fines) }),
+                ))
+            }
+            item { Caption("My accounts") }
             if (accounts.isEmpty()) item { Empty("No council account linked yet.") }
             items(accounts, key = { it.id }) { a ->
                 RowCard(a.name, a.accountNumber, if ((a.balance.toDoubleOrNull() ?: 0.0) > 0) "Owing $${money(a.balance)}" else "Paid up",
@@ -183,10 +196,8 @@ fun ClientMenu(ctx: CCtx) {
     val modules = listOf(
         "Home" to listOf(IndexRow("Dashboard", 0, { ctx.go(CScreen.Home) })),
         "Payments" to listOf(
-            IndexRow("Pay a bill (rates, levies, rent)", bills.count { it.status in listOf("UNPAID", "PART") }, { ctx.go(CScreen.Pay(null, null)) }),
-            IndexRow("Pay a fine", fines.count { it.str("status") == "ISSUED" }, { ctx.go(CScreen.Fines) }),
-            IndexRow("My bills & statements", 0, { ctx.go(CScreen.Accounts) }),
-            IndexRow("Receipts", 0, { ctx.go(CScreen.Receipts) }),
+            IndexRow("My bills", bills.count { it.status in listOf("UNPAID", "PART") } + fines.count { it.str("status") == "ISSUED" }, { ctx.go(CScreen.Accounts) }),
+            IndexRow("Payment history", 0, { ctx.go(CScreen.Receipts) }),
         ),
         "Licences & permits" to listOf(
             IndexRow("Shop & business licences", 0, { ctx.go(CScreen.Licences) }, { ctx.go(CScreen.ApplyLicence) }),
