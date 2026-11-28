@@ -56,8 +56,7 @@ fun FinesScreen(ctx: CCtx) {
         PrimaryButton("Find a fine by its number", onClick = { ctx.go(CScreen.FindFine) })
         ListScreen {
             if (fines.isEmpty()) item {
-                EmptyState("No fines on your accounts.", "Got a fine slip or SMS from a council officer? Find it with the fine number and pay it here.",
-                    "Find my fine") { ctx.go(CScreen.FindFine) }
+                EmptyState("No fines.", "", "Add a fine by its number") { ctx.go(CScreen.FindFine) }
             }
             items(fines.sortedByDescending { it.s("date") }, key = { it.s("id") }) { f ->
                 SectionCard("${f.s("reference")} – ${f.s("offence_name").substringBefore(" (")}") {
@@ -65,7 +64,7 @@ fun FinesScreen(ctx: CCtx) {
                     KeyValue("Amount", "USD ${money(f.s("amount"))}")
                     Row { StatusChip(f.s("status_label"), when (f.s("status")) { "ISSUED" -> "UNPAID"; "COURT" -> "URGENT"; else -> f.s("status") }) }
                     if (f.s("status") == "ISSUED" && f.s("bill").isNotBlank())
-                        PrimaryButton("Pay fine $${money(f.s("amount"))}", onClick = { ctx.go(CScreen.Pay(f.s("account"), f.s("bill"))) })
+                        PrimaryButton("Pay fine $${money(f.s("amount"))}", onClick = { ctx.go(CScreen.PayBills(listOf(f.s("bill")))) })
                 }
             }
         }
@@ -79,13 +78,12 @@ fun FindFineScreen(ctx: CCtx) {
     var key by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    AppScreen("Find my fine", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen("Add a fine", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            InfoBox("Enter the fine number from the fine slip or SMS (e.g. FIN-2026-00004) and the phone number or National ID given to the officer.")
             Field("Fine number", ref, { ref = it.uppercase() })
             Field("Phone number or National ID", key, { key = it })
             error?.let { InfoBox(it, CrdcColors.Danger) }
-            PrimaryButton("Find fine", busy = busy, enabled = ref.isNotBlank() && key.isNotBlank(), onClick = {
+            PrimaryButton("Add fine", busy = busy, enabled = ref.isNotBlank() && key.isNotBlank(), onClick = {
                 busy = true; error = null
                 scope.launch {
                     runCatching {
@@ -119,8 +117,7 @@ fun PermitsScreen(ctx: CCtx) {
         PrimaryButton("+ Apply for a permit", onClick = { ctx.go(CScreen.ApplyPermit) })
         ListScreen {
             if (permits.isEmpty()) item {
-                EmptyState("No permits yet.", "Apply for a sand, gravel, clay, firewood or thatch permit, pay in the app and show the permit at the collection point.",
-                    "Apply for a permit") { ctx.go(CScreen.ApplyPermit) }
+                EmptyState("No permits yet.", "")
             }
             items(permits.sortedByDescending { it.s("created_at") }, key = { it.s("id") }) { p ->
                 val active = p.s("status") == "ACTIVE"
@@ -128,7 +125,6 @@ fun PermitsScreen(ctx: CCtx) {
                     if (active) {
                         KeyValue("Permit number", p.s("reference"))
                         KeyValue("Valid until", prettyDate(p.s("valid_to")))
-                        Text("Show the permit number to the council officer at the collection point.", fontSize = 12.sp, color = CrdcColors.Muted)
                     }
                     KeyValue("Site", "${p.s("location")}${p.s("ward").takeIf { it.isNotBlank() }?.let { ", ward $it" } ?: ""}")
                     KeyValue("Allowed", "${money(p.s("quantity_allowed"))} ${p.s("unit_label")}")
@@ -138,10 +134,8 @@ fun PermitsScreen(ctx: CCtx) {
                     Row { StatusChip(p.s("status_label").ifBlank { "Waiting to send" }, p.s("status")) }
                     p.s("local_note").takeIf { it.isNotBlank() }?.let { InfoBox(it) }
                     when (p.s("status")) {
-                        "APPLIED" -> Text("The Environmental Management Officer will check the site and approve – you will get a notification to pay.",
-                            fontSize = 12.sp, color = CrdcColors.Muted)
                         "APPROVED" -> if (p.s("bill").isNotBlank())
-                            PrimaryButton("Pay $${money(p.s("fee"))} to get the permit", onClick = { ctx.go(CScreen.Pay(p.s("holder"), p.s("bill"))) })
+                            PrimaryButton("Pay $${money(p.s("fee"))}", onClick = { ctx.go(CScreen.PayBills(listOf(p.s("bill")))) })
                     }
                 }
             }
@@ -171,10 +165,7 @@ fun ApplyPermitScreen(ctx: CCtx) {
             SectionCard("Estimated fee") {
                 KeyValue("Rate", "USD ${money(t.third.second.toString())} per ${t.third.first.removeSuffix("s")}")
                 Text("USD ${money(estimate.toString())}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = CrdcColors.Green)
-                Text("The officer confirms the fee when approving. You pay in the app (EcoCash / OneMoney / InnBucks) and the permit is issued at once.",
-                    fontSize = 12.sp, color = CrdcColors.Muted)
             }
-            if (accounts.isEmpty()) InfoBox("No council account yet – one will be opened in your name so you can pay for the permit.")
             PrimaryButton("Send application", enabled = location.isNotBlank() && (qty.toDoubleOrNull() ?: 0.0) > 0, onClick = {
                 val id = ctx.sdk.newId()
                 val optimistic = buildJsonObject {
@@ -207,7 +198,7 @@ fun NoticesScreen(ctx: CCtx) {
     val notices by ctx.sdk.observe(Entities.PUBLIC_NOTICES, JsonObject.serializer()).collectAsState(initial = emptyList())
     AppScreen("Council notices", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
-            if (notices.isEmpty()) item { EmptyState("No notices right now.", "Water cuts, meetings, deadlines and health alerts from the council appear here.") }
+            if (notices.isEmpty()) item { EmptyState("No notices right now.", "") }
             items(notices.sortedByDescending { it.s("publish_from") }, key = { it.s("id") }) { n -> NoticeRow(n) }
         }
     }

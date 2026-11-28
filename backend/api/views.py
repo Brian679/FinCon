@@ -120,6 +120,13 @@ class PaymentView(AuditActorMixin, APIView):
 
     def post(self, request):
         user = request.user
+        if request.data.get("bills"):          # "pay everything": several bills, one prompt
+            try:
+                p = fin.start_bulk_payment(user, bills=list(Bill.objects.filter(pk__in=request.data["bills"]).select_related("revenue_head")),
+                                           method=request.data.get("method", "ECOCASH"), phone=request.data.get("phone", ""), channel="CLIENT_APP")
+            except (ValidationError, PermissionDenied, RuntimeError) as exc:
+                return Response({"detail": " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)}, status=400)
+            return Response(s.OnlinePaymentSerializer(p).data, status=201)
         account = get_object_or_404(ClientAccount, pk=request.data.get("account"))
         bill = Bill.objects.filter(pk=request.data.get("bill"), account=account).first() if request.data.get("bill") else None
         head = RevenueHead.objects.filter(pk=request.data.get("revenue_head")).first() if request.data.get("revenue_head") else None

@@ -57,13 +57,9 @@ fun MyStandsScreen(ctx: CCtx) {
     val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
     val rented by sdk.observe(Entities.TENANCIES, Tenancy.serializer()).collectAsState(initial = emptyList())
     val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
-    AppScreen("My stands & shops", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Register a stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
+    AppScreen("My stands, shops & farms", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+        PrimaryButton("+ Add a stand / shop / farm", onClick = { ctx.go(CScreen.RegisterStand) })
         ListScreen {
-            item {
-                InfoBox("Own a house or shop on a council stand, rent one from its owner, or lease council premises? Register it. Owners are linked straight " +
-                    "away when their details match the council register; renters and everyone else are checked by a revenue officer and notified.")
-            }
             item { Text("Linked stands", fontSize = 13.sp, color = CrdcColors.Muted) }
             if (props.isEmpty()) item { Empty("No stands linked yet.") }
             items(props, key = { it.id }) { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills) }
@@ -101,7 +97,7 @@ fun RegisterStandScreen(ctx: CCtx) {
     var idNumber by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf(ctx.me.phone) }
     var notes by remember { mutableStateOf("") }
-    AppScreen("Register a stand / shop", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen("Add a stand / shop / farm", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
             ChoicePicker("I am…", Choices.claimTypes, type) { type = it }
             Field("Stand number", stand, { stand = it })
@@ -110,7 +106,7 @@ fun RegisterStandScreen(ctx: CCtx) {
             Field("Shop / business name (if any)", business, { business = it })
             Field("National ID (or company reg. no.)", idNumber, { idNumber = it })
             Field("Phone number", phone, { phone = it })
-            Field("Anything that helps us find your stand", notes, { notes = it }, singleLine = false, minLines = 2)
+            Field("Notes", notes, { notes = it }, singleLine = false, minLines = 2)
             PrimaryButton("Send", enabled = stand.isNotBlank() && (area != null || location.isNotBlank()) && phone.isNotBlank(), onClick = {
                 val id = ctx.sdk.newId()
                 val opt = buildJsonObject {
@@ -145,7 +141,7 @@ fun PlansScreen(ctx: CCtx) {
                     KeyValue("Decision due", prettyDate(p.dueAt))
                     if (p.decisionNotes.isNotBlank()) KeyValue("Council decision", p.decisionNotes)
                     p.localNote?.let { InfoBox(it) }
-                    if (p.bill != null && p.billStatus != "PAID") PrimaryButton("Pay plan fee", onClick = { ctx.go(CScreen.Pay(null, p.bill)) })
+                    if (p.bill != null && p.billStatus != "PAID") PrimaryButton("Pay plan fee", onClick = { ctx.go(CScreen.PayBills(listOf(p.bill!!))) })
                 }
             }
         }
@@ -163,13 +159,10 @@ fun NewPlanScreen(ctx: CCtx) {
     var area by remember { mutableStateOf("") }
     AppScreen("Submit building plan", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            if (accounts.isEmpty()) InfoBox("Link your council account first so the plan fee can be billed to it.", CrdcColors.Warning)
             Field("Stand number", stand, { stand = it }); Field("Location", location, { location = it }); Field("Ward", ward, { ward = it }, number = true)
             ChoicePicker("Development", Choices.devTypes, type) { type = it }
             Field("Description (rooms, size, materials)", description, { description = it }, singleLine = false, minLines = 3)
             Field("Floor area (m²)", area, { area = it }, number = true)
-            Text("Bring the drawings (3 copies) to the Technical Services office. The decision is made within 30 working days (Client Charter).",
-                fontSize = 11.sp, color = CrdcColors.Muted)
             PrimaryButton("Submit", enabled = stand.isNotBlank() && location.isNotBlank() && description.isNotBlank(), onClick = {
                 val id = ctx.sdk.newId()
                 val opt = buildJsonObject {
@@ -203,10 +196,9 @@ fun ShopCard(ctx: CCtx, r: ShopStatus, bills: List<Bill>) {
             if (r.rent > 0) KeyValue("Rent / lease", money(r.rent.toString()))
             if (r.other > 0) KeyValue("Other (licence fee …)", money(r.other.toString()))
             licenceWords[r.licence]?.takeIf { it.isNotBlank() }?.let { KeyValue("Licence", it) }
-            val bill = bills.filter { it.property == p.id && it.status in listOf("UNPAID", "PART") }.minByOrNull { it.dueDate ?: "" }
-            if (r.total > 0) PrimaryButton("Pay USD ${money(r.total.toString())} now", onClick = { ctx.go(CScreen.Pay(p.account, bill?.id)) })
+            val due = bills.filter { it.property == p.id && it.status in listOf("UNPAID", "PART") }.map { it.id }
+            if (r.total > 0) PrimaryButton("Pay USD ${money(r.total.toString())}", onClick = { ctx.go(CScreen.PayBills(due)) })
             if (r.licence in listOf("NONE", "EXPIRED")) SecondaryButton("Apply / renew shop licence", { ctx.go(CScreen.ApplyLicence) })
         }
-        Text("Payments made at the council offices or to a revenue collector show here after your phone syncs.", fontSize = 11.sp, color = CrdcColors.Muted)
     }
 }

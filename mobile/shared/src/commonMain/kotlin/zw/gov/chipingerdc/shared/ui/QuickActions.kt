@@ -14,7 +14,7 @@ import androidx.compose.ui.unit.sp
 fun EmptyState(title: String, hint: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 12.dp)) {
         Text(title, fontSize = 13.sp, color = CrdcColors.Muted)
-        Text(hint, fontSize = 12.sp, color = CrdcColors.Muted)
+        if (hint.isNotBlank()) Text(hint, fontSize = 12.sp, color = CrdcColors.Muted)
         if (actionLabel != null && onAction != null) PrimaryButton(actionLabel, onClick = onAction)
     }
 }

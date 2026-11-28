@@ -29,6 +29,7 @@ object Entities {
     const val LEASES = "leases"
     const val CLAIMS = "claims"
     const val TENANCIES = "tenancies"
+    const val CERTIFICATES = "certificates"
     const val ASSETS = "assets"
     const val INCIDENTS = "incidents"
     const val ACTIVITIES = "activities"
@@ -238,6 +239,19 @@ data class OnlinePayment(
     val id: String, val reference: String = "", val account: String = "", val bill: String? = null, val amount: String = "0", val provider: String = "",
     val currency: String = "USD", val method: String = "", val phone: String = "", val status: String = "", val statusLabel: String = "",
     val receipt: String? = null, val receiptNumber: String? = null, val paidAt: String? = null, val createdAt: String = "",
+    val receiptNumbers: List<String> = emptyList(),
+)
+
+/** A letter / certificate a resident asked the council for (proof of residence, rates clearance, ownership, cession, burial order). */
+@Serializable
+data class Certificate(
+    val id: String, val reference: String = "", val number: String = "", val kind: String = "", val kindLabel: String = "", val account: String = "",
+    val accountNumber: String = "", val accountBalance: String = "0", val property: String? = null, val standNumber: String = "",
+    val propertyLabel: String = "", val applicantName: String = "", val nationalId: String = "", val phone: String = "", val address: String = "",
+    val ward: Int? = null, val purpose: String = "", val otherPartyName: String = "", val otherPartyId: String = "", val eventDate: String? = null,
+    val place: String = "", val feeBill: String? = null, val fee: String? = null, val feePaid: Boolean = false, val status: String = "",
+    val statusLabel: String = "", val decidedByName: String = "", val decidedAt: String? = null, val decisionNote: String = "",
+    val validUntil: String? = null, val createdAt: String = "", val localNote: String? = null,
 )
 
 @Serializable
@@ -462,4 +476,6 @@ object Choices {
     val claimTypes = listOf("OWNER" to "I own this stand / house", "SHOP" to "I own this stand and run a shop / business on it",
         "RENT" to "I rent this house / shop from its owner", "TENANT" to "I lease these council premises")
     val relationships = listOf("NONE" to "I don't own or rent a stand yet") + claimTypes
+    val certificateKinds = listOf("RESIDENCE" to "Proof of residence letter", "CLEARANCE" to "Rates clearance certificate",
+        "OWNERSHIP" to "Stand ownership confirmation letter", "CESSION" to "Transfer (cession) of a stand", "BURIAL" to "Burial order")
 }

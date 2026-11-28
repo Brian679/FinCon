@@ -81,4 +81,8 @@ urlpatterns = [
     path("fines/offences/", v.OffenceList.as_view(), name="offences"),
     path("fines/offences/new/", v.OffenceNew.as_view(), name="offence_new"),
     path("fines/offences/<uuid:pk>/", v.OffenceEdit.as_view(), name="offence_edit"),
+    path("certificates/", v.CertificateList.as_view(), name="certificates"),
+    path("certificates/<uuid:pk>/", v.CertificateDetail.as_view(), name="certificate"),
+    path("certificates/<uuid:pk>/action/", v.certificate_action, name="certificate_action"),
+    path("certificates/<uuid:pk>/print/", v.certificate_print, name="certificate_print"),
 ]

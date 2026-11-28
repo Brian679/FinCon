@@ -17,7 +17,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from core import audit, sla
-from core.models import AuditLog, Notification
+from core.models import AuditLog, Notification, SequenceCounter
 
 ZERO_D = Decimal("0.00")
 
@@ -669,7 +669,7 @@ def confirm_online_payment(payment, provider_reference=""):
     payment = OnlinePayment.objects.select_for_update().get(pk=payment.pk)
     if payment.status == OnlinePayment.Status.PAID:
         return payment.receipt
-    receipt = issue_receipt(
+    receipt = _confirm_bulk(payment, provider_reference) if payment.bills.exists() else issue_receipt(
         payment.user, revenue_head=payment.revenue_head, amount=payment.amount, account=payment.account, bill=payment.bill,
         currency=payment.currency, method=Receipt.Method.ONLINE, reference=provider_reference or payment.reference,
         channel=payment.channel, payer_name=payment.account.name, description=f"Online payment {payment.reference}",
@@ -1229,3 +1229,158 @@ def settle_paid_items(account):
 
     social_settle(account)
     settle_stand_fees(account)
+    settle_certificate_fees(account)
+
+
+# ------------------------------------------------------------ pay everything
+def start_bulk_payment(user, *, bills, method="ECOCASH", phone="", channel=Receipt.Channel.PORTAL):
+    """One mobile-money prompt for several unpaid bills – on one or more of the resident's accounts (stands, shops, farms,
+    rented places, fines …). When it is confirmed a receipt is issued for every bill."""
+    from .gateway import get_gateway
+
+    bills = [b for b in bills if b.status in (Bill.Status.UNPAID, Bill.Status.PART_PAID) and b.outstanding > 0]
+    if not bills:
+        raise ValidationError("There is nothing to pay.")
+    mine = set(user.client_accounts.values_list("pk", flat=True))
+    if any(b.account_id not in mine for b in bills) and not user.is_staff_member:
+        raise PermissionDenied("One of these bills is not on an account linked to your profile.")
+    if any(not b.revenue_head.payable_online for b in bills):
+        raise ValidationError("One of these charges cannot be paid online.")
+    first = bills[0]
+    payment = OnlinePayment.objects.create(account=first.account, user=user, revenue_head=first.revenue_head,
+                                           amount=q2(sum(b.outstanding for b in bills)), method=method, phone=phone, channel=channel,
+                                           provider=settings.PAYMENT_GATEWAY, created_by=user)
+    payment.bills.set(bills)
+    get_gateway().initiate(payment)
+    return payment
+
+
+def _confirm_bulk(payment, provider_reference):
+    remaining = payment.amount
+    receipts = []
+    for bill in payment.bills.select_related("account", "revenue_head").order_by("due_date", "created_at"):
+        bill.refresh_from_db()
+        part = min(remaining, bill.outstanding)
+        if part <= 0:
+            continue
+        receipts.append(issue_receipt(payment.user, revenue_head=bill.revenue_head, amount=part, account=bill.account, bill=bill, currency=payment.currency,
+                                      method=Receipt.Method.ONLINE, reference=provider_reference or payment.reference, channel=payment.channel,
+                                      payer_name=bill.account.name, description=f"Online payment {payment.reference}"))
+        remaining -= part
+    if remaining > 0:   # a bill was paid at the office meanwhile: the rest stays as credit on the first account
+        receipts.append(issue_receipt(payment.user, revenue_head=payment.revenue_head, amount=remaining, account=payment.account,
+                                      currency=payment.currency, method=Receipt.Method.ONLINE, reference=provider_reference or payment.reference,
+                                      channel=payment.channel, payer_name=payment.account.name, description=f"Online payment {payment.reference} (credit)"))
+    payment.receipts.set(receipts)
+    return receipts[0]
+
+
+# ------------------------------------------------------ letters & certificates
+# kind: (revenue head, offices that issue it, needs one of the resident's stands, days valid, letter number prefix)
+CERTIFICATES = {
+    "RESIDENCE": ("CERT-RES", ("ADMIN",), False, 90, "POR"),
+    "CLEARANCE": ("CERT-CLR", ("FINANCE",), True, 90, "RCC"),
+    "OWNERSHIP": ("CERT-OWN", ("ADMIN", "GROWTH"), True, 180, "SOL"),
+    "CESSION": ("CESSION", ("ADMIN", "GROWTH"), True, None, "CES"),
+    "BURIAL": ("BURIAL", ("SOCIAL",), False, 30, "BUR"),
+}
+
+
+def certificate_offices(kind):
+    return CERTIFICATES[kind][1]
+
+
+def can_issue_certificate(user, cert):
+    return user.has_cap("certificates.issue") and (user.department in CERTIFICATES[cert.kind][1] or user.department == "EXEC")
+
+
+def request_certificate(user, *, kind, property=None, purpose="", address="", ward=None, other_party_name="", other_party_id="", event_date=None,
+                        place="", req_id=None):
+    from .models import CertificateRequest, RevenueHead, Tenancy
+
+    if not user.is_client:
+        raise PermissionDenied("Only residents can request letters and certificates here.")
+    if kind not in CERTIFICATES:
+        raise ValidationError("Choose the letter or certificate you need.")
+    head_code, _offices, needs_property, _days, _prefix = CERTIFICATES[kind]
+    owned = Property.objects.alive().filter(account__portal_users=user)
+    if property is not None and not owned.filter(pk=property.pk).exists():
+        rented = Tenancy.objects.filter(user=user, property=property, is_active=True).exists()
+        if not (kind == "RESIDENCE" and rented):
+            raise PermissionDenied("That stand is not linked to your profile.")
+    if needs_property and property is None:
+        raise ValidationError("Choose the stand.")
+    if kind == "CLEARANCE" and property.account.balance > 0:
+        raise ValidationError(f"Account {property.account.account_number} owes USD {property.account.balance:,.2f}. Pay it first, then ask for the clearance.")
+    if kind == "CESSION" and not (other_party_name and other_party_id):
+        raise ValidationError("Enter the new owner's name and National ID.")
+    if kind == "BURIAL" and not (other_party_name and event_date and place):
+        raise ValidationError("Enter the name of the deceased, the date of death and the cemetery.")
+    if kind == "RESIDENCE" and not (address or property):
+        raise ValidationError("Enter where you live.")
+    account = property.account if property is not None and owned.filter(pk=property.pk).exists() else client_own_account(user)
+    kwargs = {"id": req_id} if req_id else {}
+    c = CertificateRequest.objects.create(kind=kind, user=user, account=account, property=property, applicant_name=user.get_full_name() or user.username,
+                                          national_id=user.national_id, phone=user.phone, address=address or (str(property) if property else ""),
+                                          ward=ward or user.ward, purpose=purpose, other_party_name=other_party_name, other_party_id=other_party_id,
+                                          event_date=event_date or None, place=place, created_by=user, **kwargs)
+    head = RevenueHead.objects.filter(code=head_code, is_active=True).first()
+    if head and head.default_amount > 0:
+        c.fee_bill = Bill.objects.create(account=account, revenue_head=head, amount=head.default_amount, created_by=user,
+                                         description=f"{c.get_kind_display()} {c.reference}", due_date=timezone.localdate() + timezone.timedelta(days=30))
+        c.save(update_fields=["fee_bill", "updated_at"])
+        account.recalculate()
+    else:
+        _certificate_to_office(c)
+    audit.log(AuditLog.Action.CREATE, c, user=user, message=f"Requested {c.get_kind_display()}")
+    return c
+
+
+def _certificate_to_office(c):
+    from .models import CertificateRequest
+
+    c.status = CertificateRequest.Status.PROCESSING
+    c.save(update_fields=["status", "updated_at"])
+    officers = [u for u in User.objects.filter(is_active=True, user_type=User.UserType.STAFF, department__in=CERTIFICATES[c.kind][1])
+                if u.has_cap("certificates.issue")]
+    notify(officers, f"{c.get_kind_display()} to issue: {c.reference}", f"{c.applicant_name} – {c.purpose or c.address}",
+           f"/staff/finance/certificates/{c.pk}/")
+
+
+def settle_certificate_fees(account):
+    from .models import CertificateRequest
+
+    for c in CertificateRequest.objects.alive().filter(account=account, status=CertificateRequest.Status.FEE_DUE, fee_bill__status=Bill.Status.PAID):
+        _certificate_to_office(c)
+
+
+@transaction.atomic
+def certificate_action(user, c, action, note=""):
+    from core.messaging import notify_client
+
+    from .models import CertificateRequest
+
+    if not can_issue_certificate(user, c):
+        raise PermissionDenied("Your office does not issue this letter / certificate.")
+    if c.status != CertificateRequest.Status.PROCESSING:
+        raise ValidationError("Only a request whose fee is paid can be issued or rejected.")
+    _head, _offices, _needs, days, prefix = CERTIFICATES[c.kind]
+    if action == "issue":
+        if c.kind == "CLEARANCE" and c.property.account.balance > 0:
+            raise ValidationError(f"Account {c.property.account.account_number} owes USD {c.property.account.balance:,.2f} – no clearance until it is paid.")
+        c.status, c.number = CertificateRequest.Status.ISSUED, SequenceCounter.next(prefix)
+        c.valid_until = timezone.localdate() + timezone.timedelta(days=days) if days else None
+        subject = f"{c.get_kind_display()} {c.number} is ready"
+        body = "Open it in the app, or collect the signed copy at the council offices."
+    elif action == "reject":
+        if not note:
+            raise ValidationError("Give the reason.")
+        c.status = CertificateRequest.Status.REJECTED
+        subject, body = f"{c.get_kind_display()} {c.reference} not issued", note
+    else:
+        raise ValidationError("Unknown action.")
+    c.decided_by, c.decided_at, c.decision_note = user, timezone.now(), note
+    c.save()
+    notify_client(users=[c.user] if c.user_id else [], phone=c.phone, subject=subject, body=body, account_number=c.account.account_number, sent_by=user)
+    audit.log(AuditLog.Action.APPROVE if action == "issue" else AuditLog.Action.REJECT, c, user=user, message=f"{action}: {note}")
+    return c

@@ -1,0 +1,13 @@
+{% extends "generic/detail.html" %}
+{% block actions %}
+{% if object.status == 'PROCESSING' %}
+<div class="card shadow-sm mb-3"><div class="card-header">Issue or reject</div><div class="card-body">
+{% if object.kind == 'CLEARANCE' and object.property.account.balance > 0 %}<p class="errornote">Account {{ object.property.account.account_number }} owes USD {{ object.property.account.balance }}.</p>{% endif %}
+<form method="post" action="{% url 'finance:certificate_action' object.pk %}">{% csrf_token %}
+<input class="form-control mb-2" name="note" placeholder="Note (required to reject)">
+<button class="btn btn-success" name="action" value="issue">Issue</button>
+<button class="btn btn-outline-danger" name="action" value="reject">Reject</button></form></div></div>
+{% elif object.status == 'ISSUED' %}
+<p><a class="btn btn-primary" href="{% url 'finance:certificate_print' object.pk %}">Print {{ object.get_kind_display|lower }}</a></p>
+{% elif object.status == 'FEE_DUE' %}<p class="small text-muted">Fee not paid yet.</p>{% endif %}
+{% endblock %}

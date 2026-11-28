@@ -277,11 +277,16 @@ class NotificationSerializer(SyncSerializer):
 
 class OnlinePaymentSerializer(SyncSerializer):
     receipt_number = serializers.CharField(source="receipt.number", read_only=True, default="")
+    receipt_numbers = serializers.SerializerMethodField()
 
     class Meta:
         model = OnlinePayment
         fields = _sync_fields(OnlinePayment, ["reference", "account", "bill", "revenue_head", "amount", "currency", "method", "phone", "provider", "status",
-                                              "receipt", "receipt_number", "paid_at"])
+                                              "receipt", "receipt_number", "receipt_numbers", "paid_at"])
+
+    def get_receipt_numbers(self, obj):
+        nums = [r.number for r in obj.receipts.all()] if obj.pk else []
+        return nums or ([obj.receipt.number] if obj.receipt_id else [])
 
 
 # ------------------------------------------------------------- new registers
@@ -772,3 +777,35 @@ class TenancySerializer(SyncSerializer):
         model = Tenancy
         fields = _sync_fields(Tenancy, ["property", "tenant", "tenant_account_number", "stand_number", "location", "area_name", "land_use",
                                         "business_name", "start_date", "end_date", "is_active"])
+
+
+from finance.models import CertificateRequest  # noqa: E402
+
+
+class CertificateSerializer(SyncSerializer):
+    kind_label = serializers.CharField(source="get_kind_display", read_only=True)
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    stand_number = serializers.CharField(source="property.stand_number", read_only=True, default="")
+    property_label = serializers.SerializerMethodField()
+    account_number = serializers.CharField(source="account.account_number", read_only=True)
+    account_balance = serializers.DecimalField(source="account.balance", max_digits=14, decimal_places=2, read_only=True)
+    fee = serializers.DecimalField(source="fee_bill.amount", max_digits=14, decimal_places=2, read_only=True, default=None)
+    fee_paid = serializers.SerializerMethodField()
+    decided_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CertificateRequest
+        fields = _sync_fields(CertificateRequest, ["reference", "number", "kind", "kind_label", "user", "account", "account_number", "account_balance",
+                                                   "property", "stand_number", "property_label", "applicant_name", "national_id", "phone", "address",
+                                                   "ward", "purpose", "other_party_name", "other_party_id", "event_date", "place", "fee_bill", "fee",
+                                                   "fee_paid", "status", "status_label", "decided_by_name", "decided_at", "decision_note", "valid_until",
+                                                   "created_at"])
+
+    def get_property_label(self, obj):
+        return str(obj.property) if obj.property_id else ""
+
+    def get_fee_paid(self, obj):
+        return bool(obj.fee_bill_id and obj.fee_bill.status == "PAID")
+
+    def get_decided_by_name(self, obj):
+        return obj.decided_by.get_full_name() if obj.decided_by_id else ""

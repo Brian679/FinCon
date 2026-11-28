@@ -63,6 +63,11 @@ sealed interface CScreen {
     data object ApplyPermit : CScreen
     data object Notices : CScreen
     data object Accounts : CScreen
+    data class PayBills(val ids: List<String>) : CScreen
+    data object Statements : CScreen
+    data object Certificates : CScreen
+    data object RequestCertificate : CScreen
+    data class CertificateView(val id: String) : CScreen
 }
 
 class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false,
@@ -87,8 +92,7 @@ fun ClientApp(sdk: CouncilSdk) {
         var registering by remember { mutableStateOf(false) }
         if (user == null) {
             if (registering) RegisterScreen(sdk) { registering = false }
-            else LoginScreen(sdk, "Pay rates & levies · licences · report problems",
-                "Your information is kept private and confidential (Client Charter).", onRegister = { registering = true })
+            else LoginScreen(sdk, "", "", onRegister = { registering = true })
             return@CouncilTheme
         }
         val nav = remember(user.username) { Navigator<CScreen>(CScreen.Home) }
@@ -115,6 +119,7 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false, menuOpen: Boolean = fa
         items = listOf(
             ProfileItem("Notifications", n) { ctx.go(CScreen.Notifications) },
             ProfileItem("Link a council account") { ctx.go(CScreen.LinkAccount) },
+            ProfileItem("Statements") { ctx.go(CScreen.Statements) },
             ProfileItem("Client Charter") { ctx.go(CScreen.Charter) },
             ProfileItem("Change password") { ctx.go(CScreen.ChangePassword) },
             ProfileItem("Sync status", ctx.pending.toInt()) { ctx.go(CScreen.SyncCentre) },
@@ -191,5 +196,10 @@ private fun ClientScreens(ctx: CCtx) {
         CScreen.ApplyPermit -> ApplyPermitScreen(ctx)
         CScreen.Notices -> NoticesScreen(ctx)
         CScreen.Accounts -> AccountsScreen(ctx)
+        is CScreen.PayBills -> PayBillsScreen(ctx, s.ids)
+        CScreen.Statements -> StatementsScreen(ctx)
+        CScreen.Certificates -> CertificatesScreen(ctx)
+        CScreen.RequestCertificate -> RequestCertificateScreen(ctx)
+        is CScreen.CertificateView -> CertificateViewScreen(ctx, s.id)
     }
 }

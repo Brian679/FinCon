@@ -84,6 +84,7 @@ fun CouncilMenu(ctx: Ctx) {
         add(Tile("Service requests / faults", Screen.Requests, overdueFaults, Screen.NewRequest))
         add(Tile("ICT support", Screen.Tickets, add = Screen.NewTicket))
         if (me.can("leave.approve")) add(Tile("Leave applications to approve", Screen.Leave))
+        if (me.can("certificates.issue")) add(Tile("Letters & certificates to issue", Screen.Certificates))
         if (me.can("resolutions.update") && !me.can("meetings.view")) add(Tile("Council resolutions for the department", Screen.Resolutions))
     }
     fun reg(label: String, key: String, cap: String) = Tile(label, Screen.Register(key), add = if (me.can(cap)) (REGISTERS[key]?.newScreen ?: Screen.RegisterForm(key, null)) else null)

@@ -1144,3 +1144,54 @@ class OffenceEdit(GenericUpdateView):
 
     def get_success_url(self):
         return reverse("finance:offences")
+
+
+# ------------------------------------------------------ letters & certificates
+from .models import CertificateRequest  # noqa: E402
+
+
+def _office_certificates(user, qs):
+    if user.department == "EXEC" or user.sees_all_departments():
+        return qs
+    return qs.filter(kind__in=[k for k, v in services.CERTIFICATES.items() if user.department in v[1]])
+
+
+class CertificateList(GenericListView):
+    model = CertificateRequest
+    required_caps = ("certificates.issue",)
+    title = "Letters & certificates requested by residents"
+    columns = [("Ref.", "reference"), ("Requested", "created_at"), ("Kind", "kind"), ("Applicant", "applicant_name"), ("Stand", "property"),
+               ("Purpose", "purpose"), ("No.", "number"), ("Status", "status")]
+    search_fields = ["reference", "number", "applicant_name", "national_id", "property__stand_number"]
+    detail_url_name = "finance:certificate"
+
+    def scope(self, qs):
+        return _office_certificates(self.request.user, qs)
+
+
+class CertificateDetail(GenericDetailView):
+    model = CertificateRequest
+    required_caps = ("certificates.issue",)
+    template_name = "finance/certificate_detail.html"
+    fields = [("Kind", "kind"), ("Applicant", "applicant_name"), ("National ID", "national_id"), ("Phone", "phone"), ("Address", "address"),
+              ("Ward", "ward"), ("Stand", "property"), ("Account", "account"), ("Purpose", "purpose"), ("New owner / deceased", "other_party_name"),
+              ("Their National ID", "other_party_id"), ("Date (death / sale)", "event_date"), ("Cemetery", "place"), ("Fee", "fee_bill"),
+              ("Certificate no.", "number"), ("Valid until", "valid_until"), ("Decided by", "decided_by"), ("Decision note", "decision_note")]
+
+    def scope(self, qs):
+        return _office_certificates(self.request.user, qs)
+
+
+@cap_required("certificates.issue")
+@require_POST
+def certificate_action(request, pk):
+    c = get_object_or_404(_office_certificates(request.user, CertificateRequest.objects.all()), pk=pk)
+    run_action(request, services.certificate_action, request.user, c, request.POST.get("action"), note=request.POST.get("note", ""),
+               success="Done – the resident has been notified.")
+    return redirect("finance:certificate", pk=pk)
+
+
+@cap_required("certificates.issue")
+def certificate_print(request, pk):
+    c = get_object_or_404(_office_certificates(request.user, CertificateRequest.objects.all()), pk=pk, status=CertificateRequest.Status.ISSUED)
+    return render(request, "finance/certificate_print.html", {"c": c})

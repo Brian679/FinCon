@@ -1,0 +1,34 @@
+{% extends "base.html" %}{% load static %}
+{% block content %}
+<div class="card mx-auto shadow" style="max-width:760px"><div class="card-body p-5" style="border:6px double #1f7a3a">
+<div class="text-center"><img src="{% static 'img/logo.svg' %}" width="80" alt="">
+<h1 class="h4 mt-2">{{ COUNCIL.NAME|upper }}</h1>
+<p class="small">858 E.D. Mnangagwa Street · P.O. Box 19, Chipinge · +263 227 204 5631-5</p>
+<h2 class="h4 my-3">{{ c.get_kind_display|upper }}</h2></div>
+<p class="text-end">No. <strong>{{ c.number }}</strong><br>{{ c.decided_at|date:"d F Y" }}</p>
+<p>TO WHOM IT MAY CONCERN</p>
+{% if c.kind == 'RESIDENCE' %}
+<p>This is to confirm that <strong>{{ c.applicant_name }}</strong>, National ID <strong>{{ c.national_id }}</strong>, resides at
+<strong>{{ c.address }}</strong>{% if c.ward %}, Ward {{ c.ward }}{% endif %}, within the area of Chipinge Rural District Council.</p>
+{% if c.purpose %}<p>This letter is issued for: {{ c.purpose }}.</p>{% endif %}
+{% elif c.kind == 'CLEARANCE' %}
+<p>This is to certify that all rates, levies and charges due to Chipinge Rural District Council on <strong>{{ c.property }}</strong>,
+account <strong>{{ c.account.account_number }}</strong> in the name of <strong>{{ c.property.account.name }}</strong>, have been paid up to the date of this certificate.</p>
+{% if c.purpose %}<p>Purpose: {{ c.purpose }}.</p>{% endif %}
+{% elif c.kind == 'OWNERSHIP' %}
+<p>This is to confirm that <strong>{{ c.property }}</strong> is registered with Chipinge Rural District Council in the name of
+<strong>{{ c.property.account.name }}</strong> (account {{ c.property.account.account_number }}).</p>
+{% if c.purpose %}<p>Purpose: {{ c.purpose }}.</p>{% endif %}
+{% elif c.kind == 'CESSION' %}
+<p>Chipinge Rural District Council has approved the cession (transfer) of <strong>{{ c.property }}</strong> from
+<strong>{{ c.property.account.name }}</strong> to <strong>{{ c.other_party_name }}</strong>, National ID <strong>{{ c.other_party_id }}</strong>{% if c.event_date %}, following the agreement of sale dated {{ c.event_date|date:"d F Y" }}{% endif %}.</p>
+{% elif c.kind == 'BURIAL' %}
+<p>Permission is granted for the burial of <strong>{{ c.other_party_name }}</strong>{% if c.other_party_id %} (National ID {{ c.other_party_id }}){% endif %},
+who died on <strong>{{ c.event_date|date:"d F Y" }}</strong>, at <strong>{{ c.place }}</strong>. Applicant: {{ c.applicant_name }}, National ID {{ c.national_id }}.</p>
+{% endif %}
+{% if c.valid_until %}<p>Valid until <strong>{{ c.valid_until|date:"d F Y" }}</strong>.</p>{% endif %}
+<div class="row mt-5"><div class="col"><hr>{{ c.decided_by.get_full_name }}<br><small>{{ c.decided_by.get_role_display }}</small></div><div class="col"><hr>Council stamp</div></div>
+<p class="small mt-4 text-muted">Verify with the council quoting number {{ c.number }}.</p>
+</div></div>
+<div class="text-center mt-3 no-print"><button class="btn btn-primary" onclick="window.print()">Print</button></div>
+{% endblock %}

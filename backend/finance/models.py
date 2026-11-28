@@ -753,6 +753,9 @@ class OnlinePayment(SyncModel):
     poll_url = models.URLField(blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING, db_index=True)
     receipt = models.OneToOneField(Receipt, null=True, blank=True, on_delete=models.PROTECT, related_name="online_payment")
+    # "Pay everything": one mobile-money prompt for several bills (even on different accounts) – a receipt is issued per bill.
+    bills = models.ManyToManyField(Bill, blank=True, related_name="batch_payments")
+    receipts = models.ManyToManyField(Receipt, blank=True, related_name="batch_payments")
     channel = models.CharField(max_length=10, choices=Receipt.Channel.choices, default=Receipt.Channel.PORTAL)
     paid_at = models.DateTimeField(null=True, blank=True)
 
@@ -925,3 +928,57 @@ class Tenancy(SyncModel):
 
     def __str__(self):
         return f"{self.tenant.name} renting {self.property}"
+
+
+class CertificateRequest(SyncModel):
+    """Letters and certificates residents ask the council for: proof of residence, rates clearance (needed to sell or
+    transfer a stand), stand ownership confirmation, cession (transfer) of a stand and burial orders.
+
+    The fee is billed to the resident's account; once it is paid the request goes to the office that issues it."""
+
+    class Kind(models.TextChoices):
+        RESIDENCE = "RESIDENCE", "Proof of residence letter"
+        CLEARANCE = "CLEARANCE", "Rates clearance certificate"
+        OWNERSHIP = "OWNERSHIP", "Stand ownership confirmation letter"
+        CESSION = "CESSION", "Transfer (cession) of a stand"
+        BURIAL = "BURIAL", "Burial order"
+
+    class Status(models.TextChoices):
+        FEE_DUE = "FEE_DUE", "Fee to pay"
+        PROCESSING = "PROCESSING", "Being processed"
+        ISSUED = "ISSUED", "Issued"
+        REJECTED = "REJECTED", "Rejected"
+
+    reference = models.CharField(max_length=30, unique=True, editable=False)
+    number = models.CharField(max_length=30, blank=True, help_text="Certificate / letter number, given when issued")
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="certificate_requests")
+    account = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="certificate_requests")
+    property = models.ForeignKey(Property, null=True, blank=True, on_delete=models.PROTECT, related_name="certificate_requests")
+    applicant_name = models.CharField(max_length=200)
+    national_id = models.CharField(max_length=30, blank=True)
+    phone = models.CharField(max_length=30, blank=True)
+    address = models.CharField(max_length=255, blank=True, help_text="Where the applicant lives (village / stand / street)")
+    ward = models.PositiveSmallIntegerField(null=True, blank=True)
+    purpose = models.CharField(max_length=255, blank=True, help_text="What the letter is for (bank, school, passport, sale …)")
+    other_party_name = models.CharField(max_length=200, blank=True, help_text="New owner (cession) or deceased (burial order)")
+    other_party_id = models.CharField(max_length=30, blank=True)
+    event_date = models.DateField(null=True, blank=True, help_text="Date of death (burial order) or of the sale (cession)")
+    place = models.CharField(max_length=200, blank=True, help_text="Cemetery (burial order)")
+    fee_bill = models.ForeignKey("Bill", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.FEE_DUE, db_index=True)
+    decided_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True)
+    valid_until = models.DateField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.reference} {self.get_kind_display()} – {self.applicant_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            self.reference = SequenceCounter.next("CRT")
+        super().save(*args, **kwargs)

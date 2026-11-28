@@ -108,6 +108,7 @@ def staff_entities(user):
         "complaints": (wf.complaint_scope(user, Complaint.objects.all()), s.ComplaintSerializer),
         "service_requests": (wf.request_scope(user, ServiceRequest.objects.all()), s.ServiceRequestSerializer),
         "stands": (StandApplication.objects.all(), s.StandApplicationSerializer) if c("stands.view") else None,
+        "certificates": (_certificates_for_office(user), s.CertificateSerializer) if c("certificates.issue") else None,
         "projects": (Project.objects.all(), s.ProjectSerializer) if c("projects.view") else None,
         "audit_findings": (_finding_scope(user), s.AuditFindingSerializer) if _finding_scope(user) is not None else None,
         "leave": (_leave_scope(user).select_related("employee"), s.LeaveRequestSerializer),
@@ -228,7 +229,17 @@ def client_entities(user):
         "resource_permits": (s.sm.ResourcePermit.objects.filter(holder__in=accounts).prefetch_related("extractions"), s.PermitSerializer),
         "public_notices": (_public_notices(user), s.NoticeSerializer),
         "tenancies": (s.Tenancy.objects.filter(tenant__in=accounts).select_related("property__area", "tenant"), s.TenancySerializer),
+        "certificates": (s.CertificateRequest.objects.filter(user=user).select_related("property", "fee_bill", "account"), s.CertificateSerializer),
     }
+
+
+def _certificates_for_office(user):
+    """Requests this officer's office issues (the CEO sees them all)."""
+    qs = s.CertificateRequest.objects.select_related("property", "fee_bill", "account")
+    if user.department == "EXEC":
+        return qs
+    kinds = [k for k, v in fin.CERTIFICATES.items() if user.department in v[1]]
+    return qs.filter(kind__in=kinds)
 
 
 def _public_notices(user):
@@ -883,6 +894,7 @@ def op_record_action(user, p):
 
 
 STAFF_OPS = {
+    "certificate.action": lambda user, p: op_certificate_action(user, p),
     "work.action": op_work_action,
     "record.action": op_record_action,
     "register.save": op_register_save,
@@ -966,7 +978,21 @@ def op_client_permit_apply(user, p):
     return "resource_permits", s.PermitSerializer(permit).data
 
 
+def op_certificate_request(user, p):
+    prop = _get(Property, p["property"]) if p.get("property") else None
+    c = fin.request_certificate(user, kind=p.get("kind", ""), property=prop, purpose=p.get("purpose", ""), address=p.get("address", ""),
+                                ward=p.get("ward") or None, other_party_name=p.get("other_party_name", ""), other_party_id=p.get("other_party_id", ""),
+                                event_date=parse_date(p["event_date"]) if p.get("event_date") else None, place=p.get("place", ""), req_id=p.get("id"))
+    return "certificates", s.CertificateSerializer(c).data
+
+
+def op_certificate_action(user, p):
+    c = fin.certificate_action(user, _get(s.CertificateRequest, p["certificate"]), p.get("action", ""), note=p.get("note", ""))
+    return "certificates", s.CertificateSerializer(c).data
+
+
 CLIENT_OPS = {
+    "certificate.request": op_certificate_request,
     "permit.apply": op_client_permit_apply,
     "claim.create": op_claim_create,
     "plan.create": op_plan_create,

@@ -278,6 +278,11 @@ ROLE_CAPS = {
        "growth.manage", "reminders.send", "messages.view"},
 }
 
+# Letters & certificates for residents: each office issues its own kind (see finance.services.CERTIFICATES).
+for _role in ("TREASURER", "ACCOUNTANT", "REVENUE_CLERK", "ADMIN_OFFICER", "LAND_OFFICER", "RECORDS_CLERK", "RECEPTIONIST", "SOCIAL_HEAD",
+              "HEALTH_OFFICER", "GROWTH_POINT_MANAGER", "CEO"):
+    ROLE_CAPS[_role] = set(ROLE_CAPS[_role]) | {"certificates.issue"}
+
 CLIENT_CAPS = {"portal.use"}
 
 

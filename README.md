@@ -284,3 +284,15 @@ docs/            client charter photo
 * **Stand applications**: a resident applies, pays the waiting-list fee (revenue head `STAND-APP`), is given a waiting-list number,
   and is notified (app + SMS) when a stand is allocated; the deposit, if billed, is paid from the same screen.
 
+
+### Residents' app: bills, places and letters
+
+* **My bills** shows every place the resident is connected to – houses, shops, farms, rented places, council leases – with the
+  bills on each (rates, levies, farm levy, licence, rent), plus fines and other charges. One bill, one place, or **everything at
+  once** can be paid with a single mobile-money prompt (`POST /api/v1/payments/` with `bills: [...]`); a receipt is issued per bill.
+* **Statements**: each account's bills and payments in date order with the running balance.
+* **Letters & certificates**: proof of residence (Administration), rates clearance (Finance – refused while the stand owes),
+  stand ownership confirmation and cession (Administration / Growth Points), burial order (Social Services). The fee is billed
+  to the resident; once paid the request goes to the issuing office (web: *Letters & certificates to issue*, council app tile),
+  which issues it with a number and validity, and the resident opens the letter in the app.
+* Demo resident with several places: `tsitsi` / `Chipinge@2026`.

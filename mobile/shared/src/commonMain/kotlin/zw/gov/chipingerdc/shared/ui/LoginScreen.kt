@@ -49,7 +49,7 @@ fun LoginScreen(sdk: CouncilSdk, subtitle: String, footer: String, onRegister: (
                 modifier = Modifier.fillMaxWidth().background(CrdcColors.Green).padding(horizontal = 18.dp, vertical = 16.dp))
             Box(Modifier.fillMaxWidth().height(3.dp).background(CrdcColors.Gold))
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text(subtitle, color = CrdcColors.Muted, fontSize = 13.sp)
+                if (subtitle.isNotBlank()) Text(subtitle, color = CrdcColors.Muted, fontSize = 13.sp)
                 if (error != null) Message(error!!, MessageKind.ERROR)
                 Field("Username", username, { username = it })
                 Field("Password", password, { password = it }, password = true)
@@ -67,7 +67,7 @@ fun LoginScreen(sdk: CouncilSdk, subtitle: String, footer: String, onRegister: (
                     modifier = Modifier.clickable { showServer = !showServer })
                 if (onRegister != null) Text("No account yet? Create one – it is free", color = CrdcColors.Blue, fontSize = 13.sp,
                     modifier = Modifier.clickable { onRegister() })
-                Text(footer, color = CrdcColors.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                if (footer.isNotBlank()) Text(footer, color = CrdcColors.Muted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
             }
         }
     }

@@ -96,6 +96,11 @@ REVENUE_HEADS = [
     ("WATER", "Water & sanitation charges", "WATER", 0, "MONTHLY", "I-140"),
     ("STAND", "Stand purchase instalment", "LAND", 0, "ONCE", "I-150"),
     ("STAND-APP", "Stand application / waiting-list fee", "LAND", 20, "ONCE", "I-150"),
+    ("CERT-RES", "Proof of residence letter", "FEES", 5, "ONCE", "I-130"),
+    ("CERT-CLR", "Rates clearance certificate", "FEES", 10, "ONCE", "I-130"),
+    ("CERT-OWN", "Stand ownership confirmation letter", "FEES", 10, "ONCE", "I-130"),
+    ("CESSION", "Cession (transfer) fee", "LAND", 50, "ONCE", "I-150"),
+    ("BURIAL", "Burial order / cemetery fee", "FEES", 10, "ONCE", "I-130"),
     ("FINES", "By-law fines & penalties", "FINES", 0, "ONCE", "I-130"),
     ("PENALTY", "Late payment penalties", "FINES", 0, "ONCE", "I-130"),
     ("TROPHY", "CAMPFIRE trophy fees", "FEES", 0, "ONCE", "I-130"),
@@ -333,6 +338,48 @@ class Command(BaseCommand):
         self._demo_social(u)
         self._demo_charter_registers(u)
         self._demo_admin(u)
+        self._demo_many_places(u)
+
+    def _demo_many_places(self, u):
+        """A resident with several places on two accounts: her house, two shops (one through her company), a farm and a fine –
+        all owed in one list in the app and paid at once. She also asks for a proof-of-residence letter (illustrative only)."""
+        from datetime import timedelta
+
+        from finance import services as fin
+        from finance.models import Bill, ClientAccount as Acc, Offence, Property, RevenueHead
+
+        User = get_user_model()
+        if Property.objects.filter(stand_number="C21").exists():
+            return
+        tsitsi, _ = User.objects.get_or_create(username="tsitsi", defaults=dict(first_name="Tsitsi", last_name="Mapfumo", phone="0716000555",
+                                                                               national_id="63-445566M63", user_type=User.UserType.CLIENT, ward=3))
+        tsitsi.set_password("Chipinge@2026")
+        tsitsi.save()
+        own = Acc.objects.create(name="Tsitsi Mapfumo", account_type="IND", phone="0716000555", id_number="63-445566M63", ward=3)
+        company = Acc.objects.create(name="Mapfumo Hardware (Pvt) Ltd", account_type="BUS", phone="0716000555", id_number="4321/2019", ward=22)
+        for acc in (own, company):
+            acc.portal_users.add(tsitsi)
+        house = Property.objects.create(account=own, stand_number="612", location="Gaza Township", ward=3, land_use="RES",
+                                        monthly_rates=Decimal("18"), valuation=Decimal("18000"))
+        shop = Property.objects.create(account=own, stand_number="C21", location="Checheche Growth Point", ward=22, land_use="COM",
+                                       monthly_rates=Decimal("40"), valuation=Decimal("40000"), business_name="Tsitsi's Tuck Shop")
+        farm = Property.objects.create(account=own, stand_number="CB-F15", location="Chibuwe farms", ward=25, land_use="AGR", hectares=Decimal("25"))
+        hardware = Property.objects.create(account=company, stand_number="B20", location="Checheche Growth Point", ward=22, land_use="COM",
+                                           monthly_rates=Decimal("55"), valuation=Decimal("55000"), business_name="Mapfumo Hardware")
+        today = timezone.localdate()
+        period, due = f"{today.year:04d}-{today.month:02d}", today + timedelta(days=21)
+        heads = {h.code: h for h in RevenueHead.objects.filter(code__in=["RATES", "DEV-LEVY", "FARM-LEVY", "LIC-SHOP"])}
+        for prop, head, amount, what in ((house, "RATES", 18, "Rates"), (shop, "RATES", 40, "Rates"), (hardware, "RATES", 55, "Rates"),
+                                         (shop, "DEV-LEVY", 5, "Development levy"), (hardware, "DEV-LEVY", 5, "Development levy"),
+                                         (farm, "FARM-LEVY", 125, "Farm levy (25 ha × $5)"), (hardware, "LIC-SHOP", 60, "Shop licence")):
+            Bill.objects.create(account=prop.account, property=prop, revenue_head=heads[head], amount=Decimal(amount),
+                                period=period if head == "RATES" else str(today.year), description=f"{what} – {prop}", due_date=due,
+                                created_by=u["treasurer"])
+        fin.issue_fine(u["collector"], offence=Offence.objects.get(code="TRF-01"), offender_name="Tsitsi Mapfumo", account=own, phone="0716000555",
+                       location="Chipinge CBD – loading bay", vehicle_reg="AEZ 4412")
+        for acc in (own, company):
+            acc.recalculate()
+        fin.request_certificate(tsitsi, kind="RESIDENCE", property=house, purpose="Opening a bank account")
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""
