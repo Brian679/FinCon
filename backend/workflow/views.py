@@ -234,7 +234,7 @@ def letter_detail(request, pk):
             ("Notes", c.routing_note), ("Reply due", f"{timezone.localtime(c.response_due):%d %b %Y}" if c.response_due else ""), ("Reply", c.response_summary), ("File reference", c.file_reference)]
     return render(request, "workflow/letter_detail.html", {
         "object": c, "title": f"Letter {c.reference}", "status_text": c.get_status_display(), "status_badge": "secondary",
-        "field_rows": [(k, v) for k, v in rows if v not in (None, "")], "files": att.for_object("correspondence", c), "attach_kind": "correspondence",
+        "field_rows": [(k, v) for k, v in rows if v not in (None, "")], "files": att.for_object("correspondence", c), "attach_kind": "correspondence", "files_title": "Scanned letter",
         "can_attach": att.can_attach(u, "correspondence", c), "can_route": can_route and c.status not in ("FILED", "RESPONDED"),
         "departments": Department.choices, "staff": forms.staff_queryset(), "kinds": att.Attachment.Kind.choices})
 

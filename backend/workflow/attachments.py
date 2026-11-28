@@ -35,7 +35,8 @@ def can_attach(user, kind, obj):
         return False
     if kind == "funds":
         return obj.requested_by_id == user.pk or user.has_cap("procurement.order", "voucher.prepare", "funds.accountant_approve")
-    return True
+    # letters: reception / registry scan them; the people the letter is sent to only read the scan
+    return user.has_cap("correspondence.manage")
 
 
 def add(user, kind, obj, upload, file_kind="", name=""):

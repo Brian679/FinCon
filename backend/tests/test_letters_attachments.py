@@ -222,3 +222,14 @@ class WebPagesTests(CouncilTestCase):
         w.post(f"/staff/funds/{req.pk}/action/", {"action": "confirm", "comment": "Fitted"})
         req.refresh_from_db()
         self.assertEqual(req.status, FundsRequest.Status.PENDING_PAYMENT)
+
+
+@override_settings(MEDIA_ROOT=MEDIA)
+class ScanIsReadOnlyForRecipientTests(CouncilTestCase):
+    def test_ceo_reads_the_scan_but_cannot_add_files(self):
+        c = wf.log_correspondence(self.user("reception"), sender="ZESA", subject="Outage", department="EXEC", addressed_to=self.user("ceo"))
+        att.add(self.user("reception"), "correspondence", c, pdf())
+        self.assertTrue(att.can_view(self.user("ceo"), "correspondence", c))
+        self.assertFalse(att.can_attach(self.user("ceo"), "correspondence", c))
+        with self.assertRaises(PermissionDenied):
+            att.add(self.user("ceo"), "correspondence", c, pdf())

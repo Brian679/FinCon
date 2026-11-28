@@ -91,7 +91,7 @@ fun FilesCard(sdk: CouncilSdk, targetType: String, targetId: String, files: List
     val camera = rememberCameraCapture { send(it) }
     val picker = rememberFilePicker { send(it) }
     SectionCard(title) {
-        if (files.isEmpty()) Empty("No files.")
+        if (files.isEmpty()) Empty(if (targetType == "correspondence") "No scan." else "No files.")
         files.forEach { f ->
             Column(Modifier.fillMaxWidth().bottomRule().clickable {
                 scope.launch {
@@ -106,7 +106,7 @@ fun FilesCard(sdk: CouncilSdk, targetType: String, targetId: String, files: List
         }
         msg?.let { InfoBox(it.first, if (it.second) CrdcColors.Success else CrdcColors.Danger) }
         if (canAttach) {
-            ChoicePicker("Type of file", FILE_KINDS, kind) { kind = it }
+            if (targetType != "correspondence") ChoicePicker("Type of file", FILE_KINDS, kind) { kind = it }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { PrimaryButton("Scan with camera", onClick = { camera() }, busy = busy) }
                 androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { SecondaryButton("Attach file", { picker() }) }
@@ -198,7 +198,7 @@ fun LetterDetailScreen(ctx: Ctx, id: String) {
                 if (c.routingNote.isNotBlank()) KeyValue("Notes", c.routingNote)
                 if (c.responseSummary.isNotBlank()) KeyValue("Reply", c.responseSummary)
             }
-            FilesCard(ctx.sdk, "correspondence", c.id, c.attachments, c.localNote == null, "SCAN", "Scanned letter")
+            FilesCard(ctx.sdk, "correspondence", c.id, c.attachments, c.localNote == null && me.can("correspondence.manage"), "SCAN", "Scanned letter")
             if (canRoute) {
                 ActionPanel("Give to a department as a task", listOf(
                     FieldSpec("department", "Department", "choice", Choices.departments, c.department.takeIf { it != "EXEC" } ?: "TECH"),
