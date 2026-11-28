@@ -29,9 +29,4 @@ urlpatterns = [
     path("water/new/", v.WaterNew.as_view(), name="water_new"),
     path("water/<uuid:pk>/", v.WaterDetail.as_view(), name="water"),
     path("water/<uuid:pk>/edit/", v.WaterEdit.as_view(), name="water_edit"),
-    path("welfare/", v.BeneficiaryList.as_view(), name="beneficiaries"),
-    path("welfare/new/", v.BeneficiaryNew.as_view(), name="beneficiary_new"),
-    path("welfare/<uuid:pk>/", v.BeneficiaryDetail.as_view(), name="beneficiary"),
-    path("welfare/<uuid:pk>/edit/", v.BeneficiaryEdit.as_view(), name="beneficiary_edit"),
-    path("welfare/<uuid:pk>/action/", v.beneficiary_action, name="beneficiary_action"),
 ]

@@ -26,7 +26,7 @@ def _registers():
         ("Administration", [("Staff", User.objects.filter(user_type="STAFF")), ("Registry files", dm.RecordFile), ("Land parcels", dm.LandParcel),
                             ("Assets", dm.Asset), ("Stakeholder meetings", dm.Engagement), ("Public notices", dm.PublicNotice)]),
         ("Social Services", [("Farms", sm.Farm), ("Wildlife records", sm.WildlifeRecord), ("Resource permits", sm.ResourcePermit),
-                             ("Water points", sm.WaterPoint), ("Health inspections", sm.HealthInspection), ("Welfare households", sm.Beneficiary)]),
+                             ("Water points", sm.WaterPoint), ("Health inspections", sm.HealthInspection)]),
         ("Technical Services", [("Roads", dm.Road), ("Public lights", dm.PublicLight), ("Work orders", dm.WorkOrder), ("Projects", dm.Project)]),
         ("Growth Points", [("Stand applications", dm.StandApplication)]),
         ("Customer care", [("Complaints", wm.Complaint), ("Service requests / faults", wm.ServiceRequest)]),

@@ -153,7 +153,7 @@ def staff_entities(user):
         "correspondence": ((s.Correspondence.objects.select_related("assigned_to") if c("correspondence.manage") or user.sees_all_departments()
                             else s.Correspondence.objects.filter(Q(department=user.department) | Q(assigned_to=user)).select_related("assigned_to")),
                            s.CorrespondenceSerializer) if (c("correspondence.manage") or user.is_head) else None,
-        # fines & Social Services registers (CAMPFIRE, natural resources, farms, water, welfare)
+        # fines & Social Services registers (CAMPFIRE, natural resources, farms, water)
         "offences": (s.Offence.objects.all(), s.OffenceSerializer) if c("fines.issue", "fines.view") else None,
         "fines": (_fine_scope(user), s.FineSerializer) if c("fines.issue", "fines.view") else None,
         "wildlife": (s.sm.WildlifeRecord.objects.select_related("recorded_by"), s.WildlifeSerializer) if c("wildlife.view", "wildlife.manage") else None,
@@ -164,7 +164,6 @@ def staff_entities(user):
                              s.PermitSerializer) if c("permits.view", "permits.manage") else None,
         "farms": (s.sm.Farm.objects.select_related("owner"), s.FarmSerializer) if c("farms.view", "farms.manage") else None,
         "water_points": (s.sm.WaterPoint.objects.all(), s.WaterPointSerializer) if c("water.view", "water.manage") else None,
-        "beneficiaries": (s.sm.Beneficiary.objects.prefetch_related("assistance"), s.BeneficiarySerializer) if c("welfare.view", "welfare.manage") else None,
         # charter registers per department
         "roads": (s.dm.Road.objects.all(), s.RoadSerializer) if c("roads.view", "roads.manage") else None,
         "public_lights": (s.dm.PublicLight.objects.all(), s.LightSerializer) if c("lighting.view", "lighting.manage") else None,
@@ -232,7 +231,6 @@ def client_entities(user):
         "public_notices": (_public_notices(user), s.NoticeSerializer),
         "tenancies": (s.Tenancy.objects.filter(tenant__in=accounts).select_related("property__area", "tenant"), s.TenancySerializer),
         "certificates": (s.CertificateRequest.objects.filter(user=user).select_related("property", "fee_bill", "account"), s.CertificateSerializer),
-        "beneficiaries": (s.sm.Beneficiary.objects.filter(user=user).prefetch_related("assistance"), s.BeneficiarySerializer),
         "stand_beneficiaries": (s.StandBeneficiary.objects.filter(property__in=fin.stands_of(user)).select_related("property__account", "added_by"),
                                 s.StandBeneficiarySerializer),
     }
@@ -802,7 +800,6 @@ def op_register_save(user, p):
         "resource_permits": (sf.PermitForm, s.sm.ResourcePermit, "permits.manage", s.PermitSerializer, lambda o: setattr(o, "applied_by", user)),
         "farms": (sf.FarmForm, s.sm.Farm, "farms.manage", s.FarmSerializer, None),
         "water_points": (sf.WaterPointForm, s.sm.WaterPoint, "water.manage", s.WaterPointSerializer, None),
-        "beneficiaries": (sf.BeneficiaryForm, s.sm.Beneficiary, "welfare.manage", s.BeneficiarySerializer, None),
         "roads": (_regs.form_for("roads"), s.dm.Road, "roads.manage", s.RoadSerializer, None),
         "public_lights": (_regs.form_for("lights"), s.dm.PublicLight, "lighting.manage", s.LightSerializer, None),
         "work_orders": (_regs.form_for("works"), s.dm.WorkOrder, "works.manage", s.WorkOrderSerializer, None),
@@ -876,16 +873,6 @@ def op_extraction_record(user, p):
     return "resource_permits", s.PermitSerializer(permit).data
 
 
-def op_assistance_give(user, p):
-    from social import services as sv
-
-    b = _get(s.sm.Beneficiary, p["beneficiary"])
-    sv.give_assistance(user, b, kind=p["kind"], description=p.get("description", ""), value=p.get("value") or 0, programme=p.get("programme", ""),
-                       assistance_id=p.get("id"))
-    b.refresh_from_db()
-    return "beneficiaries", s.BeneficiarySerializer(b).data
-
-
 def op_work_action(user, p):
     wo = _regs.work_action(user, _get(s.dm.WorkOrder, p["work_order"]), p.get("action"), assigned_to=p.get("assigned_to"), notes=p.get("notes", ""),
                            materials=p.get("materials", ""), labour_days=p.get("labour_days") or None, cost=p.get("cost") or None)
@@ -901,7 +888,6 @@ def op_record_action(user, p):
 STAFF_OPS = {
     "stand_beneficiary.save": lambda user, p: op_stand_beneficiary_save(user, p),
     "stand_beneficiary.remove": lambda user, p: op_stand_beneficiary_remove(user, p),
-    "beneficiary.assess": lambda user, p: op_beneficiary_assess(user, p),
     "certificate.action": lambda user, p: op_certificate_action(user, p),
     "work.action": op_work_action,
     "record.action": op_record_action,
@@ -912,7 +898,6 @@ STAFF_OPS = {
     "hunt.action": op_hunt_action,
     "permit.decide": op_permit_decide,
     "extraction.record": op_extraction_record,
-    "assistance.give": op_assistance_give,
     "licence.apply": op_licence_apply,      # Finance captures applications at the counter / in the field
     "salary.update": op_salary_update,
     "payroll.run": op_payroll_run,
@@ -986,22 +971,6 @@ def op_client_permit_apply(user, p):
     return "resource_permits", s.PermitSerializer(permit).data
 
 
-def op_assistance_apply(user, p):
-    from social import services as sv
-
-    b = sv.apply_for_assistance(user, category=p.get("category", ""), need=p.get("need", ""), village=p.get("village", ""), reason=p.get("reason", ""),
-                                ward=p.get("ward") or None, household_size=p.get("household_size") or 1, children=p.get("children") or 0,
-                                beneficiary_id=p.get("id"))
-    return "beneficiaries", s.BeneficiarySerializer(b).data
-
-
-def op_beneficiary_assess(user, p):
-    from social import services as sv
-
-    b = sv.assess_beneficiary(user, _get(s.sm.Beneficiary, p["beneficiary"]), p.get("action", ""), note=p.get("note", ""))
-    return "beneficiaries", s.BeneficiarySerializer(b).data
-
-
 def op_stand_beneficiary_save(user, p):
     b = fin.save_stand_beneficiary(user, _get(Property, p["property"]), full_name=p.get("full_name", ""), relationship=p.get("relationship", ""),
                                    national_id=p.get("national_id", ""), phone=p.get("phone", ""),
@@ -1034,7 +1003,6 @@ def op_certificate_action(user, p):
 CLIENT_OPS = {
     "stand_beneficiary.save": op_stand_beneficiary_save,
     "stand_beneficiary.remove": op_stand_beneficiary_remove,
-    "assistance.apply": op_assistance_apply,
     "certificate.request": op_certificate_request,
     "permit.apply": op_client_permit_apply,
     "claim.create": op_claim_create,

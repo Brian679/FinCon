@@ -1,6 +1,6 @@
 """Social Services registers: CAMPFIRE (wildlife database, hunting quotas, trophy hunts),
 natural resources management (sand, mining, forestry permits and extraction),
-agricultural farms, water points and social welfare."""
+agricultural farms and water points."""
 from decimal import Decimal
 
 from django.conf import settings
@@ -353,81 +353,6 @@ class WaterPoint(SyncModel):
         if not self.reference:
             self.reference = _ref("WP")
         super().save(*args, **kwargs)
-
-
-# ------------------------------------------------------------- social welfare
-class Beneficiary(SyncModel):
-    class Category(models.TextChoices):
-        ELDERLY = "ELDERLY", "Elderly (no support)"
-        CHILD_HEADED = "CHILD", "Child-headed household"
-        DISABILITY = "DISABLED", "Person with disability"
-        CHRONIC = "CHRONIC", "Chronically ill"
-        DISASTER = "DISASTER", "Disaster-affected household"
-        FOOD_INSECURE = "FOOD", "Food-insecure household"
-        OTHER = "OTHER", "Other vulnerable"
-
-    reference = models.CharField(max_length=30, unique=True, editable=False)
-    name = models.CharField(max_length=150, help_text="Head of household")
-    national_id = models.CharField(max_length=30, blank=True)
-    phone = models.CharField(max_length=20, blank=True)
-    ward = models.PositiveSmallIntegerField(null=True, blank=True)
-    village = models.CharField(max_length=120)
-    household_size = models.PositiveSmallIntegerField(default=1)
-    category = models.CharField(max_length=10, choices=Category.choices)
-    is_active = models.BooleanField(default=True)
-    notes = models.TextField(blank=True)
-    # Residents can apply in the app; a Community Development Officer assesses the household (home visit) and approves.
-    status = models.CharField(max_length=10, choices=[("APPLIED", "Application – to be assessed"), ("APPROVED", "Beneficiary"),
-                                                      ("REJECTED", "Not approved"), ("CLOSED", "No longer supported")],
-                              default="APPROVED", db_index=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="welfare_records",
-                             help_text="The resident's app account, when they applied themselves")
-    need = models.CharField(max_length=10, blank=True, choices=[("FOOD", "Food aid"), ("CASH", "Cash transfer"), ("SCHOOL", "School fees (BEAM)"),
-                                                                ("MEDICAL", "Medical / assisted treatment"), ("SHELTER", "Shelter / building materials"),
-                                                                ("BURIAL", "Pauper burial"), ("OTHER", "Other")], help_text="Help asked for")
-    reason = models.TextField(blank=True, help_text="Why the household needs help (in the applicant's words)")
-    children = models.PositiveSmallIntegerField(default=0, help_text="Children under 18 in the household")
-    assessed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-    assessed_at = models.DateTimeField(null=True, blank=True)
-    assessment_note = models.TextField(blank=True)
-
-    class Meta:
-        ordering = ["ward", "village", "name"]
-        verbose_name_plural = "beneficiaries"
-
-    def __str__(self):
-        return f"{self.reference} {self.name}"
-
-    def save(self, *args, **kwargs):
-        if not self.reference:
-            self.reference = _ref("SW")
-        super().save(*args, **kwargs)
-
-
-class Assistance(SyncModel):
-    class Kind(models.TextChoices):
-        FOOD = "FOOD", "Food aid"
-        CASH = "CASH", "Cash transfer"
-        SCHOOL = "SCHOOL", "School fees (BEAM)"
-        MEDICAL = "MEDICAL", "Medical / assisted treatment"
-        SHELTER = "SHELTER", "Shelter / building materials"
-        BURIAL = "BURIAL", "Pauper burial"
-        OTHER = "OTHER", "Other"
-
-    beneficiary = models.ForeignKey(Beneficiary, on_delete=models.PROTECT, related_name="assistance")
-    date = models.DateField(default=timezone.localdate)
-    kind = models.CharField(max_length=10, choices=Kind.choices)
-    description = models.CharField(max_length=255, help_text="e.g. 50 kg maize, 2 L cooking oil")
-    value = models.DecimalField(**MONEY, default=ZERO, help_text="Value in USD")
-    programme = models.CharField(max_length=120, blank=True, help_text="Donor / programme (e.g. drought relief 2026)")
-    given_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
-
-    class Meta:
-        ordering = ["-date", "-created_at"]
-        verbose_name_plural = "assistance"
-
-    def __str__(self):
-        return f"{self.get_kind_display()} to {self.beneficiary.name} on {self.date}"
 
 
 # ------------------------------------------------------------ public health

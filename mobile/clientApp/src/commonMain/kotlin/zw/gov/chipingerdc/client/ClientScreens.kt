@@ -153,9 +153,6 @@ fun ClientMenu(ctx: CCtx) {
             IndexRow("Proof of residence, rates clearance, cession, burial order", certs.count { it.status == "FEE_DUE" },
                 { ctx.go(CScreen.Certificates) }, { ctx.go(CScreen.RequestCertificate) }),
         ),
-        "Social services" to listOf(
-            IndexRow("Social assistance (food, school fees, medical, shelter)", 0, { ctx.go(CScreen.Welfare) }, { ctx.go(CScreen.ApplyWelfare) }),
-        ),
         "Help & feedback" to listOf(
             IndexRow("Report a problem", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
             IndexRow("Complaints & suggestions", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),

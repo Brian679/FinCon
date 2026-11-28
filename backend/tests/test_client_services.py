@@ -100,36 +100,6 @@ class CertificateTests(CouncilTestCase):
         self.assertEqual(c.account.portal_users.filter(pk=tsitsi.pk).count(), 1)
 
 
-class WelfareTests(CouncilTestCase):
-    def test_apply_assess_and_assist(self):
-        from social import services as sv
-        from social.models import Beneficiary
-
-        tsitsi = User.objects.get(username="tsitsi")
-        res = sync.push(tsitsi, [{"op_id": str(uuid.uuid4()), "type": "assistance.apply", "payload": {
-            "id": str(uuid.uuid4()), "category": "CHRONIC", "need": "MEDICAL", "village": "Gaza", "household_size": 4, "children": 2,
-            "reason": "Dialysis three times a week."}}])[0]
-        self.assertEqual(res["status"], "applied", res)
-        b = Beneficiary.objects.get(pk=res["record"]["id"])
-        self.assertEqual((b.status, b.is_active), ("APPLIED", False))
-        with self.assertRaises(ValidationError):
-            sv.apply_for_assistance(tsitsi, category="CHRONIC", need="MEDICAL", village="Gaza", reason="again")      # one at a time
-        with self.assertRaises(ValidationError):
-            sv.give_assistance(self.user("social.director"), b, kind="MEDICAL", description="x")                     # not approved yet
-        with self.assertRaises(PermissionDenied):
-            sv.assess_beneficiary(self.user("cashier"), b, "approve")
-        res = sync.push(self.user("social.director"), [{"op_id": str(uuid.uuid4()), "type": "beneficiary.assess", "payload": {
-            "beneficiary": str(b.pk), "action": "approve", "note": "Visited"}}])[0]
-        self.assertEqual(res["record"]["status"], "APPROVED", res)
-        b.refresh_from_db()
-        sv.give_assistance(self.user("social.director"), b, kind="MEDICAL", description="Transport to dialysis – November", value="35")
-        ents = sync.entities_for(tsitsi)
-        mine = ents["beneficiaries"][0]
-        self.assertEqual(mine.count(), 1)
-        self.assertEqual(ents["beneficiaries"][1](mine.first()).data["assistance_total"], "35.00")
-        self.assertFalse(sync.entities_for(User.objects.get(username="resident"))["beneficiaries"][0].exists())   # others' records stay private
-
-
 class StandBeneficiaryTests(CouncilTestCase):
     def test_owner_keeps_beneficiaries_council_sees_them_and_letter_for_a_son(self):
         from finance.models import StandBeneficiary

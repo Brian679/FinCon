@@ -102,8 +102,7 @@ class SocialRolesTests(CouncilTestCase):
         self.assertEqual(c.get("/staff/social/facilities/").status_code, 200)
         c.force_login(self.user("eho"))
         self.assertEqual(c.get("/staff/social/inspections/").status_code, 200)
-        self.assertEqual(c.get("/staff/social/welfare/").status_code, 403)
-        self.assertIsNone(sync.staff_entities(self.user("eho"))["beneficiaries"])
+        self.assertEqual(c.get("/staff/social/wildlife/").status_code, 403)
         self.assertIsNone(sync.staff_entities(self.user("social.officer"))["health_inspections"])
         self.assertIn("Social Services", nav_titles(self.user("social.intern"))[0])
 

@@ -58,7 +58,6 @@ object Entities {
     const val RESOURCE_PERMITS = "resource_permits"
     const val FARMS = "farms"
     const val WATER_POINTS = "water_points"
-    const val BENEFICIARIES = "beneficiaries"
     const val ROADS = "roads"
     const val PUBLIC_LIGHTS = "public_lights"
     const val WORK_ORDERS = "work_orders"
@@ -488,11 +487,6 @@ object Choices {
     val claimTypes = listOf("OWNER" to "I own this stand / house", "SHOP" to "I own this stand and run a shop / business on it",
         "RENT" to "I rent this house / shop from its owner", "TENANT" to "I lease these council premises")
     val relationships = listOf("NONE" to "I don't own or rent a stand yet") + claimTypes
-    val welfareCategories = listOf("ELDERLY" to "Elderly person with no support", "CHILD" to "Child-headed household",
-        "DISABLED" to "Person with disability", "CHRONIC" to "Chronically ill", "DISASTER" to "Affected by a disaster (storm, flood, fire)",
-        "FOOD" to "Not enough food", "OTHER" to "Other")
-    val welfareNeeds = listOf("FOOD" to "Food aid", "CASH" to "Cash transfer", "SCHOOL" to "School fees (BEAM)", "MEDICAL" to "Medical / assisted treatment",
-        "SHELTER" to "Shelter / building materials", "BURIAL" to "Pauper burial", "OTHER" to "Other")
     val relationships2 = listOf("CHILD" to "Child (son / daughter)", "SPOUSE" to "Spouse", "PARENT" to "Parent", "SIBLING" to "Brother / sister",
         "RELATIVE" to "Other relative", "DEPENDANT" to "Dependant", "CO_OWNER" to "Co-owner / business partner", "MANAGER" to "Shop manager / employee",
         "HEIR" to "Heir / next of kin", "OTHER" to "Other")

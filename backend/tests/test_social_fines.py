@@ -10,7 +10,7 @@ from api import sync
 from finance import services as fin
 from finance.models import Bill, ClientAccount, Fine, Offence, Property, RevenueHead
 from social import services as sv
-from social.models import Beneficiary, Farm, HuntingQuota, ResourcePermit, TrophyHunt, WaterPoint
+from social.models import Farm, HuntingQuota, ResourcePermit, TrophyHunt, WaterPoint
 
 from .base import CouncilTestCase
 
@@ -114,18 +114,7 @@ class FarmWaterWelfareTests(CouncilTestCase):
         farm.save()
         self.assertEqual(Property.objects.get(pk=farm.property_id).hectares, Decimal("12"))
 
-    def test_welfare_and_sync_ops(self):
-        so = self.user("social.officer")
-        res = sync.push(so, [{"op_id": str(uuid.uuid4()), "type": "register.save",
-                              "payload": {"register": "beneficiaries", "id": str(uuid.uuid4()),
-                                          "fields": {"name": "Gogo Test", "ward": 3, "village": "Rimbi", "household_size": 2, "category": "ELDERLY",
-                                                     "is_active": True}}}])[0]
-        self.assertEqual(res["status"], "applied", res)
-        b = Beneficiary.objects.get(name="Gogo Test")
-        res = sync.push(so, [{"op_id": str(uuid.uuid4()), "type": "assistance.give",
-                              "payload": {"beneficiary": str(b.pk), "kind": "FOOD", "description": "Maize 20 kg", "value": "12"}}])[0]
-        self.assertEqual(res["status"], "applied", res)
-        self.assertEqual(len(res["record"]["assistance"]), 1)
+    def test_registers_are_department_only(self):
         res = sync.push(self.user("cashier"), [{"op_id": str(uuid.uuid4()), "type": "register.save",
                                                 "payload": {"register": "water_points", "fields": {"name": "x", "village": "y"}}}])[0]
         self.assertEqual(res["status"], "rejected")                                              # Finance cannot edit water points
@@ -145,7 +134,7 @@ class FarmWaterWelfareTests(CouncilTestCase):
 class SocialAccessTests(CouncilTestCase):
     def test_pages_and_isolation(self):
         pages = ["/staff/social/wildlife/", "/staff/social/quotas/", "/staff/social/hunts/", "/staff/social/campfire/", "/staff/social/permits/",
-                 "/staff/social/farms/", "/staff/social/water/", "/staff/social/welfare/", "/staff/finance/fines/", "/staff/finance/fines/offences/"]
+                 "/staff/social/farms/", "/staff/social/water/", "/staff/finance/fines/", "/staff/finance/fines/offences/"]
         c = Client()
         c.force_login(self.user("social.director"))
         for url in pages[:-1]:
@@ -155,10 +144,8 @@ class SocialAccessTests(CouncilTestCase):
                 self.assertEqual(c.get(obj_url).status_code, 200, obj_url)
         c.force_login(self.user("engineer"))
         self.assertEqual(c.get("/staff/social/wildlife/").status_code, 403)
-        self.assertEqual(c.get("/staff/social/welfare/").status_code, 403)
         data = sync.staff_entities(self.user("engineer"))
         self.assertIsNone(data["wildlife"])
-        self.assertIsNone(data["beneficiaries"])
         c.force_login(self.user("treasurer"))
         self.assertEqual(c.get("/staff/social/hunts/").status_code, 200)                          # Finance sees trophy fees
         self.assertEqual(c.get("/staff/finance/fines/offences/").status_code, 200)

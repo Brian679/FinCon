@@ -339,29 +339,6 @@ class Command(BaseCommand):
         self._demo_charter_registers(u)
         self._demo_admin(u)
         self._demo_many_places(u)
-        self._demo_welfare_applications(u)
-
-    def _demo_welfare_applications(self, u):
-        """Residents apply for social assistance in the app: one approved and helped, one waiting for the home visit (illustrative)."""
-        from social import services as sv
-
-        User = get_user_model()
-        people = []
-        for username, first, last, phone, nid, ward in (("esther", "Esther", "Sithole", "0717000666", "63-778811E63", 7),
-                                                         ("tendai.m", "Tendai", "Moyo", "0718000777", "63-889922T63", 12)):
-            p, _ = User.objects.get_or_create(username=username, defaults=dict(first_name=first, last_name=last, phone=phone, national_id=nid,
-                                                                               user_type=User.UserType.CLIENT, ward=ward))
-            p.set_password("Chipinge@2026")
-            p.save()
-            people.append(p)
-        officer = User.objects.filter(role="SOCIAL_OFFICER").first() or u["social.director"]
-        esther = sv.apply_for_assistance(people[0], category="ELDERLY", need="FOOD", village="Mutema, Chief Mutema area", ward=7, household_size=3,
-                                         children=2, reason="I am 74 and look after two grandchildren. No income since my son died.")
-        sv.assess_beneficiary(officer, esther, "approve", note="Home visit done – no income, two school-going grandchildren.")
-        sv.give_assistance(officer, esther, kind="FOOD", description="50 kg maize meal, 2 L cooking oil, 2 kg beans", value="42", programme="Drought relief 2026")
-        sv.give_assistance(officer, esther, kind="SCHOOL", description="Term 1 school fees – 2 children (BEAM)", value="60", programme="BEAM 2026")
-        sv.apply_for_assistance(people[1], category="DISASTER", need="SHELTER", village="Chisumbanje, Ward 12", ward=12, household_size=6, children=4,
-                                reason="Our house was destroyed by the storm on 20 November. We are staying with neighbours.")
 
     def _demo_many_places(self, u):
         """A resident with several places on two accounts: her house, two shops (one through her company), a farm and a fine –
@@ -564,13 +541,13 @@ class Command(BaseCommand):
                            due_date=timezone.localdate() + timezone.timedelta(days=due))
 
     def _demo_social(self, u):
-        """Demo CAMPFIRE, natural resources, farms, water points, welfare and fines (illustrative only)."""
+        """Demo CAMPFIRE, natural resources, farms, water points and fines (illustrative only)."""
         from datetime import timedelta
 
         from finance import services as fin
         from finance.models import ClientAccount as Acc, Offence
         from social import services as sv
-        from social.models import Beneficiary, Farm, HuntingQuota, ResourcePermit, WaterPoint, WildlifeRecord
+        from social.models import Farm, HuntingQuota, ResourcePermit, WaterPoint, WildlifeRecord
 
         today = timezone.localdate()
         nro = u["natres.officer"]
@@ -636,15 +613,6 @@ class Command(BaseCommand):
             WaterPoint.objects.create(name=name, point_type=kind, ward=ward, village=village, households_served=hh, status=status,
                                       last_serviced=today - timedelta(days=days), committee_contact="Chair – 077x xxx xxx", created_by=eho,
                                       notes="Pump rods rusted – parts requested" if status == "BROKEN" else "")
-        so = u["social.officer"]
-        for name, cat, ward, village, size in (("Gogo E. Sithole", "ELDERLY", 25, "Chibuwe", 4), ("T. Mapfumo (aged 16)", "CHILD", 26, "Tamandai", 3),
-                                               ("J. Mlambo", "DISABLED", 22, "Checheche", 6), ("Chinyamukwakwa flood household 7", "DISASTER", 25,
-                                                                                                "Chinyamukwakwa", 8)):
-            b = Beneficiary.objects.create(name=name, category=cat, ward=ward, village=village, household_size=size, created_by=so)
-            sv.give_assistance(so, b, kind="FOOD", description="50 kg maize meal, 2 L cooking oil", value="38", programme="Drought relief 2026",
-                               date=today - timedelta(days=10))
-        b.refresh_from_db()
-        sv.give_assistance(so, b, kind="SHELTER", description="20 iron sheets, 2 bags cement", value="260", programme="Flood recovery")
         fines = [(u["natres.officer"], "NR-01", "B. Ncube", "63-555123B13", "0774112233", "Save River bridge – 2 loads", "ADG 1180"),
                  (u["eho"], "HLT-01", "Mai Rudo fast foods", "", "0771009988", "Checheche rank", ""),
                  (u["collector"], "TRD-02", "K. Dube", "", "0778667700", "Chipinge CBD pavement", "")]

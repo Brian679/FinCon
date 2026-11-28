@@ -9,7 +9,7 @@ from departments.views import ActionDetail
 from finance.services import notify, users_with_cap
 
 from . import forms, services
-from .models import Beneficiary, Farm, HuntingQuota, ResourcePermit, TrophyHunt, WaterPoint, WildlifeRecord
+from .models import Farm, HuntingQuota, ResourcePermit, TrophyHunt, WaterPoint, WildlifeRecord
 
 
 def _fmt_qty(v):
@@ -314,76 +314,3 @@ class WaterEdit(GenericUpdateView):
     form_class = forms.WaterPointForm
     required_caps = ("water.manage",)
     detail_url_name = "social:water"
-
-
-# -------------------------------------------------------------- social welfare
-class BeneficiaryList(GenericListView):
-    model = Beneficiary
-    required_caps = ("welfare.view", "welfare.manage")
-    title = "Social welfare – vulnerable households & applications for assistance"
-    columns = [("Ref.", "reference"), ("Head of household", "name"), ("Ward", "ward"), ("Village", "village"), ("Household", "household_size"),
-               ("Category", "category"), ("Help asked for", "need"), ("Status", "status")]
-    search_fields = ["reference", "name", "national_id", "village"]
-    filter_field = "status"
-    detail_url_name = "social:beneficiary"
-    create_url_name = "social:beneficiary_new"
-    create_caps = ("welfare.manage",)
-
-
-class BeneficiaryNew(GenericCreateView):
-    model = Beneficiary
-    form_class = forms.BeneficiaryForm
-    required_caps = ("welfare.manage",)
-    title = "Register a vulnerable household"
-    detail_url_name = "social:beneficiary"
-
-
-class BeneficiaryDetail(ActionDetail):
-    model = Beneficiary
-    required_caps = ("welfare.view", "welfare.manage")
-    action_url_name = "social:beneficiary_action"
-    edit_url_name = "social:beneficiary_edit"
-    edit_caps = ("welfare.manage",)
-    fields = [("Head of household", "name"), ("National ID", "national_id"), ("Phone", "phone"), ("Ward", "ward"), ("Village", "village"),
-              ("Household size", "household_size"), ("Children", "children"), ("Category", "category"), ("Help asked for", "need"),
-              ("Why", "reason"), ("Status", "status"), ("Assessed by", "assessed_by"), ("Assessment", "assessment_note"), ("Notes", "notes")]
-
-    def sections(self, obj):
-        return [{"title": "Assistance given", "rows": [(f"{a.date:%d %b %Y} – {a.get_kind_display()} (USD {a.value})",
-                                                         f"{a.description} · {a.programme} · {a.given_by or ''}") for a in obj.assistance.alive()]}]
-
-    def actions(self, obj):
-        if not self.request.user.has_cap("welfare.manage"):
-            return []
-        if obj.status == "APPLIED":
-            return [{"title": "Assess the application (after the home visit)", "fields": [("note", "Assessment / reason", "text", None)],
-                     "buttons": [("approve", "Approve – register as beneficiary", "success"), ("reject", "Not approved", "outline-danger")]}]
-        if not obj.is_active:
-            return []
-        from .models import Assistance
-
-        return [{"title": "Support ended", "fields": [("note", "Reason", "text", None)], "buttons": [("close", "Close", "outline-secondary")]},
-                {"title": "Record assistance given", "fields": [("kind", "Type", "select", Assistance.Kind.choices),
-                                                               ("description", "What was given", "text", None), ("value", "Value (USD)", "number", None),
-                                                               ("programme", "Programme / donor", "text", None)],
-                 "buttons": [("give", "Record", "primary")]}]
-
-
-class BeneficiaryEdit(GenericUpdateView):
-    model = Beneficiary
-    form_class = forms.BeneficiaryForm
-    required_caps = ("welfare.manage",)
-    detail_url_name = "social:beneficiary"
-
-
-@cap_required("welfare.manage")
-@require_POST
-def beneficiary_action(request, pk):
-    b = get_object_or_404(Beneficiary, pk=pk)
-    if request.POST.get("action") in ("approve", "reject", "close"):
-        run_action(request, services.assess_beneficiary, b, request.POST.get("action"), note=request.POST.get("note", ""),
-                   success="Done – the household has been notified.")
-        return redirect("social:beneficiary", pk=pk)
-    run_action(request, services.give_assistance, b, kind=request.POST.get("kind"), description=request.POST.get("description", ""),
-               value=request.POST.get("value") or 0, programme=request.POST.get("programme", ""), success="Assistance recorded.")
-    return redirect("social:beneficiary", pk=pk)

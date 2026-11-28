@@ -161,31 +161,6 @@ val REGISTERS: Map<String, RegisterSpec> = listOf(
             RField("notes", "Faults / repairs", "multiline")),
         line = { it.s("name") to "${it.s("reference")} · ${it.s("point_type_label")} · ${it.s("village")}, ward ${ward(it)}\n${it.s("households_served")} households · serviced ${prettyDate(it.s("last_serviced"))}" },
         tone = { when (it.s("status")) { "WORKING" -> "ACTIVE"; "BROKEN", "DECOM" -> "BROKEN"; else -> "IN_PROGRESS" } }),
-    RegisterSpec("beneficiaries", Entities.BENEFICIARIES, "Social welfare", "household", listOf("welfare.view", "welfare.manage"),
-        listOf("welfare.manage"),
-        listOf(RField("name", "Head of household", required = true), RField("national_id", "National ID"), RField("phone", "Phone"),
-            RField("ward", "Ward", "int"), RField("village", "Village", required = true), RField("household_size", "Household size", "int"),
-            RField("children", "Children under 18", "int"),
-            RField("category", "Category", "choice", WELFARE_CATEGORIES, true), RField("need", "Help needed", "choice", WELFARE_NEEDS),
-            RField("is_active", "Still receiving support", "bool"), RField("notes", "Notes", "multiline")),
-        line = { it.s("name") to "${it.s("reference")} · ${it.s("category_label")} · ${it.s("village")}, ward ${ward(it)} · ${it.s("household_size")} people" +
-            (it.s("need_label").takeIf { n -> n.isNotBlank() }?.let { n -> " · $n" } ?: "") + "\n${it.list("assistance").size} time(s) assisted · USD ${money(it.s("assistance_total"))}" },
-        amount = { o -> o.s("status_label").ifBlank { null } },
-        tone = { when (it.s("status")) { "APPLIED" -> "PENDING"; "APPROVED" -> "ACTIVE"; "REJECTED" -> "REJECTED"; else -> "WAITING" } },
-        extra = { o -> listOf("Why" to o.s("reason"),
-            "Assessment" to listOf(o.s("assessment_note"), o.s("assessed_by_name")).filter { it.isNotBlank() }.joinToString(" – ")).filter { it.second.isNotBlank() } +
-            o.list("assistance").map { a -> "${prettyDate(a.s("date"))} ${a.s("kind")}" to "${a.s("description")} · USD ${money(a.s("value"))} · ${a.s("programme")}" } },
-        actions = listOf(
-            RAction("Assess the application (after the home visit)", "beneficiary.assess", "beneficiary",
-                listOf("approve" to "Approve – register as beneficiary", "reject" to "Not approved"),
-                listOf(FieldSpec("note", "Assessment / reason", "multiline")), listOf("welfare.manage")) { o, _ -> o.s("status") == "APPLIED" },
-            RAction("Support ended", "beneficiary.assess", "beneficiary", listOf("close" to "Close"),
-                listOf(FieldSpec("note", "Reason", "multiline")), listOf("welfare.manage")) { o, _ -> o.s("status") == "APPROVED" },
-            RAction("Record assistance given", "assistance.give", "beneficiary", listOf("give" to "Record"),
-            listOf(FieldSpec("kind", "Type", "choice", listOf("FOOD" to "Food aid", "CASH" to "Cash transfer", "SCHOOL" to "School fees (BEAM)",
-                "MEDICAL" to "Medical / assisted treatment", "SHELTER" to "Shelter / building materials", "BURIAL" to "Pauper burial", "OTHER" to "Other")),
-                FieldSpec("description", "What was given"), FieldSpec("value", "Value (USD)", "number"), FieldSpec("programme", "Programme / donor")),
-            listOf("welfare.manage")) { o, _ -> o.s("is_active") == "true" && o.s("status") in listOf("", "APPROVED") })),
     RegisterSpec("fines", Entities.FINES, "Fines & penalties", "fine", listOf("fines.view", "fines.issue"), listOf("fines.issue"), emptyList(),
         line = { "${it.s("offender_name")} – ${it.s("offence_name").substringBefore(" (")}" to "${it.s("reference")} · ${prettyDate(it.s("date"))} · ${it.s("location")}\nIssued by ${it.s("issued_by_name")}" },
         amount = { "$" + money(it.s("amount")) },
@@ -569,8 +544,3 @@ fun CampfireSummary(ctx: Ctx) {
         Kpi("Ward share (paid)", "$${money(sum(paid, "community_share"))}", "${paid.size} paid", CrdcColors.Success, androidx.compose.ui.Modifier.weight(1f))
     }
 }
-
-val WELFARE_CATEGORIES: List<Pair<String, String>> get() = listOf("ELDERLY" to "Elderly (no support)", "CHILD" to "Child-headed household", "DISABLED" to "Person with disability",
-    "CHRONIC" to "Chronically ill", "DISASTER" to "Disaster-affected household", "FOOD" to "Food-insecure household", "OTHER" to "Other vulnerable")
-val WELFARE_NEEDS: List<Pair<String, String>> get() = listOf("FOOD" to "Food aid", "CASH" to "Cash transfer", "SCHOOL" to "School fees (BEAM)", "MEDICAL" to "Medical / assisted treatment",
-    "SHELTER" to "Shelter / building materials", "BURIAL" to "Pauper burial", "OTHER" to "Other")

@@ -718,29 +718,6 @@ class WaterPointSerializer(_NamedFKSerializer):
                                               "water_quality_ok", "committee_contact", "gps", "notes"])
 
 
-class BeneficiarySerializer(_NamedFKSerializer):
-    assistance = serializers.SerializerMethodField()
-
-    class Meta:
-        model = sm.Beneficiary
-        fields = _sync_fields(sm.Beneficiary, ["reference", "name", "national_id", "phone", "ward", "village", "household_size", "children",
-                                               "category", "need", "reason", "status", "is_active", "notes", "assessment_note", "assessed_at",
-                                               "assistance"])
-
-    def to_representation(self, instance):
-        data = super().to_representation(instance)
-        data["status_label"] = instance.get_status_display()
-        data["need_label"] = instance.get_need_display() if instance.need else ""
-        data["category_label"] = instance.get_category_display()
-        data["assessed_by_name"] = instance.assessed_by.get_full_name() if instance.assessed_by_id else ""
-        data["assistance_total"] = str(sum((a.value for a in instance.assistance.alive()), 0))
-        return data
-
-    def get_assistance(self, obj):
-        return [{"date": str(a.date), "kind": a.get_kind_display(), "description": a.description, "value": str(a.value),
-                 "programme": a.programme} for a in obj.assistance.alive()]
-
-
 # ------------------------------------------- charter registers (technical, admin, public health, community)
 from departments import models as dm  # noqa: E402
 

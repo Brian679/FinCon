@@ -23,7 +23,7 @@ ADD_LINKS = {
     "finance:fines": ("finance:fine_new", "fines.issue"), "social:wildlife_list": ("social:wildlife_new", "wildlife.manage"),
     "social:hunts": ("social:hunt_new", "hunts.manage"), "social:permits": ("social:permit_new", "permits.manage"),
     "social:farms": ("social:farm_new", "farms.manage"), "social:water_list": ("social:water_new", "water.manage"),
-    "social:beneficiaries": ("social:beneficiary_new", "welfare.manage"), "social:quotas": ("social:quota_new", "hunts.manage"),
+    "social:quotas": ("social:quota_new", "hunts.manage"),
     "registers:roads_list": ("registers:roads_new", "roads.manage"), "registers:lights_list": ("registers:lights_new", "lighting.manage"),
     "registers:works_list": ("registers:works_new", "works.manage"), "registers:records_list": ("registers:records_new", "records.manage"),
     "registers:inspections_list": ("registers:inspections_new", "health.manage"),
@@ -206,11 +206,9 @@ def build_nav(user):
     # ---- Social services: one block per officer's functions (the Director sees all of them)
     if show(D.SOCIAL_SERVICES):
         community = []
-        if c("welfare.view", "welfare.manage"):
-            community.append(_item("Social welfare – vulnerable households", "social:beneficiaries"))
         if c("facilities.view", "facilities.manage"):
             community.append(_item("Schools & clinics development", "registers:facilities_list"))
-        community_staff = c("welfare.view", "welfare.manage", "dept.overview_all") or role in ("SAFETY_OFFICER",)
+        community_staff = c("facilities.view", "facilities.manage", "dept.overview_all") or role in ("SAFETY_OFFICER",)
         if c("incidents.view") and community_staff:
             community.append(_item("Disasters & incidents (public safety)", "departments:incidents"))
         if c("activities.manage", "activities.verify", "dept.overview_all") and (dept == D.SOCIAL_SERVICES or sees_all) and community_staff:

@@ -3,7 +3,7 @@ from django import forms
 from core.crud import BaseModelForm, date_widgets
 from finance.models import ClientAccount
 
-from .models import Assistance, Beneficiary, Extraction, Farm, HuntingQuota, ResourcePermit, TrophyHunt, WaterPoint, WildlifeRecord
+from .models import Extraction, Farm, HuntingQuota, ResourcePermit, TrophyHunt, WaterPoint, WildlifeRecord
 
 
 class WildlifeForm(BaseModelForm):
@@ -71,16 +71,3 @@ class WaterPointForm(BaseModelForm):
         fields = ["name", "point_type", "ward", "village", "households_served", "status", "last_serviced", "water_quality_ok", "committee_contact",
                   "gps", "notes"]
         widgets = date_widgets("last_serviced")
-
-
-class BeneficiaryForm(BaseModelForm):
-    class Meta:
-        model = Beneficiary
-        fields = ["name", "national_id", "phone", "ward", "village", "household_size", "children", "category", "need", "is_active", "notes"]
-
-
-class AssistanceForm(BaseModelForm):
-    class Meta:
-        model = Assistance
-        fields = ["date", "kind", "description", "value", "programme"]
-        widgets = date_widgets("date")

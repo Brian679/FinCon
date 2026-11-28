@@ -68,10 +68,8 @@ sealed interface CScreen {
     data object Certificates : CScreen
     data object RequestCertificate : CScreen
     data class CertificateView(val id: String) : CScreen
-    data object Welfare : CScreen
     data class StandPeople(val propertyId: String, val title: String) : CScreen
     data class StandPerson(val propertyId: String, val id: String?) : CScreen
-    data object ApplyWelfare : CScreen
 }
 
 class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false,
@@ -205,9 +203,7 @@ private fun ClientScreens(ctx: CCtx) {
         CScreen.Certificates -> CertificatesScreen(ctx)
         CScreen.RequestCertificate -> RequestCertificateScreen(ctx)
         is CScreen.CertificateView -> CertificateViewScreen(ctx, s.id)
-        CScreen.Welfare -> WelfareScreen(ctx)
         is CScreen.StandPeople -> StandPeopleScreen(ctx, s.propertyId, s.title)
         is CScreen.StandPerson -> StandPersonScreen(ctx, s.propertyId, s.id)
-        CScreen.ApplyWelfare -> ApplyWelfareScreen(ctx)
     }
 }

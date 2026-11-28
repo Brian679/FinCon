@@ -92,7 +92,7 @@ HEAD_CAPS = {
 FINANCE_READ = {"finance.view", "finance.view_all", "finance.reports", "fines.view"}
 
 # Social Services registers: read access for oversight (CEO, internal audit)
-SOCIAL_READ = {"wildlife.view", "hunts.view", "permits.view", "farms.view", "water.view", "welfare.view", "health.view", "sanitation.view",
+SOCIAL_READ = {"wildlife.view", "hunts.view", "permits.view", "farms.view", "water.view", "health.view", "sanitation.view",
                "facilities.view"}
 TECH_READ = {"roads.view", "lighting.view", "works.view"}
 ADMIN_READ = {"records.view", "land.view", "engagements.view", "notices.view", "data.view"}
@@ -255,14 +255,14 @@ ROLE_CAPS = {
     # Social Services – each officer works on their own functions; the Director sees and decides on everything
     "SOCIAL_HEAD": HEAD_CAPS | SOCIAL_READ | FINE_ISSUERS
     | {"stands.view", "licence.inspect", "activities.manage", "incidents.manage", "incidents.view", "assets.condition", "assets.view",
-       "wildlife.manage", "hunts.manage", "permits.manage", "permits.approve", "farms.manage", "water.manage", "welfare.manage",
+       "wildlife.manage", "hunts.manage", "permits.manage", "permits.approve", "farms.manage", "water.manage",
        "health.manage", "sanitation.manage", "facilities.manage"},
     # Natural resources & environment + agriculture: CAMPFIRE, human-wildlife conflict, fire management, land reclamation, permits, farms
     "NATURAL_RESOURCES_OFFICER": FINE_ISSUERS | {"activities.manage", "incidents.manage", "incidents.view", "wildlife.manage", "wildlife.view",
                                                  "hunts.manage", "hunts.view", "permits.manage", "permits.approve", "permits.view", "farms.manage",
                                                  "farms.view"},
-    # Community services, schools & clinics development, social welfare, disaster risk / public safety
-    "SOCIAL_OFFICER": {"activities.manage", "incidents.manage", "incidents.view", "welfare.manage", "welfare.view", "facilities.manage",
+    # Community services, schools & clinics development, disaster risk / public safety
+    "SOCIAL_OFFICER": {"activities.manage", "incidents.manage", "incidents.view", "facilities.manage",
                        "facilities.view", "assets.condition", "assets.view"},
     # Public health and WASH: health inspections & certificates, water points, ablutions & waste, hygiene promotion
     "HEALTH_OFFICER": FINE_ISSUERS | {"licence.inspect", "activities.manage", "incidents.view", "assets.condition", "assets.view", "water.manage",
