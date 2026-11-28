@@ -184,11 +184,16 @@ class BudgetLineSerializer(SyncSerializer):
 class TaskSerializer(SyncSerializer):
     assigned_by_name = serializers.CharField(source="assigned_by.get_full_name", read_only=True)
     assigned_to_name = serializers.CharField(source="assigned_to.get_full_name", read_only=True, default="")
+    letter = serializers.SerializerMethodField()
 
     class Meta:
         model = Task
         fields = _sync_fields(Task, ["reference", "kind", "title", "description", "assigned_by", "assigned_by_name", "assigned_to",
-                                     "assigned_to_name", "department", "priority", "due_date", "status", "progress", "completed_at"])
+                                     "assigned_to_name", "department", "priority", "due_date", "status", "progress", "completed_at", "letter"])
+
+    def get_letter(self, obj):
+        c = obj.letters.filter(is_deleted=False).first()
+        return str(c.pk) if c else None
 
 
 class TaskCommentSerializer(SyncSerializer):
@@ -577,6 +582,9 @@ class CorrespondenceSerializer(SyncSerializer):
     status_label = serializers.CharField(source="get_status_display", read_only=True)
     department_label = serializers.CharField(source="get_department_display", read_only=True)
     task_reference = serializers.CharField(source="task.reference", read_only=True, default="")
+    task_status = serializers.CharField(source="task.status", read_only=True, default="")
+    task_status_label = serializers.CharField(source="task.get_status_display", read_only=True, default="")
+    task_assigned_to = serializers.IntegerField(source="task.assigned_to_id", read_only=True, default=None)
     received_by_name = serializers.SerializerMethodField()
     attachments = serializers.SerializerMethodField()
 
@@ -585,7 +593,7 @@ class CorrespondenceSerializer(SyncSerializer):
         fields = _sync_fields(Correspondence, ["reference", "sender", "sender_contact", "subject", "date_received", "department", "department_label",
                                                "assigned_to", "assigned_to_name", "addressed_to", "addressed_to_name", "status", "status_label",
                                                "response_due", "responded_at", "response_summary", "file_reference", "routing_note", "task",
-                                               "task_reference", "received_by_name", "attachments"])
+                                               "task_reference", "task_status", "task_status_label", "task_assigned_to", "received_by_name", "attachments"])
 
     def get_received_by_name(self, obj):
         return obj.created_by.get_full_name() if obj.created_by_id else ""

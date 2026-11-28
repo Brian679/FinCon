@@ -13,7 +13,12 @@
 <div class="card shadow-sm"><div class="card-header">Conversation</div><ul class="list-group list-group-flush">
 {% for c in comments %}<li class="list-group-item"><strong>{{ c.author }}</strong> <span class="small text-muted">{{ c.created_at }}</span><br>{{ c.body|linebreaksbr }}</li>{% empty %}<li class="list-group-item text-muted">No comments yet.</li>{% endfor %}
 </ul></div></div>
-<div class="col-lg-5"><div class="card shadow-sm"><div class="card-header">Update</div><div class="card-body">
+<div class="col-lg-5">
+{% if letter %}<div class="card shadow-sm mb-3"><div class="card-body"><a class="btn btn-outline-primary w-100" href="{% url 'workflow:letter' letter.pk %}">Open the letter {{ letter.reference }}</a></div></div>{% endif %}
+{% if can_finish %}<div class="card shadow-sm mb-3"><div class="card-header">Done?</div><div class="card-body"><form method="post">{% csrf_token %}
+<input type="hidden" name="status" value="DONE"><textarea class="form-control mb-2" name="comment" rows="2" placeholder="What was done"></textarea>
+<button class="btn btn-primary w-100">Mark as done</button></form></div></div>{% endif %}
+<div class="card shadow-sm"><div class="card-header">Update</div><div class="card-body">
 <form method="post">{% csrf_token %}
 <label class="form-label">Status</label><select class="form-select mb-2" name="status"><option value="">(no change)</option>{% for v, l in statuses %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
 <label class="form-label">Progress %</label><input class="form-range mb-2" type="range" name="progress" min="0" max="100" step="10" value="{{ task.progress }}">

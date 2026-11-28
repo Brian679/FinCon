@@ -65,6 +65,8 @@ def update_task(user, task, *, status=None, progress=None, comment=""):
         if task.status == Task.Status.OPEN and task.progress > 0:
             task.status = Task.Status.IN_PROGRESS
     task.save()
+    for letter in task.letters.filter(is_deleted=False):
+        letter.save(update_fields=["updated_at"])        # the letter shows the task's new status on the next sync
     if comment:
         TaskComment.objects.create(task=task, author=user, body=comment, created_by=user)
         others = {task.assigned_by, task.assigned_to} - {user}

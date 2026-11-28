@@ -57,7 +57,9 @@ def task_detail(request, pk):
                    progress=request.POST.get("progress") or None, comment=request.POST.get("comment", "").strip(), success="Task updated.")
         return redirect("workflow:task", pk=pk)
     return render(request, "workflow/task_detail.html", {"task": task, "title": str(task), "statuses": Task.Status.choices,
-                                                          "comments": task.comments.alive().select_related("author")})
+                                                          "comments": task.comments.alive().select_related("author"),
+                                                          "letter": task.letters.filter(is_deleted=False).first(),
+                                                          "can_finish": task.assigned_to_id == request.user.pk and task.status in ("OPEN", "IN_PROGRESS")})
 
 
 # ---------------------------------------------------------------- complaints
@@ -247,7 +249,8 @@ def letter_detail(request, pk):
     return render(request, "workflow/letter_detail.html", {
         "object": c, "title": f"Letter {c.reference}", "status_text": c.get_status_display(), "status_badge": "secondary",
         "field_rows": [(k, v) for k, v in rows if v not in (None, "")], "files": att.for_object("correspondence", c), "attach_kind": "correspondence", "files_title": "Scanned letter",
-        "can_attach": att.can_attach(u, "correspondence", c), "can_route": can_route and c.status not in ("FILED", "RESPONDED"),
+        "can_attach": att.can_attach(u, "correspondence", c), "can_route": can_route and c.status in ("RECEIVED", "ASSIGNED"),
+        "can_finish": bool(c.task_id and c.task.assigned_to_id == u.pk and c.task.status in ("OPEN", "IN_PROGRESS")),
         "departments": Department.choices, "staff": forms.staff_queryset(), "kinds": att.Attachment.Kind.choices})
 
 

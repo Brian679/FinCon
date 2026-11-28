@@ -3,6 +3,9 @@
 {% if object.task %}<div class="module"><h2>Task</h2><p class="p-2 mb-0"><a href="{% url 'workflow:task' object.task.pk %}">{{ object.task.reference }} – {{ object.task.title }}</a> · {{ object.task.get_department_display }} · {{ object.task.assigned_to.get_full_name }} · {{ object.task.get_status_display }}</p></div>{% endif %}
 {% endblock %}
 {% block actions %}
+{% if can_finish %}<div class="module"><h2>Your task {{ object.task.reference }}</h2><form method="post" action="{% url 'workflow:task' object.task.pk %}" class="p-2 d-grid gap-2">{% csrf_token %}
+<input type="hidden" name="status" value="DONE"><textarea class="form-control" name="comment" rows="2" placeholder="What was done"></textarea>
+<button class="btn btn-primary">Mark as done</button></form></div>{% endif %}
 {% if can_route %}
 <div class="module"><div class="p-2 d-grid"><a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'task' %}">Give task</a></div></div>
 {% endif %}

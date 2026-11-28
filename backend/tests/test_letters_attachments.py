@@ -254,3 +254,28 @@ class LetterActionPagesTests(CouncilTestCase):
         c.refresh_from_db()
         self.assertEqual(c.status, Correspondence.Status.TASKED)
         self.assertEqual(c.task.assigned_to, self.user("treasurer"))
+
+
+@override_settings(MEDIA_ROOT=MEDIA)
+class LetterTaskDoneTests(CouncilTestCase):
+    def test_person_given_the_task_marks_it_done(self):
+        from django.test import Client
+
+        c = wf.log_correspondence(self.user("reception"), sender="ZESA", subject="Outage", department="EXEC", addressed_to=self.user("ceo"))
+        wf.route_letter(self.user("ceo"), c, "task", to_user=self.user("engineer"))
+        c.refresh_from_db()
+        w = Client()
+        w.login(username="engineer", password=PW)
+        self.assertContains(w.get(f"/staff/correspondence/{c.pk}/view/"), "Mark as done")
+        self.assertContains(w.get(f"/staff/tasks/{c.task_id}/"), "Open the letter")
+        w.post(f"/staff/tasks/{c.task_id}/", {"status": "DONE", "comment": "Power restored; ZESA informed."})
+        c.task.refresh_from_db()
+        self.assertEqual(c.task.status, Task.Status.DONE)
+        self.assertTrue(Notification.objects.filter(recipient=self.user("ceo"), title__startswith="Task completed").exists())
+        self.assertNotContains(w.get(f"/staff/correspondence/{c.pk}/view/"), "Mark as done")
+        # in the app the letter carries the task's status
+        api = APIClient()
+        tok = api.post("/api/v1/auth/login/", {"username": "ceo", "password": PW, "app": "council"}, format="json").data["access"]
+        api.credentials(HTTP_AUTHORIZATION=f"Bearer {tok}")
+        rows = api.post("/api/v1/sync/pull/", {"cursors": {}}, format="json").data["entities"]["correspondence"]["items"]
+        self.assertEqual(next(r for r in rows if r["id"] == str(c.pk))["task_status"], "DONE")

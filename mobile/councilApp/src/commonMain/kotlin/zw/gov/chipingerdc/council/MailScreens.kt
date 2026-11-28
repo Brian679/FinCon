@@ -186,13 +186,20 @@ fun LetterDetailScreen(ctx: Ctx, id: String) {
                 c.addressedToName?.takeIf { it.isNotBlank() }?.let { KeyValue("Sent to", it) }
                 KeyValue("Department", c.departmentLabel)
                 c.assignedToName?.takeIf { it.isNotBlank() }?.let { KeyValue("Assigned to", it) }
-                c.taskReference?.takeIf { it.isNotBlank() }?.let { KeyValue("Task", it) }
+                c.taskReference?.takeIf { it.isNotBlank() }?.let { KeyValue("Task", "$it – ${c.taskStatusLabel}") }
                 KeyValue("Reply due", prettyDate(c.responseDue))
                 if (c.fileReference.isNotBlank()) KeyValue("File reference", c.fileReference)
                 if (c.routingNote.isNotBlank()) KeyValue("Notes", c.routingNote)
                 if (c.responseSummary.isNotBlank()) KeyValue("Reply", c.responseSummary)
             }
             FilesCard(ctx.sdk, "correspondence", c.id, c.attachments, c.localNote == null && me.can("correspondence.manage"), "SCAN", "Scanned letter")
+            if (c.taskAssignedTo == me.id && c.taskStatus in listOf("OPEN", "IN_PROGRESS") && c.localNote == null && c.task != null)
+                ActionPanel("Your task ${c.taskReference ?: ""}", listOf(FieldSpec("comment", "What was done", "multiline")), listOf("done" to "Mark as done")) { _, v ->
+                    ctx.sdk.markPending(Entities.CORRESPONDENCE, c.id, "Task marked done – queued")
+                    ctx.sdk.enqueue("task.update", "Task ${c.taskReference} done", Entities.TASKS, c.task!!) {
+                        put("task", c.task!!); put("progress", 100); put("status", "DONE"); put("comment", v["comment"] ?: "")
+                    }
+                }
             if (canRoute) {
                 PrimaryButton("Give task", onClick = { ctx.go(Screen.LetterAction(c.id, "task")) })
             }

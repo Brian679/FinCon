@@ -165,7 +165,8 @@ data class Task(
     val id: String, val reference: String = "", val kind: String = "", val kindLabel: String = "", val title: String = "",
     val description: String = "", val assignedByName: String = "", val assignedToName: String? = null, val department: String = "",
     val departmentLabel: String = "", val priority: String = "", val priorityLabel: String = "", val dueDate: String? = null,
-    val status: String = "", val statusLabel: String = "", val progress: Int = 0, val localNote: String? = null,
+    val status: String = "", val statusLabel: String = "", val progress: Int = 0, val assignedTo: Long? = null, val letter: String? = null,
+    val localNote: String? = null,
 )
 
 @Serializable
@@ -438,7 +439,8 @@ data class Correspondence(val id: String, val reference: String = "", val sender
                           val assignedToName: String? = null, val status: String = "", val statusLabel: String = "", val responseDue: String? = null,
                           val respondedAt: String? = null, val responseSummary: String = "", val fileReference: String = "",
                           val addressedTo: Long? = null, val addressedToName: String? = null, val routingNote: String = "", val task: String? = null,
-                          val taskReference: String? = null, val receivedByName: String = "", val attachments: List<FileInfo> = emptyList(),
+                          val taskReference: String? = null, val taskStatus: String = "", val taskStatusLabel: String = "",
+                          val taskAssignedTo: Long? = null, val receivedByName: String = "", val attachments: List<FileInfo> = emptyList(),
                           val localNote: String? = null)
 
 @Serializable

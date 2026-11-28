@@ -34,6 +34,8 @@ import zw.gov.chipingerdc.shared.ui.Progress
 import zw.gov.chipingerdc.shared.ui.RowCard
 import zw.gov.chipingerdc.shared.ui.ScrollColumn
 import zw.gov.chipingerdc.shared.ui.SecondaryButton
+import zw.gov.chipingerdc.shared.ui.ActionPanel
+import zw.gov.chipingerdc.shared.ui.FieldSpec
 import zw.gov.chipingerdc.shared.ui.SectionCard
 import zw.gov.chipingerdc.shared.ui.isPast
 import zw.gov.chipingerdc.shared.ui.prettyDate
@@ -79,6 +81,14 @@ fun TaskDetailScreen(ctx: Ctx, id: String) {
                 Text(task.description)
                 if (task.localNote != null) InfoBox(task.localNote!!)
             }
+            task.letter?.let { l -> SecondaryButton("Open the letter", { ctx.go(Screen.CorrespondenceDetail(l)) }) }
+            if (task.assignedTo == ctx.me.id && task.status in listOf("OPEN", "IN_PROGRESS") && task.localNote == null)
+                ActionPanel("Done?", listOf(FieldSpec("comment", "What was done", "multiline")), listOf("done" to "Mark as done")) { _, v ->
+                    ctx.sdk.markPending(Entities.TASKS, task.id, "Marked done – queued")
+                    ctx.sdk.enqueue("task.update", "Task ${task.reference} done", Entities.TASKS, task.id) {
+                        put("task", task.id); put("progress", 100); put("status", "DONE"); put("comment", v["comment"] ?: "")
+                    }
+                }
             SectionCard("Conversation") {
                 val mine = comments.filter { it.task == task.id }.sortedBy { it.createdAt }
                 if (mine.isEmpty()) Text("No comments yet.", color = CrdcColors.Muted)
