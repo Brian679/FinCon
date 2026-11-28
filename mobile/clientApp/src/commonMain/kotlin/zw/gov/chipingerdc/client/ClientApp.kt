@@ -62,6 +62,7 @@ sealed interface CScreen {
     data object Permits : CScreen
     data object ApplyPermit : CScreen
     data object Notices : CScreen
+    data object Accounts : CScreen
 }
 
 class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false,
@@ -113,6 +114,8 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false, menuOpen: Boolean = fa
         badge = n, startOpen = profileOpen,
         items = listOf(
             ProfileItem("Notifications", n) { ctx.go(CScreen.Notifications) },
+            ProfileItem("Link a council account") { ctx.go(CScreen.LinkAccount) },
+            ProfileItem("Client Charter") { ctx.go(CScreen.Charter) },
             ProfileItem("Change password") { ctx.go(CScreen.ChangePassword) },
             ProfileItem("Sync status", ctx.pending.toInt()) { ctx.go(CScreen.SyncCentre) },
             ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
@@ -187,5 +190,6 @@ private fun ClientScreens(ctx: CCtx) {
         CScreen.Permits -> PermitsScreen(ctx)
         CScreen.ApplyPermit -> ApplyPermitScreen(ctx)
         CScreen.Notices -> NoticesScreen(ctx)
+        CScreen.Accounts -> AccountsScreen(ctx)
     }
 }
