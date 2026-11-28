@@ -75,14 +75,14 @@ class ClientRegistrationForm(BootstrapFormMixin, forms.ModelForm):
     password2 = forms.CharField(label="Confirm password", widget=forms.PasswordInput)
     class Meta:
         model = User
-        fields = ["first_name", "last_name", "username", "email", "phone", "national_id", "ward"]
+        fields = ["first_name", "last_name", "username", "email", "phone", "national_id"]
         labels = {"username": "Username (you will log in with this)"}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for f in ("first_name", "last_name", "phone", "national_id"):
             self.fields[f].required = True
-        self.order_fields(["first_name", "last_name", "username", "email", "phone", "national_id", "ward", "password1", "password2"])
+        self.order_fields(["first_name", "last_name", "username", "email", "phone", "national_id", "password1", "password2"])
 
     def clean(self):
         data = super().clean()

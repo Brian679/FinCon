@@ -501,6 +501,6 @@ object Choices {
     val relationships2 = listOf("CHILD" to "Child (son / daughter)", "SPOUSE" to "Spouse", "PARENT" to "Parent", "SIBLING" to "Brother / sister",
         "RELATIVE" to "Other relative", "DEPENDANT" to "Dependant", "CO_OWNER" to "Co-owner / business partner", "MANAGER" to "Shop manager / employee",
         "HEIR" to "Heir / next of kin", "OTHER" to "Other")
-    val certificateKinds = listOf("RESIDENCE" to "Proof of residence letter", "CLEARANCE" to "Rates clearance certificate",
+    val certificateKinds = listOf("RESIDENCE" to "Proof of residence (confirmation of residence letter – free)", "CLEARANCE" to "Rates clearance certificate",
         "OWNERSHIP" to "Stand ownership confirmation letter", "CESSION" to "Transfer (cession) of a stand", "BURIAL" to "Burial order")
 }

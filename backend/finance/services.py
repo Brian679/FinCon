@@ -1537,3 +1537,16 @@ def remove_stand_beneficiary(user, b):
     b.save(update_fields=["is_active", "updated_at"])
     audit.log(AuditLog.Action.DELETE, b, user=user, message=f"Beneficiary removed from {b.property}")
     return b
+
+
+
+LETTER_TITLES = {"RESIDENCE": ("Confirmation of residence", "letter"), "CLEARANCE": ("Rates clearance certificate", "certificate"),
+                 "OWNERSHIP": ("Confirmation of stand ownership", "letter"), "CESSION": ("Approval of cession (transfer) of stand", "letter"),
+                 "BURIAL": ("Burial order", "order")}
+
+
+def letter_context(c, request):
+    from django.templatetags.static import static
+
+    title, noun = LETTER_TITLES[c.kind]
+    return {"c": c, "title": title, "noun": noun, "logo": request.build_absolute_uri(static("img/logo.svg")), "COUNCIL": settings.COUNCIL}

@@ -940,7 +940,7 @@ class CertificateRequest(SyncModel):
     The fee is billed to the resident's account; once it is paid the request goes to the office that issues it."""
 
     class Kind(models.TextChoices):
-        RESIDENCE = "RESIDENCE", "Proof of residence letter"
+        RESIDENCE = "RESIDENCE", "Proof of residence (confirmation of residence letter)"
         CLEARANCE = "CLEARANCE", "Rates clearance certificate"
         OWNERSHIP = "OWNERSHIP", "Stand ownership confirmation letter"
         CESSION = "CESSION", "Transfer (cession) of a stand"

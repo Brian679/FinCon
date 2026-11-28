@@ -94,10 +94,10 @@ fun ClientHome(ctx: CCtx) {
     val stands by sdk.observe(Entities.STANDS, StandApplication.serializer()).collectAsState(initial = emptyList())
     val notices by sdk.observe(Entities.PUBLIC_NOTICES, JsonObject.serializer()).collectAsState(initial = emptyList())
     val total = bills.filter { it.status in listOf("UNPAID", "PART") }.sumOf { it.outstanding.toDoubleOrNull() ?: 0.0 }
-    var show by remember { mutableStateOf(false) }
+    var show by remember { mutableStateOf(ClientPrefs.showBalance) }
     AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            SectionCard("Balance") {
+            SectionCard("Outstanding balance") {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(if (show) "USD ${money(total.toString())}" else "USD ****", Modifier.weight(1f), fontSize = 26.sp, fontWeight = FontWeight.Bold,
                         color = if (show && total > 0) CrdcColors.Danger else CrdcColors.Green)
@@ -145,9 +145,6 @@ fun AccountsScreen(ctx: CCtx) {
     val total = places.sumOf { it.total }
     AppScreen("My bills", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
-            if (places.size + places.sumOf { it.bills.size } > 2) item {
-                PrimaryButton("Pay everything $${money(total.toString())}", onClick = { ctx.go(CScreen.PayBills(places.flatMap { p -> p.bills.map { it.id } })) })
-            }
             if (places.isEmpty()) item { Empty("No bills to pay.") }
             items(places, key = { it.key }) { p ->
                 SectionCard(p.title) {
@@ -171,7 +168,6 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
     var email by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
     var nid by remember { mutableStateOf("") }
-    var ward by remember { mutableStateOf("") }
     var p1 by remember { mutableStateOf("") }
     var p2 by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
@@ -184,7 +180,6 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
             Field("Email", email, { email = it })
             Field("Mobile number", phone, { phone = it })
             Field("National ID", nid, { nid = it.uppercase() })
-            Field("Ward (optional)", ward, { ward = it }, number = true)
             Field("Password (min. 8 characters)", p1, { p1 = it }, password = true)
             Field("Confirm password", p2, { p2 = it }, password = true)
             msg?.let { InfoBox(it, CrdcColors.Danger) }
@@ -192,7 +187,7 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
                 busy = true
                 scope.launch {
                     runCatching {
-                        sdk.register(sdk.session.baseUrl, RegisterRequest(first, last, username, email, phone, nid, ward, p1, p2))
+                        sdk.register(sdk.session.baseUrl, RegisterRequest(first, last, username, email, phone, nid, "", p1, p2))
                         sdk.login(sdk.session.baseUrl, username, p1)
                     }.onFailure { msg = it.message ?: OFFLINE }
                     busy = false
@@ -204,7 +199,7 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
 
 // ----------------------------------------------------------------- settings
 @Composable
-fun SettingsScreen(ctx: CCtx) {
+fun ProfileScreen(ctx: CCtx) {
     val me = ctx.me
     val scope = rememberCoroutineScope()
     var first by remember { mutableStateOf(me.firstName.ifBlank { me.fullName.substringBeforeLast(" ") }) }
@@ -215,8 +210,9 @@ fun SettingsScreen(ctx: CCtx) {
     var ward by remember { mutableStateOf(me.ward?.toString() ?: "") }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
-    AppScreen("Settings", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen("My profile", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
+            KeyValue("Username", me.username)
             Field("First name", first, { first = it })
             Field("Surname", last, { last = it })
             Field("Mobile number", phone, { phone = it })
@@ -275,10 +271,10 @@ fun LinkAccountScreen(ctx: CCtx) {
 @Composable
 fun FeedbackScreen(ctx: CCtx) {
     val list by ctx.sdk.observe(Entities.COMPLAINTS, Complaint.serializer()).collectAsState(initial = emptyList())
-    AppScreen("My messages", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen("Feedback", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
-            item { PrimaryButton("+ New message", onClick = { ctx.go(CScreen.NewFeedback) }) }
-            if (list.isEmpty()) item { Empty("No messages yet.") }
+            item { PrimaryButton("+ Send feedback", onClick = { ctx.go(CScreen.NewFeedback) }) }
+            if (list.isEmpty()) item { Empty("No feedback yet.") }
             items(list.sortedByDescending { it.createdAt }, key = { it.id }) { c ->
                 RowCard(c.subject, "${c.reference} · ${prettyDate(c.createdAt)}" + if (c.resolution.isNotBlank()) "\nCouncil: ${c.resolution}" else "",
                     null, c.statusLabel, c.status, c.localNote)
@@ -290,9 +286,9 @@ fun FeedbackScreen(ctx: CCtx) {
 @Composable
 fun NewFeedbackScreen(ctx: CCtx) {
     var message by remember { mutableStateOf("") }
-    AppScreen("New message", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    AppScreen("Send feedback", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            Field("Message", message, { message = it }, singleLine = false, minLines = 6)
+            Field("Your feedback", message, { message = it }, singleLine = false, minLines = 6)
             PrimaryButton("Send", enabled = message.isNotBlank(), onClick = {
                 val id = ctx.sdk.newId()
                 val now = ctx.sdk.nowIso()
@@ -301,7 +297,7 @@ fun NewFeedbackScreen(ctx: CCtx) {
                     put("id", id); put("reference", "(sending)"); put("subject", if (text.length > 60) text.take(57) + "…" else text); put("details", text)
                     put("status", "RECEIVED"); put("status_label", "Waiting to send"); put("created_at", now); put("updated_at", now)
                 }
-                ctx.sdk.enqueue("complaint.create", "Message to the council", Entities.COMPLAINTS, id, opt) {
+                ctx.sdk.enqueue("complaint.create", "Feedback", Entities.COMPLAINTS, id, opt) {
                     put("id", id); put("details", text); put("captured_at", now)
                 }
                 ctx.back()
@@ -442,6 +438,58 @@ fun NewPlanScreen(ctx: CCtx) {
                 file?.let { f -> ctx.sdk.scope.launch { runCatching { ctx.sdk.sync.sync(); uploadPlanFile(ctx.sdk, id, f) } } }
                 ctx.back()
             })
+        }
+    }
+}
+
+
+// ------------------------------------------------------------ app settings
+/** Preferences kept on this phone. */
+object ClientPrefs {
+    var showBalance by mutableStateOf(false)
+    var autoSync by mutableStateOf(true)
+    var largeText by mutableStateOf(false)
+
+    fun load(sdk: CouncilSdk) {
+        showBalance = sdk.store.value("pref.show_balance") == "1"
+        autoSync = sdk.store.value("pref.auto_sync") != "0"
+        largeText = sdk.store.value("pref.large_text") == "1"
+    }
+
+    fun save(sdk: CouncilSdk) {
+        sdk.store.setValue("pref.show_balance", if (showBalance) "1" else "0")
+        sdk.store.setValue("pref.auto_sync", if (autoSync) "1" else "0")
+        sdk.store.setValue("pref.large_text", if (largeText) "1" else "0")
+        if (autoSync) sdk.sync.startAuto(sdk.scope) else sdk.sync.stopAuto()
+    }
+}
+
+@Composable
+private fun Toggle(label: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable { onChange(!on) }, verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), fontSize = 15.sp)
+        androidx.compose.material3.Switch(checked = on, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+fun AppSettingsScreen(ctx: CCtx) {
+    AppScreen("Settings", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+        ScrollColumn {
+            SectionCard("Display") {
+                Toggle("Show my balance on the dashboard", ClientPrefs.showBalance) { ClientPrefs.showBalance = it; ClientPrefs.save(ctx.sdk) }
+                Toggle("Larger text", ClientPrefs.largeText) { ClientPrefs.largeText = it; ClientPrefs.save(ctx.sdk) }
+            }
+            SectionCard("Data") {
+                Toggle("Update automatically when online", ClientPrefs.autoSync) { ClientPrefs.autoSync = it; ClientPrefs.save(ctx.sdk) }
+                KeyValue("Last updated", prettyDate(ctx.sync.lastSync))
+                PrimaryButton("Update now", busy = ctx.sync.running, onClick = { ctx.syncNow() })
+            }
+            SectionCard("About") {
+                KeyValue("App", "Chipinge RDC online services")
+                KeyValue("Version", "1.0")
+                KeyValue("Phone", zw.gov.chipingerdc.shared.platformName)
+            }
         }
     }
 }

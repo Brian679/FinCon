@@ -1,0 +1,71 @@
+{% load static %}<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ c.number|default:c.reference }} – {{ title }}</title>
+<style>
+  @page { size: A4; margin: 18mm 18mm 16mm 18mm; }
+  * { box-sizing: border-box; }
+  body { font-family: "Times New Roman", Georgia, serif; color: #111; font-size: 12pt; line-height: 1.5; margin: 0; background: #e9e9e9; }
+  .sheet { width: 210mm; min-height: 297mm; margin: 12px auto; padding: 18mm; background: #fff; box-shadow: 0 0 6px rgba(0,0,0,.25); position: relative; }
+  .head { display: flex; align-items: center; gap: 14px; border-bottom: 3px double #1f7a3a; padding-bottom: 8px; }
+  .head img { width: 72px; height: 72px; }
+  .head .name { font-size: 17pt; font-weight: bold; letter-spacing: .5px; color: #1f7a3a; }
+  .head .lines { font-size: 9.5pt; line-height: 1.35; color: #333; }
+  .ref { display: flex; justify-content: space-between; margin: 14px 0 10px; font-size: 11pt; }
+  h1 { font-size: 13.5pt; text-align: center; text-decoration: underline; margin: 18px 0 14px; letter-spacing: .5px; }
+  p { margin: 0 0 11px; text-align: justify; }
+  .sign { margin-top: 42px; display: flex; justify-content: space-between; align-items: flex-end; }
+  .sign .line { border-top: 1px solid #111; width: 70mm; padding-top: 4px; font-size: 11pt; }
+  .stamp { width: 42mm; height: 30mm; border: 1px dashed #888; color: #888; font-size: 9pt; display: flex; align-items: center; justify-content: center; }
+  .foot { position: absolute; left: 18mm; right: 18mm; bottom: 12mm; border-top: 1px solid #bbb; padding-top: 5px; font-size: 8.5pt; color: #555; text-align: center; }
+  .print { text-align: center; margin: 10px; font-family: Arial, sans-serif; }
+  .print button { background: #205067; color: #fff; border: 0; padding: 10px 22px; font-size: 14px; border-radius: 4px; cursor: pointer; }
+  @media print { body { background: #fff; } .sheet { margin: 0; box-shadow: none; width: auto; min-height: auto; padding: 0; } .print { display: none; }
+                 .foot { position: fixed; left: 0; right: 0; bottom: 0; } }
+</style></head>
+<body>
+<div class="print"><button onclick="window.print()">Print / save as PDF (A4)</button></div>
+<div class="sheet">
+  <div class="head">
+    <img src="{{ logo }}" alt="">
+    <div>
+      <div class="name">{{ COUNCIL.NAME|upper }}</div>
+      <div class="lines">{{ COUNCIL.ADDRESS }}, Zimbabwe<br>Tel: {{ COUNCIL.PHONE }} · Email: {{ COUNCIL.EMAIL }}<br>
+        Facebook: {{ COUNCIL.FACEBOOK }} · X: {{ COUNCIL.X }}<br>All correspondence to be addressed to the Chief Executive Officer</div>
+    </div>
+  </div>
+  <div class="ref"><div>Our ref: <strong>{{ c.number|default:c.reference }}</strong><br>Your ref: {{ c.reference }}</div>
+    <div>{{ c.decided_at|default:c.created_at|date:"d F Y" }}</div></div>
+  <p>TO WHOM IT MAY CONCERN</p>
+  <h1>{{ title|upper }}</h1>
+  {% if c.kind == 'RESIDENCE' %}
+  <p>This is to certify that <strong>{{ c.subject_name|default:c.applicant_name }}</strong>, holder of National Identity Number
+    <strong>{{ c.subject_id|default:c.national_id }}</strong>, is a bona fide resident of <strong>{{ c.address }}</strong>{% if c.ward %}, Ward {{ c.ward }}{% endif %},
+    Chipinge District, which falls under the jurisdiction of {{ COUNCIL.NAME }}.</p>
+  {% if c.purpose %}<p>This letter is issued at the request of the above-named person for the purpose of: <strong>{{ c.purpose }}</strong>.</p>{% endif %}
+  <p>Any assistance rendered to the above-named person will be greatly appreciated.</p>
+  {% elif c.kind == 'CLEARANCE' %}
+  <p>This is to certify that all rates, levies and other charges due to {{ COUNCIL.NAME }} in respect of <strong>{{ c.property }}</strong>,
+    account number <strong>{{ c.account.account_number }}</strong> in the name of <strong>{{ c.property.account.name }}</strong>, have been paid in full
+    as at the date of this certificate.</p>
+  {% if c.purpose %}<p>This certificate is issued for the purpose of: <strong>{{ c.purpose }}</strong>.</p>{% endif %}
+  {% elif c.kind == 'OWNERSHIP' %}
+  <p>This is to confirm that <strong>{{ c.property }}</strong> is registered in the records of {{ COUNCIL.NAME }} in the name of
+    <strong>{{ c.property.account.name }}</strong>, account number <strong>{{ c.property.account.account_number }}</strong>.</p>
+  {% if c.purpose %}<p>This letter is issued for the purpose of: <strong>{{ c.purpose }}</strong>.</p>{% endif %}
+  {% elif c.kind == 'CESSION' %}
+  <p>{{ COUNCIL.NAME }} has approved the cession (transfer) of <strong>{{ c.property }}</strong> from <strong>{{ c.property.account.name }}</strong>
+    to <strong>{{ c.other_party_name }}</strong>, holder of National Identity Number <strong>{{ c.other_party_id }}</strong>{% if c.event_date %}, in terms of the
+    agreement of sale dated {{ c.event_date|date:"d F Y" }}{% endif %}.</p>
+  {% elif c.kind == 'BURIAL' %}
+  <p>Permission is hereby granted for the burial of the late <strong>{{ c.other_party_name }}</strong>{% if c.other_party_id %} (National Identity Number
+    {{ c.other_party_id }}){% endif %}, who died on <strong>{{ c.event_date|date:"d F Y" }}</strong>, at <strong>{{ c.place }}</strong>.</p>
+  <p>Applicant: {{ c.applicant_name }}, National Identity Number {{ c.national_id }}.</p>
+  {% endif %}
+  {% if c.valid_until %}<p>This {{ noun }} is valid until <strong>{{ c.valid_until|date:"d F Y" }}</strong>.</p>{% endif %}
+  <div class="sign">
+    <div class="line">{{ c.decided_by.get_full_name|default:"" }}<br><small>{{ c.decided_by.get_role_display|default:"" }}</small><br><small>For: Chief Executive Officer</small></div>
+    <div class="stamp">Council date stamp</div>
+  </div>
+  <div class="foot">Verify this {{ noun }} with the council quoting number {{ c.number|default:c.reference }} · {{ COUNCIL.NAME }} – {{ COUNCIL.CHARTER }}</div>
+</div>
+</body></html>

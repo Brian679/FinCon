@@ -52,6 +52,7 @@ sealed interface CScreen {
     data object Notifications : CScreen
     data object Charter : CScreen
     data object Settings : CScreen
+    data object MyProfile : CScreen
     data object MyStands : CScreen
     data object RegisterStand : CScreen
     data object Plans : CScreen
@@ -100,10 +101,17 @@ fun ClientApp(sdk: CouncilSdk) {
         val nav = remember(user.username) { Navigator<CScreen>(CScreen.Home) }
         val sync by sdk.sync.state.collectAsState()
         val pending by sdk.pendingCount.collectAsState(initial = 0L)
-        LaunchedEffect(user.username) { sdk.sync.startAuto(sdk.scope) }
+        LaunchedEffect(user.username) {
+            ClientPrefs.load(sdk)
+            if (ClientPrefs.autoSync) sdk.sync.startAuto(sdk.scope)
+        }
         PlatformBackHandler(nav.canGoBack) { nav.pop() }
         val ctx = CCtx(sdk, nav, user, sync, pending)
-        ClientRouter(ctx)
+        val d = androidx.compose.ui.platform.LocalDensity.current
+        CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides
+            androidx.compose.ui.unit.Density(d.density, if (ClientPrefs.largeText) d.fontScale * 1.2f else d.fontScale)) {
+            ClientRouter(ctx)
+        }
     }
 }
 
@@ -120,11 +128,11 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false, menuOpen: Boolean = fa
         badge = n, startOpen = profileOpen,
         items = listOf(
             ProfileItem("Notifications", n) { ctx.go(CScreen.Notifications) },
-            ProfileItem("Settings") { ctx.go(CScreen.Settings) },
+            ProfileItem("My profile") { ctx.go(CScreen.MyProfile) },
             ProfileItem("Add an existing account") { ctx.go(CScreen.LinkAccount) },
             ProfileItem("Statements") { ctx.go(CScreen.Statements) },
             ProfileItem("Client Charter") { ctx.go(CScreen.Charter) },
-            ProfileItem("Change password") { ctx.go(CScreen.ChangePassword) },
+            ProfileItem("Settings") { ctx.go(CScreen.Settings) },
             ProfileItem("Log out", danger = true) { ctx.sdk.logout() },
         ),
     )
@@ -186,7 +194,8 @@ private fun ClientScreens(ctx: CCtx) {
         CScreen.ApplyStand -> ApplyStandScreen(ctx)
         CScreen.Notifications -> NotificationsScreen(ctx)
         CScreen.Charter -> CharterScreen(ctx)
-        CScreen.Settings -> SettingsScreen(ctx)
+        CScreen.Settings -> AppSettingsScreen(ctx)
+        CScreen.MyProfile -> ProfileScreen(ctx)
         CScreen.MyStands -> MyStandsScreen(ctx)
         CScreen.RegisterStand -> RegisterStandScreen(ctx)
         CScreen.Plans -> PlansScreen(ctx)

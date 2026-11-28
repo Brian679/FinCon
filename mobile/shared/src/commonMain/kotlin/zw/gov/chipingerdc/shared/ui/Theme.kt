@@ -29,6 +29,8 @@ object CrdcColors {
     val Darkened = Color(0xFFF8F8F8)
     val Selected = Color(0xFFFDF6D8)
     val CloseButton = Color(0xFF747474)
+    val Action = Color(0xFF205067)       // buttons (Django admin "default" button blue) – never the green of headers
+    val ActionLight = Color(0xFF417690)
     val BreadcrumbsText = Color(0xFFCFE8D6)
 
     // statuses / messages

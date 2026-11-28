@@ -64,7 +64,7 @@ class CertificateTests(CouncilTestCase):
         self.assertIsNotNone(c.valid_until)
         web = self.client
         web.force_login(admin)
-        self.assertContains(web.get(f"/staff/finance/certificates/{c.pk}/print/"), "resides at")
+        self.assertContains(web.get(f"/staff/finance/certificates/{c.pk}/print/"), "bona fide resident")
         web.force_login(self.user("cashier"))
         self.assertEqual(web.get(f"/staff/finance/certificates/{c.pk}/print/").status_code, 404)   # other offices do not see it
 

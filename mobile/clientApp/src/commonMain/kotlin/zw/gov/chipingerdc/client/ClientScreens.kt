@@ -104,7 +104,7 @@ fun ClientMenu(ctx: CCtx) {
         ),
         "Help & feedback" to listOf(
             IndexRow("Report a problem", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
-            IndexRow("Messages to the council", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
+            IndexRow("Feedback", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
             IndexRow("Council notices", 0, { ctx.go(CScreen.Notices) }),
         ),
     )

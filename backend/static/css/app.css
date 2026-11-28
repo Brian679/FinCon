@@ -23,10 +23,10 @@
     --link-fg: var(--crdc-blue);
     --link-hover-color: #174a7c;
     --link-selected-fg: var(--crdc-green);
-    --button-bg: var(--crdc-green);
-    --button-hover-bg: var(--crdc-green-dark);
-    --default-button-bg: var(--crdc-green-dark);
-    --default-button-hover-bg: var(--crdc-green);
+    --button-bg: #417690;
+    --button-hover-bg: #205067;
+    --default-button-bg: #205067;
+    --default-button-hover-bg: #417690;
     --selected-row: #fdf6d8;
     --message-success-bg: #e2f2e6;
     --message-warning-bg: #fdf3cc;

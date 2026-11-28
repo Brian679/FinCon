@@ -1195,7 +1195,23 @@ def certificate_action(request, pk):
 @cap_required("certificates.issue")
 def certificate_print(request, pk):
     c = get_object_or_404(_office_certificates(request.user, CertificateRequest.objects.all()), pk=pk, status=CertificateRequest.Status.ISSUED)
-    return render(request, "finance/certificate_print.html", {"c": c})
+    return render(request, "finance/letter_a4.html", services.letter_context(c, request))
+
+
+LETTER_LINK_SALT = "crdc-letter"
+
+
+def letter_public(request, token):
+    """The resident's issued letter as a printable A4 page – opened from the app through a short-lived signed link."""
+    from django.core import signing
+    from django.http import Http404
+
+    try:
+        pk = signing.loads(token, salt=LETTER_LINK_SALT, max_age=60 * 60)
+    except signing.BadSignature:
+        raise Http404("This link has expired. Open the letter again in the app.")
+    c = get_object_or_404(CertificateRequest.objects.alive(), pk=pk, status=CertificateRequest.Status.ISSUED)
+    return render(request, "finance/letter_a4.html", services.letter_context(c, request))
 
 
 

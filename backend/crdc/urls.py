@@ -14,6 +14,7 @@ urlpatterns = [
     path("system-admin/", admin.site.urls),
     path("staff/", include("accounts.urls")),
     path("", include("core.urls")),
+    path("letters/<str:token>/", __import__("finance.views", fromlist=["letter_public"]).letter_public, name="letter_public"),
     path("staff/finance/", include("finance.urls")),
     path("staff/", include("workflow.urls")),
     path("staff/", include("payroll.urls")),

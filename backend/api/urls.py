@@ -11,6 +11,7 @@ urlpatterns = [
     path("auth/register/", v.register_client, name="register"),
     path("me/", v.MeView.as_view(), name="me"),
     path("plans/<uuid:pk>/drawing/", v.PlanDrawingView.as_view(), name="plan_drawing"),
+    path("certificates/<uuid:pk>/print-link/", v.LetterLinkView.as_view(), name="letter_link"),
     path("auth/password/", v.PasswordView.as_view(), name="password"),
     path("reports/finance/", v.FinanceReportView.as_view(), name="report_finance"),
     path("reports/data/", v.DataReportView.as_view(), name="report_data"),

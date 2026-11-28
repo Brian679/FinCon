@@ -383,3 +383,21 @@ class PlanDrawingView(AuditActorMixin, APIView):
         except (ValidationError, PermissionDenied) as exc:
             return Response({"detail": " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)}, status=400)
         return Response(s.BuildingPlanSerializer(plan).data, status=201)
+
+
+
+class LetterLinkView(AuditActorMixin, APIView):
+    """POST: a one-hour link to the printable A4 copy of the resident's issued letter (opened in the phone's browser)."""
+
+    def post(self, request, pk):
+        from django.core import signing
+        from django.urls import reverse
+
+        from finance.models import CertificateRequest
+        from finance.views import LETTER_LINK_SALT
+
+        c = get_object_or_404(CertificateRequest.objects.alive(), pk=pk, status=CertificateRequest.Status.ISSUED)
+        if c.user_id != request.user.pk and not request.user.has_cap("certificates.issue"):
+            return Response({"detail": "Not your letter."}, status=403)
+        token = signing.dumps(str(c.pk), salt=LETTER_LINK_SALT)
+        return Response({"url": request.build_absolute_uri(reverse("letter_public", args=[token]))})

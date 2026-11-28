@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.sp
@@ -174,33 +175,54 @@ fun RequestCertificateScreen(ctx: CCtx) {
     }
 }
 
-/** The issued letter, as the council prints it. */
+/** The issued letter on the council's letterhead; "Print / save as PDF" opens the A4 copy. */
 @Composable
 fun CertificateViewScreen(ctx: CCtx, id: String) {
     val c by ctx.sdk.observeOne(Entities.CERTIFICATES, id, Certificate.serializer()).collectAsState(initial = null)
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val uri = androidx.compose.ui.platform.LocalUriHandler.current
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     AppScreen("Letter", onBack = ctx::back) {
         val x = c ?: return@AppScreen Empty("Not found")
         ScrollColumn {
-            SectionCard("CHIPINGE RURAL DISTRICT COUNCIL") {
-                Text(x.kindLabel.uppercase(), fontWeight = FontWeight.Bold, fontSize = 16.sp, textAlign = TextAlign.Center)
-                KeyValue("No.", x.number)
+            SectionCard(null) {
+                Text("CHIPINGE RURAL DISTRICT COUNCIL", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = CrdcColors.Green)
+                Text("858 E.D. Mnangagwa Street, P.O. Box 19, Chipinge\nTel: +263 227 204 5631-5 · info@chipingerdc.gov.zw", fontSize = 12.sp, color = CrdcColors.Muted)
+                KeyValue("Our ref.", x.number)
                 KeyValue("Date", prettyDate(x.decidedAt))
                 Text("TO WHOM IT MAY CONCERN", fontWeight = FontWeight.SemiBold)
                 Text(when (x.kind) {
-                    "RESIDENCE" -> "This is to confirm that ${x.subjectName.ifBlank { x.applicantName }}, National ID ${x.subjectId.ifBlank { x.nationalId }}" +
-                        ", resides at ${x.address}" +
-                        (x.ward?.let { ", Ward $it" } ?: "") + ", within the area of Chipinge Rural District Council."
-                    "CLEARANCE" -> "All rates, levies and charges due to the council on ${x.propertyLabel}, account ${x.accountNumber}, have been paid up to the date of this certificate."
-                    "OWNERSHIP" -> "${x.propertyLabel} is registered with Chipinge Rural District Council under account ${x.accountNumber} in the name of ${x.applicantName}."
-                    "CESSION" -> "The council has approved the transfer of ${x.propertyLabel} to ${x.otherPartyName}, National ID ${x.otherPartyId}."
-                    "BURIAL" -> "Permission is granted for the burial of ${x.otherPartyName}, who died on ${prettyDate(x.eventDate)}, at ${x.place}."
+                    "RESIDENCE" -> "CONFIRMATION OF RESIDENCE"; "CLEARANCE" -> "RATES CLEARANCE CERTIFICATE"; "OWNERSHIP" -> "CONFIRMATION OF STAND OWNERSHIP"
+                    "CESSION" -> "APPROVAL OF CESSION (TRANSFER) OF STAND"; else -> x.kindLabel.uppercase()
+                }, fontWeight = FontWeight.Bold, fontSize = 15.sp, textAlign = TextAlign.Center)
+                Text(when (x.kind) {
+                    "RESIDENCE" -> "This is to certify that ${x.subjectName.ifBlank { x.applicantName }}, holder of National Identity Number " +
+                        "${x.subjectId.ifBlank { x.nationalId }}, is a bona fide resident of ${x.address}" + (x.ward?.let { ", Ward $it" } ?: "") +
+                        ", Chipinge District, which falls under the jurisdiction of Chipinge Rural District Council." +
+                        (if (x.purpose.isNotBlank()) "\n\nThis letter is issued at the request of the above-named person for the purpose of: ${x.purpose}." else "") +
+                        "\n\nAny assistance rendered to the above-named person will be greatly appreciated."
+                    "CLEARANCE" -> "This is to certify that all rates, levies and other charges due to the council in respect of ${x.propertyLabel}, account " +
+                        "${x.accountNumber}, have been paid in full as at the date of this certificate."
+                    "OWNERSHIP" -> "This is to confirm that ${x.propertyLabel} is registered in the council's records under account ${x.accountNumber}."
+                    "CESSION" -> "The council has approved the transfer of ${x.propertyLabel} to ${x.otherPartyName}, National Identity Number ${x.otherPartyId}."
+                    "BURIAL" -> "Permission is hereby granted for the burial of the late ${x.otherPartyName}, who died on ${prettyDate(x.eventDate)}, at ${x.place}."
                     else -> ""
                 }, fontSize = 15.sp)
-                if (x.purpose.isNotBlank()) KeyValue("For", x.purpose)
                 x.validUntil?.let { KeyValue("Valid until", prettyDate(it)) }
-                KeyValue("Issued by", x.decidedByName)
+                KeyValue("Signed", x.decidedByName + " – for the Chief Executive Officer")
             }
-            SecondaryButton("Back", { ctx.back() })
+            error?.let { zw.gov.chipingerdc.shared.ui.InfoBox(it, CrdcColors.Danger) }
+            PrimaryButton("Print / save as PDF (A4)", busy = busy, onClick = {
+                busy = true
+                scope.launch {
+                    runCatching {
+                        val link = ctx.sdk.postJson("certificates/${x.id}/print-link/", buildJsonObject { })
+                        (link["url"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.let { uri.openUri(it) }
+                    }.onFailure { error = it.message ?: "No connection. Try again when you are online." }
+                    busy = false
+                }
+            })
         }
     }
 }

@@ -319,8 +319,7 @@ fun PrimaryButton(text: String, onClick: () -> Unit, enabled: Boolean = true, bu
     val bg = when (color) {
         CrdcColors.Danger -> CrdcColors.Danger
         CrdcColors.Blue -> CrdcColors.CloseButton
-        CrdcColors.Success, CrdcColors.GreenDark -> CrdcColors.GreenDark
-        else -> CrdcColors.Green
+        else -> CrdcColors.Action
     }
     AdminButton(text, onClick, bg, enabled && !busy, busy, Modifier.fillMaxWidth())
 }
@@ -401,7 +400,7 @@ fun DecisionPanel(title: String, approveText: String = "Approve", rejectText: St
     SectionCard(title) {
         Field("Comment", comment, { comment = it }, singleLine = false, minLines = 2)
         SubmitRow {
-            AdminButton(approveText, { onDecide(true, comment) }, CrdcColors.GreenDark, true, false, Modifier.weight(1f))
+            AdminButton(approveText, { onDecide(true, comment) }, CrdcColors.Action, true, false, Modifier.weight(1f))
             AdminButton(rejectText, { onDecide(false, comment) }, CrdcColors.Danger, true, false, Modifier.weight(1f))
         }
         Text("Decisions are queued if you are offline and applied when the phone syncs. Segregation-of-duties rules are checked by the server.",
@@ -474,8 +473,8 @@ fun ActionPanel(title: String, fields: List<FieldSpec>, buttons: List<Pair<Strin
             buttons.forEachIndexed { i, (action, label) ->
                 val bg = when {
                     action in NEGATIVE_ACTIONS -> CrdcColors.Danger
-                    i == 0 -> CrdcColors.GreenDark
-                    else -> CrdcColors.Green
+                    i == 0 -> CrdcColors.Action
+                    else -> CrdcColors.ActionLight
                 }
                 AdminButton(label, { onAction(action, values.toMap()) }, bg, true, false, Modifier.fillMaxWidth())
             }

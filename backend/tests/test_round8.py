@@ -83,3 +83,24 @@ class ProfileAndFeedbackTests(CouncilTestCase):
         self.assertEqual(res["status"], "applied", res)
         msg = Complaint.objects.get(pk=res["record"]["id"])
         self.assertEqual((msg.kind, msg.department, msg.subject[:10]), ("ENQUIRY", "ADMIN", "The street"))
+
+
+class LetterPrintTests(CouncilTestCase):
+    def test_issued_letter_opens_as_a4_from_a_signed_link(self):
+        from finance.models import CertificateRequest
+
+        tsitsi = User.objects.get(username="tsitsi")
+        c = CertificateRequest.objects.get(user=tsitsi, kind="RESIDENCE")
+        fin.certificate_action(User.objects.filter(role="ADMIN_OFFICER").first(), c, "issue")
+        api = APIClient()
+        api.force_authenticate(User.objects.get(username="resident"))
+        self.assertEqual(api.post(f"/api/v1/certificates/{c.pk}/print-link/").status_code, 403)     # not their letter
+        api.force_authenticate(tsitsi)
+        url = api.post(f"/api/v1/certificates/{c.pk}/print-link/").data["url"]
+        page = self.client.get(url.replace("http://testserver", ""))
+        self.assertContains(page, "size: A4")
+        self.assertContains(page, "CONFIRMATION OF RESIDENCE")
+        self.assertContains(page, "bona fide resident")
+        self.assertContains(page, "858 E.D. Mnangagwa Street")
+        self.assertEqual(self.client.get("/letters/forged-token/").status_code, 404)
+        self.assertNotContains(self.client.get("/portal/register/"), 'name="ward"')
