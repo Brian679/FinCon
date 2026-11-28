@@ -123,6 +123,9 @@ sealed interface Screen {
     data object Correspondence : Screen
     data class CorrespondenceDetail(val id: String) : Screen
     data object NewCorrespondence : Screen
+    data object InTray : Screen
+    data object PhoneMessages : Screen
+    data object NewPhoneMessage : Screen
     data object Staff : Screen
     data object FinanceReport : Screen
     data object Executive : Screen
@@ -316,8 +319,11 @@ private fun CouncilScreens(ctx: Ctx) {
         Screen.Orders -> OrdersScreen(ctx)
         is Screen.OrderDetail -> OrderDetailScreen(ctx, s.id)
         Screen.Correspondence -> CorrespondenceScreen(ctx)
-        is Screen.CorrespondenceDetail -> CorrespondenceDetailScreen(ctx, s.id)
-        Screen.NewCorrespondence -> NewCorrespondenceScreen(ctx)
+        is Screen.CorrespondenceDetail -> LetterDetailScreen(ctx, s.id)
+        Screen.NewCorrespondence -> IncomingLetterScreen(ctx)
+        Screen.InTray -> InTrayScreen(ctx)
+        Screen.PhoneMessages -> PhoneMessagesScreen(ctx)
+        Screen.NewPhoneMessage -> NewPhoneMessageScreen(ctx)
         Screen.Staff -> StaffScreen(ctx)
         Screen.FinanceReport -> FinanceReportScreen(ctx)
         Screen.Executive -> ExecutiveScreen(ctx)

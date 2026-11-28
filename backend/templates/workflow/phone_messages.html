@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>{{ title }}</h1>
+<div class="row g-4">
+<div class="{% if form %}col-xl-7{% else %}col-12{% endif %}">
+<p><a href="?show=open"{% if show == "open" %} class="fw-bold"{% endif %}>Open</a> · <a href="?show=all"{% if show == "all" %} class="fw-bold"{% endif %}>All</a></p>
+<div class="module"><table class="w-100"><thead><tr><th>When</th><th>Caller</th><th>For</th><th>Message</th><th>Status</th><th></th></tr></thead>
+{% for m in messages_list %}<tr><td class="small">{{ m.created_at|date:"d M H:i" }}</td><td>{{ m.caller_name }}{% if m.caller_phone %}<br><span class="small">{{ m.caller_phone }}</span>{% endif %}</td>
+<td>{% if m.for_user %}{{ m.for_user.get_full_name }}{% else %}{{ m.get_for_department_display }}{% endif %}<br><span class="small quiet">taken by {{ m.taken_by.get_full_name }}</span></td>
+<td>{{ m.message }}{% if m.call_back %}<br><strong class="small">Please call back</strong>{% endif %}{% if m.done_note %}<br><em class="small">{{ m.done_note }}</em>{% endif %}</td>
+<td>{{ m.get_status_display }}</td>
+<td>{% if m.status == "NEW" %}<form method="post" class="d-flex gap-1">{% csrf_token %}<input name="note" class="form-control form-control-sm" placeholder="Note"><button class="btn btn-sm btn-primary" name="done" value="{{ m.pk }}">Done</button></form>{% endif %}</td></tr>
+{% empty %}<tr><td colspan="6" class="quiet">No messages.</td></tr>{% endfor %}</table></div>
+</div>
+{% if form %}<div class="col-xl-5"><div class="module"><h2>Take a message</h2><form method="post" class="p-2">{% csrf_token %}
+{% for f in form %}<div class="mb-2">{% if f.field.widget.input_type == "checkbox" %}{{ f }} <label class="form-check-label" for="{{ f.id_for_label }}">{{ f.label }}</label>{% else %}<label class="form-label" for="{{ f.id_for_label }}">{{ f.label }}</label>{{ f }}{% endif %}{% for e in f.errors %}<div class="errornote">{{ e }}</div>{% endfor %}</div>{% endfor %}
+<div class="submit-row m-0"><button class="btn btn-primary">Pass on</button></div></form></div></div>{% endif %}
+</div>
+{% endblock %}

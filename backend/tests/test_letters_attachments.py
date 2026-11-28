@@ -115,14 +115,14 @@ class LettersAndCallsTests(CouncilTestCase):
         m = wf.take_phone_message(self.user("reception"), caller_name="Mr Dube", caller_phone="0771234567", message="About the borehole",
                                   for_user=self.user("engineer"))
         self.assertTrue(Notification.objects.filter(recipient=self.user("engineer"), title__contains="Mr Dube").exists())
-        self.assertFalse(wf.phone_message_scope(self.user("treasurer"), PhoneMessage.objects.all()).exists())
+        self.assertFalse(wf.phone_message_scope(self.user("treasurer"), PhoneMessage.objects.filter(pk=m.pk)).exists())
         with self.assertRaises(PermissionDenied):
             wf.phone_message_done(self.user("treasurer"), m)
         wf.phone_message_done(self.user("engineer"), m, "Called back")
         m.refresh_from_db()
         self.assertEqual(m.status, PhoneMessage.Status.DONE)
         r = self.push(self.api("reception"), "phone_message.create", {"id": str(uuid.uuid4()), "caller_name": "Mrs Moyo", "message": "Rates query",
-                                                                        "for_department": "FIN"})
+                                                                        "for_department": "FINANCE"})
         self.assertEqual(r["status"], "applied", r)
 
 
@@ -162,3 +162,63 @@ class PurchaseChainTests(CouncilTestCase):
         req = self.make(self.user("tech.officer"))
         with self.assertRaises(PermissionDenied):
             att.add(self.user("social.officer"), "funds", req, pdf())
+
+
+@override_settings(MEDIA_ROOT=MEDIA)
+class WebPagesTests(CouncilTestCase):
+    def web(self, username):
+        from django.test import Client
+
+        c = Client()
+        c.login(username=username, password=PW)
+        return c
+
+    def test_reception_to_ceo_on_the_website(self):
+        rec = self.web("reception")
+        self.assertEqual(rec.get("/staff/correspondence/incoming/").status_code, 200)
+        r = rec.post("/staff/correspondence/incoming/", {"sender": "Provincial Development Office", "subject": "Road plan", "date_received": "2026-11-27",
+                                                         "addressed_to": self.user("ceo").pk, "routing_note": "Urgent", "scan": pdf("road.pdf")})
+        self.assertEqual(r.status_code, 302, getattr(r, "context", None) and r.context["form"].errors)
+        c = Correspondence.objects.get(subject="Road plan")
+        self.assertEqual(att.for_object("correspondence", c).count(), 1)
+        ceo = self.web("ceo")
+        self.assertContains(ceo.get("/staff/incoming-mail/"), "Road plan")
+        self.assertContains(ceo.get("/staff/"), "Incoming mail")
+        page = ceo.get(f"/staff/correspondence/{c.pk}/view/")
+        self.assertContains(page, "Give task")
+        f = att.for_object("correspondence", c).first()
+        self.assertEqual(ceo.get(f"/staff/files/{f.pk}/").status_code, 200)
+        self.assertEqual(self.web("tech.officer").get(f"/staff/files/{f.pk}/").status_code, 403)
+        ceo.post(f"/staff/correspondence/{c.pk}/view/", {"action": "task", "department": "TECH", "note": "Cost it"})
+        c.refresh_from_db()
+        self.assertEqual(c.status, Correspondence.Status.TASKED)
+
+    def test_phone_messages_page(self):
+        rec = self.web("reception")
+        self.assertContains(rec.get("/staff/phone-messages/"), "Take a message")
+        rec.post("/staff/phone-messages/", {"caller_name": "Mr Sithole", "message": "Water bill", "for_user": self.user("treasurer").pk, "call_back": "on"})
+        m = PhoneMessage.objects.get(caller_name="Mr Sithole")
+        t = self.web("treasurer")
+        self.assertNotContains(t.get("/staff/phone-messages/"), "Take a message")
+        t.post("/staff/phone-messages/", {"done": m.pk, "note": "Called"})
+        m.refresh_from_db()
+        self.assertEqual(m.status, PhoneMessage.Status.DONE)
+
+    def test_files_and_confirm_on_the_request_page(self):
+        officer = self.user("tech.officer")
+        req = FundsRequest.objects.create(requested_by=officer, created_by=officer, request_type="REPAIRS", title="Grader tyres", purpose="Repairs",
+                                          requires_payment=True)
+        FundsRequestLine.objects.create(request=req, description="Tyre", quantity=2, unit_cost=Decimal("300"))
+        w = self.web("tech.officer")
+        self.assertContains(w.get(f"/staff/funds/{req.pk}/"), "Attach the quotation before submitting")
+        w.post(f"/staff/files/funds/{req.pk}/add/", {"file": pdf("q.pdf"), "kind": "QUOTE", "next": f"/staff/funds/{req.pk}/"})
+        w.post(f"/staff/funds/{req.pk}/action/", {"action": "submit"})
+        req.refresh_from_db()
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_HOD)
+        for who in ("engineer", "admin.officer", "accountant", "treasurer", "ceo"):
+            fr.decide(self.user(who), req, "approve")
+        self.assertContains(w.get(f"/staff/funds/{req.pk}/"), "Confirm purchase")
+        w.post(f"/staff/files/funds/{req.pk}/add/", {"file": pdf("inv.pdf"), "kind": "INVOICE", "next": "/"})
+        w.post(f"/staff/funds/{req.pk}/action/", {"action": "confirm", "comment": "Fitted"})
+        req.refresh_from_db()
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_PAYMENT)

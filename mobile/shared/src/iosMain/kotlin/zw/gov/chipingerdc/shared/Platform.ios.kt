@@ -50,3 +50,40 @@ actual fun rememberFilePicker(onPicked: (PickedFile?) -> Unit): () -> Unit {
         platform.UIKit.UIApplication.sharedApplication.keyWindow?.rootViewController?.presentViewController(picker, animated = true, completion = null)
     }
 }
+
+
+private class CameraDelegate(var onPicked: (PickedFile?) -> Unit) : platform.darwin.NSObject(), platform.UIKit.UIImagePickerControllerDelegateProtocol,
+    platform.UIKit.UINavigationControllerDelegateProtocol {
+    @OptIn(kotlinx.cinterop.ExperimentalForeignApi::class)
+    override fun imagePickerController(picker: platform.UIKit.UIImagePickerController, didFinishPickingMediaWithInfo: Map<Any?, *>) {
+        picker.dismissViewControllerAnimated(true, completion = null)
+        val image = didFinishPickingMediaWithInfo[platform.UIKit.UIImagePickerControllerOriginalImage] as? platform.UIKit.UIImage
+        val data = image?.let { platform.UIKit.UIImageJPEGRepresentation(it, 0.8) }
+        val length = data?.length?.toInt() ?: 0
+        if (data == null || length == 0) { onPicked(null); return }
+        val bytes = ByteArray(length)
+        bytes.usePinned { pinned -> platform.posix.memcpy(pinned.addressOf(0), data.bytes, data.length) }
+        onPicked(PickedFile("scan.jpg", bytes, "image/jpeg"))
+    }
+
+    override fun imagePickerControllerDidCancel(picker: platform.UIKit.UIImagePickerController) {
+        picker.dismissViewControllerAnimated(true, completion = null)
+        onPicked(null)
+    }
+}
+
+@Composable
+actual fun rememberCameraCapture(onPicked: (PickedFile?) -> Unit): () -> Unit {
+    val delegate = androidx.compose.runtime.remember { CameraDelegate(onPicked) }
+    delegate.onPicked = onPicked
+    val fallback = rememberFilePicker(onPicked)
+    return {
+        val camera = platform.UIKit.UIImagePickerControllerSourceType.UIImagePickerControllerSourceTypeCamera
+        if (!platform.UIKit.UIImagePickerController.isSourceTypeAvailable(camera)) fallback() else {
+            val picker = platform.UIKit.UIImagePickerController()
+            picker.sourceType = camera
+            picker.delegate = delegate
+            platform.UIKit.UIApplication.sharedApplication.keyWindow?.rootViewController?.presentViewController(picker, animated = true, completion = null)
+        }
+    }
+}

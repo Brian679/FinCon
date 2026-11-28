@@ -14,11 +14,13 @@
 {% for i in object.lines.all %}<tr><td>{{ i.description }}</td><td class="text-end">{{ i.quantity }}</td><td class="text-end">{{ i.unit_cost }}</td><td class="text-end">{{ i.total }}</td></tr>{% endfor %}
 <tr class="fw-bold"><td colspan="3">Total ({{ object.currency }})</td><td class="text-end">{{ object.total }}</td></tr></table>
 {% if object.attachment %}<p class="mt-2"><a href="{{ object.attachment.url }}">Supporting document</a></p>{% endif %}</div>
+{% include "workflow/_files.html" %}
 {% endblock %}
 {% block actions %}
 {% if can_edit %}
 <div class="module"><h2>{% if object.status == "RETURNED" %}Returned to you{% else %}Draft{% endif %}</h2>
 {% if object.decision_note %}<p class="errornote">{{ object.decision_note }}</p>{% endif %}
+{% if needs_quote %}<p class="errornote">Attach the quotation before submitting.</p>{% endif %}
 <form method="post" action="{% url 'workflow:fund_action' object.pk %}">{% csrf_token %}<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="submit">Submit for approval</button></div></form>
 <p class="help"><a href="{% url 'workflow:fund_edit' object.pk %}">Edit the request</a> first if changes were asked for.</p></div>
 {% endif %}
@@ -26,6 +28,12 @@
 <div class="module"><h2>Your decision – {{ stage }}</h2><form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="p-2">{% csrf_token %}
 <textarea class="form-control mb-2" name="comment" rows="3" placeholder="Comment (required to reject or return)"></textarea>
 <div class="submit-row m-0"><button class="btn btn-success" name="action" value="approve">Approve</button> <button class="btn btn-outline-primary" name="action" value="return">Return for changes</button> <button class="btn btn-danger" name="action" value="reject">Reject</button></div></form></div>
+{% endif %}
+{% if can_confirm %}
+<div class="module"><h2>Confirm the purchase</h2><form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="p-2">{% csrf_token %}
+<p class="small">All approvals are done. Attach the invoice or delivery note under Files, then confirm. Finance prepares the payment after this.</p>
+<input class="form-control mb-2" name="comment" placeholder="e.g. 400 litres delivered to the depot">
+<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="confirm">Confirm purchase</button></div></form></div>
 {% endif %}
 {% if can_pay %}
 <div class="module"><h2>Finance – prepare payment</h2><form method="post" action="{% url 'workflow:fund_action' object.pk %}" class="p-2">{% csrf_token %}

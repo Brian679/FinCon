@@ -5,7 +5,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from core import audit
-from core.models import AuditLog
+from core.models import AuditLog, Department
 from finance.services import notify
 
 from .models import Complaint, ServiceRequest, Task, TaskComment
@@ -211,18 +211,20 @@ def _can_correspond(user, department=None):
 
 @transaction.atomic
 def log_correspondence(user, *, sender, subject, department, sender_contact="", assigned_to=None, file_reference="", corr_id=None,
-                       addressed_to=None, routing_note=""):
+                       addressed_to=None, routing_note="", date_received=None):
     from .models import Correspondence
 
     if not _can_correspond(user, department):
         raise PermissionDenied("Only the registry or the head of the department can record correspondence.")
     extra = {"id": corr_id} if corr_id else {}
+    if date_received:
+        extra["date_received"] = date_received
     c = Correspondence.objects.create(sender=sender, sender_contact=sender_contact, subject=subject, department=department, assigned_to=assigned_to,
                                       file_reference=file_reference, status=Correspondence.Status.ASSIGNED if assigned_to else Correspondence.Status.RECEIVED,
                                       addressed_to=addressed_to, routing_note=routing_note, created_by=user, **extra)
     targets = [addressed_to] if addressed_to else [assigned_to] if assigned_to else [u for u in User.objects.filter(department=department, is_active=True) if u.is_head]
-    notify(targets, f"Letter {c.reference} from {sender}: {subject}", f"Reply due {timezone.localtime(c.response_due):%d %b %Y}" if c.response_due else "",
-           "/staff/correspondence/")
+    notify(targets, f"Letter {c.reference} from {sender}: {subject}", (f"Received by {user.get_full_name()}. " + (routing_note + " " if routing_note else "") +
+           (f"Reply due {timezone.localtime(c.response_due):%d %b %Y}" if c.response_due else "")).strip(), f"/staff/correspondence/{c.pk}/view/")
     return c
 
 
@@ -274,7 +276,7 @@ def route_letter(user, c, action, *, to_user=None, department="", title="", due_
         raise PermissionDenied("This letter was not sent to you.")
     if action == "task":
         dept = department or (to_user.department if to_user else "")
-        if not dept:
+        if dept not in Department.values:
             raise ValidationError("Choose the department.")
         if to_user is None:
             to_user = next((u for u in User.objects.filter(department=dept, is_active=True, user_type=User.UserType.STAFF) if u.is_head), None)
@@ -315,6 +317,8 @@ def take_phone_message(user, *, caller_name, message, caller_phone="", for_user=
         raise ValidationError("Enter who called and the message.")
     if for_user is None and not for_department:
         raise ValidationError("Choose who the message is for.")
+    if for_department and for_department not in Department.values:
+        raise ValidationError("Unknown department.")
     extra = {"id": msg_id} if msg_id else {}
     m = PhoneMessage.objects.create(caller_name=caller_name, caller_phone=caller_phone, for_user=for_user,
                                     for_department=for_department or (for_user.department if for_user else ""), message=message,

@@ -1,0 +1,9 @@
+<div class="module"><h2>Files</h2>
+<table class="w-100">{% for f in files %}<tr><td><a href="{% url 'workflow:attachment' f.pk %}" target="_blank">{{ f.name }}</a></td><td>{{ f.get_kind_display }}</td><td class="small quiet">{{ f.uploaded_by.get_full_name }} · {{ f.created_at|date:"d M Y H:i" }}</td><td class="small text-end">{{ f.size|filesizeformat }}</td></tr>
+{% empty %}<tr><td class="quiet">No files.</td></tr>{% endfor %}</table>
+{% if can_attach %}<form method="post" enctype="multipart/form-data" action="{% url 'workflow:attach' attach_kind object.pk %}" class="p-2 d-flex flex-wrap gap-2 align-items-center">{% csrf_token %}
+<input type="hidden" name="next" value="{{ request.get_full_path }}">
+<input type="file" name="file" class="form-control" style="max-width:22rem" accept="application/pdf,image/*,.doc,.docx,.xls,.xlsx" required>
+<select name="kind" class="form-select" style="max-width:14rem">{% for v, l in kinds %}<option value="{{ v }}"{% if attach_kind == "correspondence" and v == "SCAN" or attach_kind == "funds" and v == "QUOTE" and object.status == "DRAFT" or attach_kind == "funds" and v == "INVOICE" and object.status == "P_CONF" %} selected{% endif %}>{{ l }}</option>{% endfor %}</select>
+<button class="btn btn-primary">Attach</button></form>{% endif %}
+</div>

@@ -36,3 +36,27 @@ actual fun rememberFilePicker(onPicked: (PickedFile?) -> Unit): () -> Unit {
     }
     return { launcher.launch(arrayOf("application/pdf", "image/*", "*/*")) }
 }
+
+
+@Composable
+actual fun rememberCameraCapture(onPicked: (PickedFile?) -> Unit): () -> Unit {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val callback = androidx.compose.runtime.rememberUpdatedState(onPicked)
+    val fallback = rememberFilePicker(onPicked)
+    val target = androidx.compose.runtime.remember { arrayOfNulls<java.io.File>(1) }
+    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok ->
+        val f = target[0]
+        if (ok && f != null && f.length() > 0) {
+            val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmm", java.util.Locale.US).format(java.util.Date())
+            callback.value(PickedFile("scan-$stamp.jpg", f.readBytes(), "image/jpeg"))
+        } else callback.value(null)
+        f?.delete()
+    }
+    return {
+        val dir = java.io.File(context.cacheDir, "scans").apply { mkdirs() }
+        val f = java.io.File.createTempFile("scan", ".jpg", dir)
+        target[0] = f
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".crdcfiles", f)
+        try { launcher.launch(uri) } catch (e: android.content.ActivityNotFoundException) { fallback() }
+    }
+}

@@ -51,3 +51,8 @@ actual fun rememberFilePicker(onPicked: (PickedFile?) -> Unit): () -> Unit {
         callback(file?.let { PickedFile(it.name, it.readBytes(), java.nio.file.Files.probeContentType(it.toPath()) ?: "application/octet-stream") })
     }
 }
+
+
+/** Desktop computers use a scanner: the scanned file is chosen from disk. */
+@Composable
+actual fun rememberCameraCapture(onPicked: (PickedFile?) -> Unit): () -> Unit = rememberFilePicker(onPicked)

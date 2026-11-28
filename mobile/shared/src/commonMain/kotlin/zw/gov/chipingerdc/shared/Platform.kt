@@ -20,3 +20,9 @@ class PickedFile(val name: String, val bytes: ByteArray, val mime: String)
 /** Returns a function that opens the platform's file chooser; [onPicked] gets the file, or null when cancelled. */
 @Composable
 expect fun rememberFilePicker(onPicked: (PickedFile?) -> Unit): () -> Unit
+
+
+/** Returns a function that opens the camera to photograph a document (a scanned letter, an invoice, a delivery note).
+ *  [onPicked] gets the photo as a JPEG, or null when cancelled. Where there is no camera the file chooser opens instead. */
+@Composable
+expect fun rememberCameraCapture(onPicked: (PickedFile?) -> Unit): () -> Unit

@@ -132,9 +132,11 @@ class ApiClient(private val session: Session, private val app: AppKind) {
     suspend fun getJson(path: String): JsonObject = authed { t -> http.get(url(path)) { common(); bearer(t) } }.body()
 
     /** Multipart upload (e.g. a building plan file). Needs a connection. */
-    suspend fun uploadFile(path: String, field: String, fileName: String, bytes: ByteArray, mime: String): JsonObject =
+    suspend fun uploadFile(path: String, field: String, fileName: String, bytes: ByteArray, mime: String,
+                           extra: Map<String, String> = emptyMap()): JsonObject =
         authed { t ->
             http.submitFormWithBinaryData(url(path), formData {
+                extra.forEach { (k, v) -> append(k, v) }
                 append(field, bytes, Headers.build {
                     append(HttpHeaders.ContentType, mime)
                     append(HttpHeaders.ContentDisposition, "filename=\"${fileName.replace("\"", "")}\"")

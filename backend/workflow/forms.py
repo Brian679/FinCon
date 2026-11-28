@@ -59,6 +59,50 @@ class CorrespondenceForm(BaseModelForm):
         self.fields["assigned_to"].queryset = staff_queryset()
 
 
+class IncomingLetterForm(BaseModelForm):
+    """Reception: a letter that arrived – scan it and send it to the CEO or any officer."""
+    scan = forms.FileField(label="Scanned letter", required=False,
+                           widget=forms.ClearableFileInput(attrs={"accept": "application/pdf,image/*", "capture": "environment"}))
+
+    class Meta:
+        model = Correspondence
+        fields = ["sender", "sender_contact", "subject", "date_received", "addressed_to", "routing_note", "file_reference"]
+        labels = {"addressed_to": "Send to", "routing_note": "Note to them", "sender": "From"}
+        widgets = date_widgets("date_received")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["addressed_to"].queryset = staff_queryset()
+        self.fields["addressed_to"].required = True
+        from accounts.models import User
+
+        ceo = next((u for u in staff_queryset() if getattr(u, "is_ceo", False)), None)
+        if ceo and not self.initial.get("addressed_to"):
+            self.initial["addressed_to"] = ceo.pk
+        self.fields["addressed_to"].label_from_instance = lambda u: f"{u.get_full_name()} – {u.get_role_display()}" if hasattr(u, "get_role_display") else str(u)
+        del User
+
+
+class PhoneMessageForm(forms.Form):
+    caller_name = forms.CharField(label="Who called", max_length=120)
+    caller_phone = forms.CharField(label="Their phone number", max_length=30, required=False)
+    for_user = forms.ModelChoiceField(label="Message for", queryset=None, required=False)
+    for_department = forms.ChoiceField(label="Or for the department", required=False)
+    message = forms.CharField(widget=forms.Textarea(attrs={"rows": 3}))
+    call_back = forms.BooleanField(label="Please call back", required=False, initial=True)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from core.models import Department
+
+        self.fields["for_user"].queryset = staff_queryset()
+        self.fields["for_department"].choices = [("", "—")] + list(Department.choices)
+        for f in self.fields.values():
+            w = f.widget
+            w.attrs.setdefault("class", "form-check-input" if isinstance(w, forms.CheckboxInput) else
+                               "form-select" if isinstance(w, forms.Select) else "form-control")
+
+
 # ------------------------------------------------------------ funds requests
 from django.forms import inlineformset_factory  # noqa: E402
 

@@ -103,7 +103,8 @@ class CouncilSdk(driverFactory: DatabaseDriverFactory, val app: AppKind, default
 
     suspend fun postJson(path: String, body: JsonObject) = api.postJson(path, body)
 
-    suspend fun uploadFile(path: String, field: String, fileName: String, bytes: ByteArray, mime: String) = api.uploadFile(path, field, fileName, bytes, mime)
+    suspend fun uploadFile(path: String, field: String, fileName: String, bytes: ByteArray, mime: String, extra: Map<String, String> = emptyMap()) =
+        api.uploadFile(path, field, fileName, bytes, mime, extra)
 
     /** Settings: save my own details on the server and keep the signed-in profile up to date. */
     suspend fun updateProfile(changes: JsonObject): zw.gov.chipingerdc.shared.model.Me {

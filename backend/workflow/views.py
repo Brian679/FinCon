@@ -2,6 +2,8 @@ from django.contrib import messages
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_POST
 
 from accounts.decorators import cap_required, staff_required
@@ -157,20 +159,138 @@ def request_detail(request, pk):
 # ------------------------------------------------------------ correspondence
 class CorrespondenceList(GenericListView):
     model = Correspondence
-    required_caps = ("correspondence.manage", "tasks.assign_department", "tasks.assign_any")
     title = "Correspondence register (respond within 7 working days)"
-    columns = [("Ref.", "reference"), ("Received", "date_received"), ("From", "sender"), ("Subject", "subject"), ("Department", "department"),
-               ("Assigned", "assigned_to"), ("Response due", "response_due"), ("Status", "status")]
+    columns = [("Ref.", "reference"), ("Received", "date_received"), ("From", "sender"), ("Subject", "subject"), ("Sent to", "addressed_to"),
+               ("Department", "department"), ("Assigned", "assigned_to"), ("Response due", "response_due"), ("Status", "status")]
     search_fields = ["reference", "sender", "subject", "file_reference"]
-    detail_url_name = "workflow:correspondence_edit"
-    create_url_name = "workflow:correspondence_new"
+    detail_url_name = "workflow:letter"
+    create_url_name = "workflow:letter_new"
     create_caps = ("correspondence.manage",)
 
     def scope(self, qs):
-        u = self.request.user
-        if u.has_cap("correspondence.manage") or u.sees_all_departments():
-            return qs
-        return qs.filter(department=u.department)
+        return services.letter_scope(self.request.user, qs)
+
+
+class InTray(GenericListView):
+    """Letters sent to me that I have not dealt with yet."""
+    model = Correspondence
+    title = "Incoming mail"
+    columns = [("Ref.", "reference"), ("Received", "date_received"), ("From", "sender"), ("Subject", "subject"),
+               ("Received by", lambda c: c.created_by.get_full_name() if c.created_by_id else ""), ("Note", "routing_note"), ("Status", "status")]
+    search_fields = ["reference", "sender", "subject"]
+    detail_url_name = "workflow:letter"
+    create_url_name = "workflow:letter_new"
+    create_caps = ("correspondence.manage",)
+
+    def scope(self, qs):
+        return qs.filter(pk__in=services.in_tray(self.request.user).values("pk"))
+
+
+@staff_required
+def letter_new(request):
+    from . import attachments as att
+
+    if not request.user.has_cap("correspondence.manage"):
+        raise PermissionDenied("Only reception / registry log incoming letters.")
+    form = forms.IncomingLetterForm(request.POST or None, request.FILES or None, initial={"date_received": timezone.localdate()})
+    if request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        to = d["addressed_to"]
+        try:
+            with transaction.atomic():
+                c = services.log_correspondence(request.user, sender=d["sender"], sender_contact=d["sender_contact"], subject=d["subject"],
+                                                department=to.department or "EXEC", addressed_to=to, routing_note=d["routing_note"],
+                                                file_reference=d["file_reference"], date_received=d["date_received"])
+                if d.get("scan"):
+                    att.add(request.user, "correspondence", c, d["scan"], "SCAN")
+        except (ValidationError, PermissionDenied) as exc:
+            messages.error(request, " ".join(getattr(exc, "messages", [str(exc)])))
+        else:
+            messages.success(request, f"Letter {c.reference} sent to {to.get_full_name()}.")
+            return redirect("workflow:letter", pk=c.pk)
+    return render(request, "generic/form.html", {"form": form, "title": "Incoming letter – scan and send", "multipart": True})
+
+
+@staff_required
+def letter_detail(request, pk):
+    from . import attachments as att
+
+    c = get_object_or_404(services.letter_scope(request.user, Correspondence.objects.alive()), pk=pk)
+    if request.method == "POST":
+        a = request.POST.get("action", "")
+        to = User.objects.filter(pk=request.POST.get("to_user") or 0, user_type=User.UserType.STAFF).first()
+        due = request.POST.get("due_date") or None
+        run_action(request, services.route_letter, c, a, to_user=to, department=request.POST.get("department", ""),
+                   title=request.POST.get("title", ""), due_date=parse_date(due) if due else None, note=request.POST.get("note", "").strip(),
+                   success={"task": "Task given to the department.", "forward": "Letter sent on.", "file": "Letter filed.",
+                            "respond": "Reply recorded."}.get(a, "Done."))
+        return redirect("workflow:letter", pk=pk)
+    u = request.user
+    can_route = (c.addressed_to_id == u.pk or c.assigned_to_id == u.pk or u.has_cap("correspondence.manage") or u.sees_all_departments()
+                 or (u.is_head and c.department == u.department))
+    rows = [("From", c.sender), ("Contact", c.sender_contact), ("Subject", c.subject), ("Received", c.date_received),
+            ("Received by", c.created_by.get_full_name() if c.created_by_id else ""), ("Sent to", c.addressed_to.get_full_name() if c.addressed_to_id else ""),
+            ("Department", c.get_department_display()), ("Assigned to", c.assigned_to.get_full_name() if c.assigned_to_id else ""),
+            ("Notes", c.routing_note), ("Reply due", c.response_due), ("Reply", c.response_summary), ("File reference", c.file_reference)]
+    return render(request, "workflow/letter_detail.html", {
+        "object": c, "title": f"Letter {c.reference}", "status_text": c.get_status_display(), "status_badge": "secondary",
+        "field_rows": [(k, v) for k, v in rows if v not in (None, "")], "files": att.for_object("correspondence", c), "attach_kind": "correspondence",
+        "can_attach": att.can_attach(u, "correspondence", c), "can_route": can_route and c.status not in ("FILED", "RESPONDED"),
+        "departments": Department.choices, "staff": forms.staff_queryset(), "kinds": att.Attachment.Kind.choices})
+
+
+# ------------------------------------------------------------------ files
+@staff_required
+@require_POST
+def attach(request, kind, pk):
+    from . import attachments as att
+
+    try:
+        obj = att.target(kind, pk)
+        upload = request.FILES.get("file")
+        if upload is None:
+            raise ValidationError("Choose the file.")
+        att.add(request.user, kind, obj, upload, request.POST.get("kind", ""), request.POST.get("name", ""))
+        messages.success(request, "File attached.")
+    except (ValidationError, PermissionDenied) as exc:
+        messages.error(request, " ".join(getattr(exc, "messages", [str(exc)])))
+    return redirect(request.POST.get("next") or "/staff/")
+
+
+@staff_required
+def attachment_file(request, pk):
+    from django.http import FileResponse
+
+    from . import attachments as att
+
+    a = get_object_or_404(att.Attachment.objects.alive(), pk=pk)
+    if not att.can_view(request.user, a.target_type, att.target(a.target_type, a.target_id)):
+        raise PermissionDenied("You cannot open this file.")
+    name = a.name if "." in a.name else a.file.name.rsplit("/", 1)[-1]
+    return FileResponse(a.file.open("rb"), filename=name, as_attachment=request.GET.get("download") == "1")
+
+
+# ---------------------------------------------------------- phone messages
+@staff_required
+def phone_messages(request):
+    from .models import PhoneMessage
+
+    u = request.user
+    if request.method == "POST" and request.POST.get("done"):
+        m = get_object_or_404(PhoneMessage.objects.alive(), pk=request.POST["done"])
+        run_action(request, services.phone_message_done, m, request.POST.get("note", ""), success="Marked as done.")
+        return redirect("workflow:phone_messages")
+    form = forms.PhoneMessageForm(request.POST or None) if u.has_cap("calls.log") else None
+    if form is not None and request.method == "POST" and form.is_valid():
+        d = form.cleaned_data
+        if run_action(request, services.take_phone_message, caller_name=d["caller_name"], caller_phone=d["caller_phone"], message=d["message"],
+                      for_user=d["for_user"], for_department=d["for_department"], call_back=d["call_back"], success="Message passed on."):
+            return redirect("workflow:phone_messages")
+    qs = services.phone_message_scope(u, PhoneMessage.objects.alive().select_related("for_user", "taken_by")).order_by("status", "-created_at")
+    show = request.GET.get("show", "open")
+    if show == "open":
+        qs = qs.filter(status=PhoneMessage.Status.NEW)
+    return render(request, "workflow/phone_messages.html", {"title": "Phone messages", "form": form, "messages_list": qs[:100], "show": show})
 
 
 class CorrespondenceCreate(GenericCreateView):
@@ -313,6 +433,14 @@ class FundsDetail(GenericDetailView):
         ctx["can_remind"] = r.is_open and not ctx["can_decide"] and (ctx["is_owner"] or (u.is_head and u.department == r.department))
         ctx["can_cancel"] = ctx["is_owner"] and r.status in ("DRAFT", "RETURNED") + FundsRequest.PENDING
         ctx["can_pay"] = r.status == FundsRequest.Status.PENDING_PAYMENT and u.has_cap("voucher.prepare")
+        from . import attachments as att
+
+        ctx["files"] = att.for_object("funds", r)
+        ctx["attach_kind"] = "funds"
+        ctx["can_attach"] = att.can_attach(u, "funds", r) and r.status not in ("PAID", "COMPLETED", "REJECTED", "CANCELLED")
+        ctx["kinds"] = att.Attachment.Kind.choices
+        ctx["can_confirm"] = r.status == FundsRequest.Status.PENDING_CONFIRMATION and (ctx["is_owner"] or u.has_cap("procurement.order"))
+        ctx["needs_quote"] = ctx["can_edit"] and r.request_type in fr.PURCHASE_TYPES and not ctx["files"]
         ctx["methods"] = FundsRequest.PaymentMethod.choices
         ctx["approvals"] = []  # shown in the tracker instead
         ctx["log"] = fr.history(r)
@@ -336,6 +464,8 @@ def fund_action(request, pk):
         run_action(request, fr.remind, req, note, success="Reminder sent.")
     elif a == "cancel":
         run_action(request, fr.cancel, req, note, success="Request cancelled.")
+    elif a == "confirm":
+        run_action(request, fr.confirm_purchase, req, note, success="Purchase confirmed – Finance now prepares the payment.")
     elif a == "pay":
         v = run_action(request, fr.prepare_payment, req, method=request.POST.get("method") or None,
                        success="Payment voucher prepared – it now goes through payment approval.")

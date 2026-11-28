@@ -48,6 +48,7 @@ object Entities {
     const val PURCHASE_ORDERS = "purchase_orders"
     const val BANK_ACCOUNTS = "bank_accounts"
     const val CORRESPONDENCE = "correspondence"
+    const val PHONE_MESSAGES = "phone_messages"
     const val SALARY_PROFILES = "salary_profiles"
     const val PAYSLIPS = "payslips"
     const val TAX_TABLES = "tax_tables"
@@ -378,10 +379,23 @@ data class FundsRequest(
     val voucherNumber: String? = null, val voucherStatus: String? = null, val completedAt: String? = null,
     val lines: List<FundsLine> = emptyList(), val route: List<RouteStep> = emptyList(), val history: List<HistoryEntry> = emptyList(),
     val whereNow: String = "", val daysWaiting: Int = 0, val deciders: List<Long> = emptyList(), val payeeDiffers: Boolean = false, val createdAt: String = "",
+    val attachments: List<FileInfo> = emptyList(), val purchaseConfirmedAt: String? = null, val confirmationNote: String = "",
     val localNote: String? = null,
 ) {
-    val isOpen get() = status in listOf("P_HOD", "P_ADMIN", "P_TREAS", "P_CEO", "P_PAY", "PAYING")
+    val isOpen get() = status in listOf("P_HOD", "P_ADMIN", "P_ACC", "P_TREAS", "P_CEO", "P_CONF", "P_PAY", "PAYING")
 }
+
+/** A file on a request or letter: quotation, invoice, delivery note, scan, photo. Opened through a one-hour link. */
+@Serializable
+data class FileInfo(val id: String, val name: String = "", val kind: String = "", val kindLabel: String = "", val size: Long = 0,
+                    val uploadedByName: String = "", val createdAt: String = "")
+
+/** A phone call taken by reception for an officer or a department. */
+@Serializable
+data class PhoneMessage(val id: String, val callerName: String = "", val callerPhone: String = "", val forUser: Long? = null,
+                        val forUserName: String? = null, val forDepartment: String = "", val forDepartmentLabel: String = "", val message: String = "",
+                        val callBack: Boolean = true, val takenByName: String? = null, val status: String = "NEW", val statusLabel: String = "",
+                        val doneAt: String? = null, val doneNote: String = "", val createdAt: String = "", val localNote: String? = null)
 
 @Serializable
 data class MemoReply(val author: String = "", val department: String = "", val body: String = "", val `when`: String = "")
@@ -422,7 +436,10 @@ data class BankAccount(val id: String, val name: String = "", val bank: String =
 data class Correspondence(val id: String, val reference: String = "", val sender: String = "", val senderContact: String = "", val subject: String = "",
                           val dateReceived: String = "", val department: String = "", val departmentLabel: String = "", val assignedTo: Long? = null,
                           val assignedToName: String? = null, val status: String = "", val statusLabel: String = "", val responseDue: String? = null,
-                          val respondedAt: String? = null, val responseSummary: String = "", val fileReference: String = "", val localNote: String? = null)
+                          val respondedAt: String? = null, val responseSummary: String = "", val fileReference: String = "",
+                          val addressedTo: Long? = null, val addressedToName: String? = null, val routingNote: String = "", val task: String? = null,
+                          val taskReference: String? = null, val receivedByName: String = "", val attachments: List<FileInfo> = emptyList(),
+                          val localNote: String? = null)
 
 @Serializable
 data class SalaryProfile(val id: String, val employeeId: Long = 0, val employeeName: String = "", val department: String = "", val roleLabel: String = "",

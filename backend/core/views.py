@@ -111,6 +111,12 @@ def dashboard(request):
     user = request.user
     ctx = {"title": "Dashboard", "approvals": pending_approvals(user)}
     ctx["my_tasks"] = Task.objects.alive().filter(assigned_to=user, status__in=[Task.Status.OPEN, Task.Status.IN_PROGRESS])[:10]
+    from workflow import services as _wf
+    from workflow.models import PhoneMessage
+
+    ctx["in_tray"] = list(_wf.in_tray(user).select_related("created_by")[:8])
+    ctx["calls"] = list(_wf.phone_message_scope(user, PhoneMessage.objects.alive()).filter(status=PhoneMessage.Status.NEW)
+                        .exclude(taken_by=user)[:6]) if not user.has_cap("calls.log") else []
     dept_filter = Q() if user.sees_all_departments() else Q(department=user.department)
     from workflow.services import complaint_scope
 

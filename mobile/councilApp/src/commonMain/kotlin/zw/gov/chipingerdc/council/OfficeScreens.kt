@@ -279,7 +279,7 @@ fun IssueOrderPanel(ctx: Ctx, r: Requisition) {
 fun CorrespondenceScreen(ctx: Ctx) {
     val list by ctx.sdk.observe(Entities.CORRESPONDENCE, Correspondence.serializer()).collectAsState(initial = emptyList())
     AppScreen("Correspondence register", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        zw.gov.chipingerdc.shared.ui.TopAction { PrimaryButton("+ Record incoming letter", onClick = { ctx.go(Screen.NewCorrespondence) }) }
+        zw.gov.chipingerdc.shared.ui.TopAction { if (ctx.me.can("correspondence.manage")) PrimaryButton("+ Incoming letter", onClick = { ctx.go(Screen.NewCorrespondence) }) }
         ListScreen {
             item { InfoBox("Letters are answered within 7 working days.") }
             if (list.isEmpty()) item { Empty("No letters.") }

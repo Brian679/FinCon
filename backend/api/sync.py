@@ -197,7 +197,8 @@ def _staff_scope(user):
     from accounts.models import User
 
     qs = User.objects.filter(user_type=User.UserType.STAFF)
-    if user.sees_all_departments() or user.has_cap("hr.view", "tasks.assign_any", "payroll.view", "payroll.manage"):
+    if user.sees_all_departments() or user.has_cap("hr.view", "tasks.assign_any", "payroll.view", "payroll.manage", "correspondence.manage",
+                                                   "calls.log"):
         return qs
     return qs.filter(department=user.department)
 

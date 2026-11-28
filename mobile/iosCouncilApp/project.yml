@@ -19,6 +19,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         UIBackgroundModes: [fetch]
+        NSCameraUsageDescription: "Photograph letters, invoices and delivery notes to attach them."
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: zw.gov.chipingerdc.council

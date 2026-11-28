@@ -1,5 +1,7 @@
 package zw.gov.chipingerdc.council
 
+import kotlinx.coroutines.launch
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,8 +61,10 @@ import zw.gov.chipingerdc.shared.ui.bottomRule
 import zw.gov.chipingerdc.shared.ui.money
 import zw.gov.chipingerdc.shared.ui.prettyDate
 
-const val FUNDS_ROUTE = "You → Head of Department → Administration Officer → Treasurer → CEO → payment voucher (Accountant checks, " +
-    "Treasurer approves the payment, CEO if large) → paid. You are notified at every step."
+const val FUNDS_ROUTE = "You → Head of Department → Administration Officer → Accountant → Treasurer → CEO → (purchases: invoice attached, " +
+    "purchase confirmed) → payment voucher (Accountant checks, Treasurer approves the payment, CEO if large) → paid. You are notified at every step."
+
+val PURCHASE_TYPES = listOf("PURCHASE", "FUEL", "REPAIRS", "TRAINING")
 
 /** Can this officer decide the request now? (the server lists who may). */
 fun fundsStage(me: Me, r: FundsRequest): String? =
@@ -72,6 +76,8 @@ fun fundsApprovals(me: Me, list: List<FundsRequest>): List<Approval> = buildList
     list.forEach { r ->
         fundsStage(me, r)?.let { add(Approval("Request for funds", r.reference, "${r.departmentLabel} · ${r.title} · ${r.currency} ${money(r.total)}", it, Screen.FundsDetail(r.id))) }
         if (canPreparePayment(me, r)) add(Approval("Request for funds", r.reference, "${r.title} · ${r.currency} ${money(r.total)}", "Prepare payment voucher", Screen.FundsDetail(r.id)))
+        if (r.status == "P_CONF" && r.localNote == null && (r.requestedBy == me.id || me.can("procurement.order")))
+            add(Approval("Request for funds", r.reference, "${r.title} · ${r.currency} ${money(r.total)}", "Attach invoice & confirm purchase", Screen.FundsDetail(r.id)))
     }
 }
 
@@ -189,6 +195,18 @@ fun FundsDetailScreen(ctx: Ctx, id: String) {
                 r.lines.forEach { KeyValue("${it.quantity.removeSuffix(".00")} × ${it.description} @ ${money(it.unitCost)}", money(it.total)) }
                 KeyValue("Total", "${r.currency} ${money(r.total)}")
             }
+            val mineReq = r.requestedBy == me.id
+            FilesCard(ctx.sdk, "funds", r.id, r.attachments,
+                r.localNote == null && r.status !in listOf("PAID", "COMPLETED", "REJECTED", "CANCELLED") &&
+                    (mineReq || me.can("procurement.order", "voucher.prepare", "funds.accountant_approve")),
+                when { r.status == "P_CONF" -> "INVOICE"; r.status in listOf("DRAFT", "RETURNED") && r.requestType in PURCHASE_TYPES -> "QUOTE"; else -> "EVIDENCE" },
+                "Quotations, invoices & evidence")
+            if (r.status == "P_CONF" && r.localNote == null && (mineReq || me.can("procurement.order"))) {
+                val hasInvoice = r.attachments.any { it.kind in listOf("INVOICE", "DELIVERY") }
+                if (!hasInvoice) Message("Attach the invoice or delivery note, then confirm the purchase.", MessageKind.WARNING)
+                ActionPanel("Confirm the purchase", listOf(FieldSpec("comment", "Note (e.g. 400 litres delivered to the depot)")),
+                    listOf("confirm" to "Confirm purchase")) { _, v -> act("confirm", v["comment"] ?: "", "Confirmation queued") }
+            }
             fundsStage(me, r)?.let { stage ->
                 ActionPanel("Your decision – $stage", listOf(FieldSpec("comment", "Comment (required to return or reject)", "multiline")),
                     listOf("approve" to "Approve – send to next stage", "return" to "Return for changes", "reject" to "Reject"),
@@ -212,8 +230,9 @@ fun FundsDetailScreen(ctx: Ctx, id: String) {
                     act("remind", v["comment"] ?: "", "Reminder queued")
                 }
             }
-            if (mine && r.status == "RETURNED") PrimaryButton("Resubmit for approval", onClick = { act("submit", note = "Resubmission queued") })
-            if (mine && r.status in listOf("P_HOD", "P_ADMIN", "P_TREAS", "P_CEO", "RETURNED")) SecondaryButton("Cancel request", { act("cancel", note = "Cancellation queued") })
+            if (mine && r.status in listOf("RETURNED", "DRAFT")) PrimaryButton(if (r.status == "DRAFT") "Submit for approval" else "Resubmit for approval",
+                enabled = r.requestType !in PURCHASE_TYPES || r.attachments.isNotEmpty(), onClick = { act("submit", note = "Submission queued") })
+            if (mine && r.status in listOf("P_HOD", "P_ADMIN", "P_ACC", "P_TREAS", "P_CEO", "RETURNED")) SecondaryButton("Cancel request", { act("cancel", note = "Cancellation queued") })
             if (r.history.isNotEmpty()) SectionCard("History") {
                 r.history.forEach { h ->
                     Column(Modifier.fillMaxWidth().bottomRule().padding(vertical = 6.dp)) {
@@ -249,6 +268,7 @@ fun NewFundsScreen(ctx: Ctx) {
     var details by remember { mutableStateOf("") }
     var payee by remember { mutableStateOf("") }
     val rows = remember { mutableStateListOf(LineRow("Subsistence allowance", "1", ""), LineRow("Accommodation", "1", "")) }
+    val files = remember { mutableStateListOf<zw.gov.chipingerdc.shared.PickedFile>() }
     val total = rows.sumOf { (it.quantity.toDoubleOrNull() ?: 0.0) * (it.unitCost.toDoubleOrNull() ?: 0.0) }
     AppScreen("New request", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
@@ -286,8 +306,10 @@ fun NewFundsScreen(ctx: Ctx) {
                 Field("Bank / mobile money details", details, { details = it })
                 Field("Pay to (blank = me)", payee, { payee = it })
             }
+            val needsQuote = type in PURCHASE_TYPES
+            PendingFiles(files, if (needsQuote) "Quotation / supporting documents (required)" else "Supporting documents")
             val valid = title.isNotBlank() && purpose.isNotBlank() && rows.all { it.description.isNotBlank() && (it.unitCost.toDoubleOrNull() ?: 0.0) > 0 } &&
-                (type != "TRAVEL" || (destination.isNotBlank() && depart.isNotBlank()))
+                (type != "TRAVEL" || (destination.isNotBlank() && depart.isNotBlank())) && (!needsQuote || files.isNotEmpty())
             PrimaryButton("Submit for approval", enabled = valid, onClick = {
                 val id = ctx.sdk.newId()
                 val optimistic = buildJsonObject {
@@ -303,9 +325,18 @@ fun NewFundsScreen(ctx: Ctx) {
                     if (ret.isNotBlank()) put("return_date", ret)
                     put("travellers", travellers); if (neededBy.isNotBlank()) put("needed_by", neededBy)
                     put("requires_payment", payment); put("payment_method", method); put("payment_details", details); put("payee_name", payee)
-                    put("submit", true)
+                    val toSend = files.toList()
+                    put("submit", toSend.isEmpty())
                     putJsonArray("lines") {
                         rows.forEach { r -> addJsonObject { put("description", r.description); put("quantity", r.quantity); put("unit_cost", r.unitCost) } }
+                    }
+                }
+                val toSend = files.toList()
+                if (toSend.isNotEmpty()) ctx.sdk.scope.launch {
+                    runCatching {
+                        ctx.sdk.sync.sync()
+                        toSend.forEach { uploadAttachment(ctx.sdk, "funds", id, if (needsQuote) "QUOTE" else "EVIDENCE", it) }
+                        ctx.sdk.enqueue("funds.action", "Submit: $title", Entities.FUNDS_REQUESTS, id) { put("id", id); put("action", "submit"); put("comment", "") }
                     }
                 }
                 ctx.back()

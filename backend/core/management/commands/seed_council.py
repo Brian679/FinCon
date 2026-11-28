@@ -334,6 +334,7 @@ class Command(BaseCommand):
         Policy.objects.create(title="Strategic plan 2026–2030", kind="STRATEGY", department="EXEC", version="1.0", status="ADOPTED", adopted_on=today - timedelta(days=200))
         self._demo_more_areas(u)
         self._demo_requests(u)
+        self._demo_mail(u)
         self._demo_payroll(u)
         self._demo_farms_and_intern(u)
         self._demo_social(u)
@@ -406,6 +407,52 @@ class Command(BaseCommand):
                                    notes="Runs the tuck shop")
         fin.save_stand_beneficiary(tsitsi, farm, full_name="Simba Mapfumo", relationship="CO_OWNER", national_id="63-334455S63", phone="0772334455")
         fin.request_certificate(tsitsi, kind="RESIDENCE", property=house, purpose="Opening a bank account", beneficiary=son)
+
+    def _demo_mail(self, u):
+        """Reception: scanned letters sent to the CEO (one already given to a department), phone messages, and a purchase waiting for its invoice."""
+        from datetime import timedelta
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from workflow import attachments as att
+        from workflow import funds as fr
+        from workflow import services as wf
+        from workflow.models import FundsRequest, FundsRequestLine
+
+        today = timezone.localdate()
+        rec, ceo = u["reception"], u["ceo"]
+
+        def scan(name):
+            return SimpleUploadedFile(name, b"%PDF-1.4\n% scanned letter (demo)\n", content_type="application/pdf")
+
+        letters = [
+            ("Ministry of Local Government, Public Works and National Housing", "2027 budget consultation meetings – dates to confirm", "Needs a reply by Friday."),
+            ("Zimbabwe National Water Authority (ZINWA)", "Borehole drilling programme for wards 12 and 18", ""),
+            ("Chipinge Business Association", "Request to extend market trading hours in December", "Delivered by hand."),
+            ("Provincial Development Coordinator, Manicaland", "Road rehabilitation – Chipinge to Checheche section", ""),
+        ]
+        made = []
+        for i, (sender, subject, note) in enumerate(letters):
+            c = wf.log_correspondence(rec, sender=sender, subject=subject, department="EXEC", addressed_to=ceo, routing_note=note,
+                                      date_received=today - timedelta(days=i))
+            att.add(rec, "correspondence", c, scan(f"{c.reference} scan.pdf"), "SCAN")
+            made.append(c)
+        wf.route_letter(ceo, made[3], "task", department="TECH", title="Prepare the road section costing for the PDC",
+                        due_date=today + timedelta(days=7), note="Give the PDC the costed works plan.")
+        wf.take_phone_message(rec, caller_name="Mr T. Dube (ZINWA)", caller_phone="0772 410 553", message="About the borehole drilling letter – wants a meeting date.",
+                              for_user=u["engineer"])
+        wf.take_phone_message(rec, caller_name="Mrs R. Sibanda", caller_phone="0715 880 214", message="Asking when the rates statement for stand 612 will be ready.",
+                              for_department="FINANCE", call_back=True)
+        wf.take_phone_message(rec, caller_name="Office of the PDC", caller_phone="020 2 2601", message="Please call back about Thursday's meeting.", for_user=ceo)
+        # a purchase fully approved – waiting for the invoice before Finance pays
+        req = FundsRequest.objects.create(requested_by=u["tech.officer"], created_by=u["tech.officer"], request_type="REPAIRS",
+                                          title="Grader tyres (2)", purpose="Grader CRDC-07 is off the road – both front tyres worn out.")
+        FundsRequestLine.objects.create(request=req, description="Grader tyre 14.00-24", quantity=2, unit_cost=650)
+        att.add(u["tech.officer"], "funds", req, SimpleUploadedFile("Tyre quotation – Chipinge Motors.pdf", b"%PDF-1.4\n% quotation (demo)\n",
+                                                                     content_type="application/pdf"), "QUOTE")
+        fr.submit(u["tech.officer"], req)
+        for who in ("engineer", "admin.officer", "accountant", "treasurer", "ceo"):
+            fr.decide(u[who], req, "approve")
 
     def _demo_requests(self, u):
         """Requests for funds / purchases at different stages, and memos."""

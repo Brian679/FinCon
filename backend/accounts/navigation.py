@@ -12,7 +12,8 @@ ADD_LINKS = {
     "finance:cashups": ("finance:cashup_new", "cashup.submit"), "finance:area_list": ("finance:area_new", "areas.manage"),
     "finance:leases": ("finance:lease_new", "leases.manage"), "finance:messages": ("finance:broadcast", "reminders.send"),
     "workflow:tasks": ("workflow:task_new", ("tasks.assign_any", "tasks.assign_department")), "workflow:complaints": ("workflow:complaint_new", ("complaints.manage", "complaints.department", "complaints.view_all")),
-    "workflow:requests": ("workflow:request_new", None), "workflow:correspondence": ("workflow:correspondence_new", "correspondence.manage"),
+    "workflow:requests": ("workflow:request_new", None), "workflow:correspondence": ("workflow:letter_new", "correspondence.manage"),
+    "workflow:in_tray": ("workflow:letter_new", "correspondence.manage"),
     "departments:leave": ("departments:leave_new", None), "departments:stands": ("departments:stand_new", "stands.manage"),
     "departments:projects": ("departments:project_new", "projects.manage"), "departments:findings": ("departments:finding_new", "audit.findings_manage"),
     "departments:incidents": ("departments:incident_new", "incidents.manage"), "departments:activities": ("departments:activity_new", "activities.manage"),
@@ -89,6 +90,8 @@ def build_nav(user):
     if c("dept.overview", "dept.overview_all"):
         general.append(_item("Department overview", "departments:overview"))
     general += [
+        _item("Incoming mail", "workflow:in_tray"),
+        _item("Phone messages", "workflow:phone_messages"),
         _item("Tasks", "workflow:tasks"),
         _item("Memos to / from departments", "workflow:memos"),
         _item("Requests for funds & purchases", "workflow:funds") if c("funds.request") else None,

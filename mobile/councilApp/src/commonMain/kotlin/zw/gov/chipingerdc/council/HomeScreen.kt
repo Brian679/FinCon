@@ -44,6 +44,7 @@ import zw.gov.chipingerdc.shared.ui.LocalSiteName
 import zw.gov.chipingerdc.shared.ui.RowCard
 import zw.gov.chipingerdc.shared.ui.ScrollColumn
 import zw.gov.chipingerdc.shared.ui.SectionCard
+import zw.gov.chipingerdc.shared.ui.PrimaryButton
 import zw.gov.chipingerdc.shared.ui.isPast
 import zw.gov.chipingerdc.shared.ui.money
 
@@ -72,11 +73,17 @@ fun CouncilMenu(ctx: Ctx) {
     val overdueFaults = requests.count { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") && isPast(it.dueAt) }
     val myFunds = funds.count { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
     val newMemos = memos.count { it.sender != me.id && it.status == "SENT" }
+    val letters by sdk.observe(Entities.CORRESPONDENCE, zw.gov.chipingerdc.shared.model.Correspondence.serializer()).collectAsState(initial = emptyList())
+    val calls by sdk.observe(Entities.PHONE_MESSAGES, zw.gov.chipingerdc.shared.model.PhoneMessage.serializer()).collectAsState(initial = emptyList())
+    val mail = inTray(me, letters).size
+    val openCalls = calls.count { it.status == "NEW" }
 
     val work = buildList {
         add(Tile("Dashboard", Screen.Home))
         if (me.can("reports.executive")) add(Tile("Executive overview", Screen.Executive))
         if (me.can("dept.overview", "dept.overview_all")) add(Tile("Department overview", Screen.Department()))
+        add(Tile("Incoming mail", Screen.InTray, mail, if (me.can("correspondence.manage")) Screen.NewCorrespondence else null))
+        add(Tile("Phone messages", Screen.PhoneMessages, openCalls, if (me.can("calls.log")) Screen.NewPhoneMessage else null))
         add(Tile("Tasks", Screen.Tasks, myTasks, if (me.can("tasks.assign_any", "tasks.assign_department")) Screen.NewTask else null))
         add(Tile("Memos to / from departments", Screen.Memos, newMemos, Screen.NewMemo))
         if (me.can("funds.request")) add(Tile("Requests for funds & purchases", Screen.Funds, myFunds, Screen.NewFunds))
@@ -117,7 +124,7 @@ fun CouncilMenu(ctx: Ctx) {
     val admin = buildList {
         if (me.can("meetings.view")) { add(Tile("Council meetings", Screen.Meetings)); add(Tile("Resolutions", Screen.Resolutions)) }
         if (me.can("policies.view")) add(Tile("Policies & by-laws", Screen.Policies))
-        if (me.can("correspondence.manage") || me.isHead) add(Tile("Correspondence", Screen.Correspondence, add = Screen.NewCorrespondence))
+        if (me.can("correspondence.manage") || me.isHead || me.isCeo) add(Tile("Correspondence register", Screen.Correspondence, add = if (me.can("correspondence.manage")) Screen.NewCorrespondence else null))
         if (me.can("hr.view")) add(Tile("Staff directory", Screen.Staff))
         if (me.can("records.view", "records.manage")) add(reg("Records management (registry)", "record_files", "records.manage"))
         if (me.can("ict.manage")) add(Tile("ICT services – support tickets", Screen.Tickets))
@@ -226,6 +233,11 @@ fun HomeScreen(ctx: Ctx) {
     val openFaults = requests.filter { it.status !in listOf("RESOLVED", "CLOSED", "REJECTED") }
     val openComplaints = complaints.filter { it.status !in listOf("RESOLVED", "CLOSED") }
     val myFunds = funds.filter { it.requestedBy == me.id && (it.isOpen || it.status == "RETURNED") }
+    val letters by sdk.observe(Entities.CORRESPONDENCE, zw.gov.chipingerdc.shared.model.Correspondence.serializer()).collectAsState(initial = emptyList())
+    val calls by sdk.observe(Entities.PHONE_MESSAGES, zw.gov.chipingerdc.shared.model.PhoneMessage.serializer()).collectAsState(initial = emptyList())
+    val mail = inTray(me, letters)
+    val openCalls = calls.filter { it.status == "NEW" }
+    val reception = me.can("calls.log", "correspondence.manage")
 
     AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
@@ -250,6 +262,23 @@ fun HomeScreen(ctx: Ctx) {
                 }
             }
             zw.gov.chipingerdc.shared.ui.AdaptiveGrid(figures)
+            if (reception) Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+                androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { PrimaryButton("Incoming letter", onClick = { ctx.go(Screen.NewCorrespondence) }) }
+                if (me.can("calls.log")) androidx.compose.foundation.layout.Box(Modifier.weight(1f)) { PrimaryButton("Take a phone message", onClick = { ctx.go(Screen.NewPhoneMessage) }) }
+            }
+            if (mail.isNotEmpty()) SectionCard("Incoming mail (${mail.size})") {
+                mail.take(5).forEach { c ->
+                    RowCard(c.subject, "${c.reference} · from ${c.sender}" + (if (c.receivedByName.isNotBlank()) " · received by ${c.receivedByName}" else ""),
+                        null, c.statusLabel, c.status, c.localNote) { ctx.go(Screen.CorrespondenceDetail(c.id)) }
+                }
+                if (mail.size > 5) Text("See all ${mail.size} ›", color = CrdcColors.Blue, fontSize = 13.sp, modifier = Modifier.padding(8.dp).clickable { ctx.go(Screen.InTray) })
+            }
+            if (openCalls.isNotEmpty() && !me.can("calls.log")) SectionCard("Phone messages (${openCalls.size})") {
+                openCalls.take(4).forEach { m ->
+                    RowCard(m.callerName + (if (m.callerPhone.isNotBlank()) " – ${m.callerPhone}" else ""), m.message, null,
+                        if (m.callBack) "Call back" else "New", "PENDING") { ctx.go(Screen.PhoneMessages) }
+                }
+            }
             // 2. what needs me – each list shows its own count
             SectionCard("Waiting for my approval (${approvals.size})") {
                 if (approvals.isEmpty()) Empty("Nothing waiting for you.")
