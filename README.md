@@ -87,7 +87,7 @@ What a user sees and can do is decided by their **role**, which belongs to a dep
 | Finance | **Treasurer** (HOD – oversees everything in Finance), **Accountant**, Revenue Clerk / Cashier, Expenditure Clerk |
 | Internal Audit | Chief Internal Auditor (HOD), Internal Auditor |
 | Social Services | **Director of Social Services** (HOD – sees and decides on everything in the department), **Environmental Management & Agricultural Officer** (CAMPFIRE wildlife / quotas / hunts, human-wildlife conflict & fires, environmental campaigns, sand / mining / forestry permits, agricultural farms), **Community Development Officer** (social welfare, schools & clinics development, community programmes, disasters & public safety), **Environmental Health Officer** (public health inspections, health certificates, water points, public ablutions & waste, hygiene promotion), Public Safety Officer, interns. Each officer only sees their own functions |
-| Growth Points | **Growth Point Manager** (own department) – oversees every growth point: the shops, houses and stands there (paid / owing board), **housing & stand allocation** (waiting list → shortlist → allocate), council premises leases, building plans and housing projects at the growth points |
+| Growth Points | **Growth Point Manager** (own department) – oversees every growth point: the shops, houses and stands there (paid / owing board), **housing & stand allocation** (application → $20 waiting-list fee → numbered waiting list → shortlist → allocate, with an optional deposit bill; the applicant is notified at each step), council premises leases, building plans and housing projects at the growth points |
 | Technical Services | District Engineer (HOD), Technical Officer, Building Inspector |
 
 Roles map to *capabilities* in one file (`backend/accounts/roles.py`), so changing who may do what is a one-line change.
@@ -273,3 +273,14 @@ mobile/
   iosCouncilApp/ iosClientApp/   Xcode (XcodeGen) wrappers
 docs/            client charter photo
 ```
+
+### Residents, owners and renters
+
+* **Registration** asks how the person is connected to a stand: none yet, owner, owner running a shop, *renting from the owner*, or
+  leasing council premises. Owners are linked to the owner's account straight away when their phone / ID match the register.
+* **Renters** are never put on the owner's account. Once a revenue officer approves the rental, the renter gets their own account
+  (for licences and levies on the shop they rent) and a *tenancy* record; the owner's rates stay with the owner.
+* **My bills** in the residents' app lists only what is still to be paid; fines are marked as fines. Tap a bill to pay it.
+* **Stand applications**: a resident applies, pays the waiting-list fee (revenue head `STAND-APP`), is given a waiting-list number,
+  and is notified (app + SMS) when a stand is allocated; the deposit, if billed, is paid from the same screen.
+

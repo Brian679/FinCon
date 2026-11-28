@@ -29,6 +29,7 @@ import zw.gov.chipingerdc.shared.model.Entities
 import zw.gov.chipingerdc.shared.model.Lease
 import zw.gov.chipingerdc.shared.model.Property
 import zw.gov.chipingerdc.shared.model.TradingArea
+import zw.gov.chipingerdc.shared.model.Tenancy
 import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.ChoicePicker
 import zw.gov.chipingerdc.shared.ui.CrdcColors
@@ -54,17 +55,25 @@ fun MyStandsScreen(ctx: CCtx) {
     val leases by sdk.observe(Entities.LEASES, Lease.serializer()).collectAsState(initial = emptyList())
     val bills by sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
     val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
+    val rented by sdk.observe(Entities.TENANCIES, Tenancy.serializer()).collectAsState(initial = emptyList())
     val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
     AppScreen("My stands & shops", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         PrimaryButton("+ Register a stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
         ListScreen {
             item {
-                InfoBox("Own a house or shop on a council stand, or lease council premises? Register it. If your details match the council register it is " +
-                    "linked straight away; otherwise a revenue officer verifies it and you are notified.")
+                InfoBox("Own a house or shop on a council stand, rent one from its owner, or lease council premises? Register it. Owners are linked straight " +
+                    "away when their details match the council register; renters and everyone else are checked by a revenue officer and notified.")
             }
             item { Text("Linked stands", fontSize = 13.sp, color = CrdcColors.Muted) }
             if (props.isEmpty()) item { Empty("No stands linked yet.") }
             items(props, key = { it.id }) { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills) }
+            if (rented.isNotEmpty()) {
+                item { Text("Places I rent", fontSize = 13.sp, color = CrdcColors.Muted) }
+                items(rented, key = { it.id }) { t ->
+                    RowCard("Stand ${t.standNumber} · ${t.areaName.ifBlank { t.location }}", "${t.businessName.ifBlank { t.landUse }}\nMy account ${t.tenantAccountNumber}" +
+                        (t.startDate?.let { " · since ${prettyDate(it)}" } ?: ""), null, if (t.isActive) "Renting" else "Ended", if (t.isActive) "ACTIVE" else "ENDED")
+                }
+            }
             if (leases.isNotEmpty()) {
                 item { Text("Leases", fontSize = 13.sp, color = CrdcColors.Muted) }
                 items(leases, key = { it.id }) { l ->

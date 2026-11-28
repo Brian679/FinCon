@@ -95,6 +95,7 @@ REVENUE_HEADS = [
     ("BUILD-PLAN", "Building plan approval fees", "FEES", 50, "ONCE", "I-130"),
     ("WATER", "Water & sanitation charges", "WATER", 0, "MONTHLY", "I-140"),
     ("STAND", "Stand purchase instalment", "LAND", 0, "ONCE", "I-150"),
+    ("STAND-APP", "Stand application / waiting-list fee", "LAND", 20, "ONCE", "I-150"),
     ("FINES", "By-law fines & penalties", "FINES", 0, "ONCE", "I-130"),
     ("PENALTY", "Late payment penalties", "FINES", 0, "ONCE", "I-130"),
     ("TROPHY", "CAMPFIRE trophy fees", "FEES", 0, "ONCE", "I-130"),
@@ -725,6 +726,23 @@ class Command(BaseCommand):
         if acc:
             sv.client_apply_permit(resident, holder=acc, permit_type="SAND", location="Musikavanhu river, Mutema – collection point 3", quantity=6,
                                    ward=12, days=30, purpose="Building a house – 2 loads")
+        from departments.services import apply_for_stand
+        from finance import services as fin
+        from finance.models import Property
+
+        # a renter: runs a bottle store in a shop owned by someone else – own account, linked as tenant
+        User = get_user_model()
+        renter, _ = User.objects.get_or_create(username="tenant", defaults=dict(first_name="Farai", last_name="Mutasa", phone="0773556677",
+                                                                               national_id="63-778899F63", user_type=User.UserType.CLIENT, ward=22))
+        renter.set_password("Chipinge@2026")
+        renter.save()
+        shop = Property.objects.filter(stand_number="B13").first()
+        if shop:
+            claim = fin.submit_claim(renter, stand_number="B13", area=shop.area, business_name="Farai's Bottle Store", claim_type="RENT",
+                                     notes="Renting from Tendai Sibanda since March 2026")
+            fin.decide_claim(u["cashier"], claim, True, note="Lease agreement seen")
+        # the renter also applies for a residential stand of their own (waiting-list fee to pay)
+        apply_for_stand(renter, stand_type="RES", preferred_location="Checheche growth point – extension phase 2", ward=22)
 
     def _demo_payroll(self, u):
         """Demo salaries and two months of payroll (illustrative amounts only – not real council salaries)."""

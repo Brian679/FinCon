@@ -814,8 +814,9 @@ class AccountClaim(SyncModel):
         REJECTED = "REJECTED", "Rejected"
 
     class ClaimType(models.TextChoices):
-        OWNER = "OWNER", "I own / occupy this stand"
-        SHOP = "SHOP", "I run a shop / business at this stand"
+        OWNER = "OWNER", "I own this stand / house"
+        SHOP = "SHOP", "I own this stand and run a shop / business on it"
+        RENT = "RENT", "I rent this house / shop from its owner"
         TENANT = "TENANT", "I lease these council premises"
 
     reference = models.CharField(max_length=30, unique=True, editable=False)
@@ -902,3 +903,25 @@ class Fine(SyncModel):
         if not self.reference:
             self.reference = SequenceCounter.next("FIN", 5)
         super().save(*args, **kwargs)
+
+
+
+class Tenancy(SyncModel):
+    """Someone renting a house or shop from its owner. The renter has their own council account: they pay their own
+    licence (and anything billed to them) and see the place in the app, but never the owner's account or bills."""
+
+    property = models.ForeignKey(Property, on_delete=models.PROTECT, related_name="tenancies")
+    tenant = models.ForeignKey(ClientAccount, on_delete=models.PROTECT, related_name="tenancies")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="tenancies")
+    business_name = models.CharField(max_length=200, blank=True, help_text="Shop / business the tenant runs here")
+    start_date = models.DateField(default=timezone.localdate)
+    end_date = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    claim = models.ForeignKey("AccountClaim", null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["-start_date"]
+        verbose_name_plural = "tenancies"
+
+    def __str__(self):
+        return f"{self.tenant.name} renting {self.property}"

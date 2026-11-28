@@ -97,6 +97,9 @@ def register_client(request):
         return Response({"errors": form.errors}, status=400)
     user = form.save()
     audit.log(AuditLog.Action.CREATE, user, user=user, message="Client self-registration (mobile app)")
+    d = form.cleaned_data
+    if d.get("stand_number") and d.get("relationship", "NONE") != "NONE":
+        fin.submit_claim(user, stand_number=d["stand_number"], area=d.get("area"), location=d.get("location", ""), business_name=d.get("business_name", ""), claim_type=d["relationship"])
     return Response(s.MeSerializer(user).data, status=201)
 
 

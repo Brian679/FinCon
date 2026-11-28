@@ -66,9 +66,10 @@ def register(request):
         audit.log(AuditLog.Action.CREATE, user, user=user, message="Client self-registration")
         login(request, user, backend="accounts.backends.LockoutModelBackend")
         d = form.cleaned_data
-        if d.get("stand_number"):
-            claim = fin.submit_claim(user, stand_number=d["stand_number"], area=d.get("area"), business_name=d.get("business_name", ""),
-                                     claim_type="SHOP" if d.get("business_name") else "OWNER")
+        if d.get("stand_number") and d.get("relationship", "NONE") != "NONE":
+            claim = fin.submit_claim(user, stand_number=d["stand_number"], area=d.get("area"), location=d.get("location", ""),
+                                     business_name=d.get("business_name", ""),
+                                     claim_type=d["relationship"])
             if claim.status == claim.Status.APPROVED:
                 messages.success(request, f"Welcome! Stand {claim.stand_number} matched our register and is now linked to your account.")
             else:
@@ -266,12 +267,12 @@ def stands(request):
 def stand_new(request):
     form = forms.ClientStandForm(request.POST or None, initial={"national_id": request.user.national_id, "phone": request.user.phone})
     if request.method == "POST" and form.is_valid():
-        st = form.save(commit=False)
-        st.applicant = request.user
-        st.applicant_name = request.user.get_full_name()
-        st.created_by = request.user
-        st.save()
-        messages.success(request, f"Application {st.reference} received and placed on the waiting list.")
+        from departments.services import apply_for_stand
+
+        d = form.cleaned_data
+        st = apply_for_stand(request.user, stand_type=d["stand_type"], preferred_location=d["preferred_location"], ward=d.get("ward"))
+        messages.success(request, f"Application {st.reference} received. " + (
+            f"Pay the waiting-list fee (bill {st.fee_bill.number}) to join the waiting list." if st.fee_bill_id else "You are on the waiting list."))
         return redirect("portal:stands")
     return render(request, "generic/form.html", {"form": form, "title": "Apply for a stand"})
 

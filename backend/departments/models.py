@@ -78,7 +78,8 @@ class StandApplication(SyncModel):
         INDUSTRIAL = "IND", "Industrial"
 
     class Status(models.TextChoices):
-        RECEIVED = "RECEIVED", "Received (waiting list)"
+        FEE_DUE = "FEE_DUE", "Waiting for the application fee"
+        RECEIVED = "RECEIVED", "On the waiting list"
         SHORTLISTED = "SHORTLISTED", "Shortlisted"
         ALLOCATED = "ALLOCATED", "Stand allocated"
         REJECTED = "REJECTED", "Rejected"
@@ -97,9 +98,23 @@ class StandApplication(SyncModel):
     allocated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="+")
     allocated_at = models.DateTimeField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    account = models.ForeignKey("finance.ClientAccount", null=True, blank=True, on_delete=models.SET_NULL, related_name="stand_applications")
+    fee_bill = models.ForeignKey("finance.Bill", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                 help_text="Application / waiting-list fee")
+    deposit_bill = models.ForeignKey("finance.Bill", null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+                                     help_text="Deposit billed when a stand is allocated")
+    joined_waiting_list_at = models.DateTimeField(null=True, blank=True)
 
     def __str__(self):
         return f"{self.reference} {self.applicant_name} ({self.get_stand_type_display()})"
+
+    @property
+    def waiting_position(self):
+        """Place in the queue for this type of stand (first come, first served from the day the fee was paid)."""
+        if self.status not in (self.Status.RECEIVED, self.Status.SHORTLISTED) or not self.joined_waiting_list_at:
+            return None
+        return StandApplication.objects.alive().filter(stand_type=self.stand_type, status__in=[self.Status.RECEIVED, self.Status.SHORTLISTED],
+                                                      joined_waiting_list_at__lt=self.joined_waiting_list_at).count() + 1
 
     def save(self, *args, **kwargs):
         if not self.reference:

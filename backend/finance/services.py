@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core import audit, sla
@@ -933,11 +934,13 @@ def submit_claim(user, *, stand_number, area=None, location="", business_name=""
     elif location:
         qs = qs.filter(location__icontains=location.strip())
     prop = qs.first() if qs.count() == 1 else None
+    if claim_type not in AccountClaim.ClaimType.values:
+        raise ValidationError("Choose how you are connected to this stand.")
     kwargs = {"id": claim_id} if claim_id else {}
     claim = AccountClaim.objects.create(user=user, stand_number=stand_number, area=area, location=location, business_name=business_name,
                                         id_number=id_number or user.national_id, phone=phone or user.phone, claim_type=claim_type, notes=notes,
                                         matched_property=prop, created_by=user, **kwargs)
-    if prop is not None:
+    if prop is not None and claim_type != AccountClaim.ClaimType.RENT:   # renting is always checked by the council
         acc = prop.account
         phone_ok = acc.phone and len(_digits(claim.phone)) >= 9 and _digits(acc.phone) == _digits(claim.phone)
         id_ok = acc.id_number and claim.id_number and acc.id_number.replace("-", "").replace(" ", "").upper() == claim.id_number.replace("-", "").replace(" ", "").upper()
@@ -970,6 +973,8 @@ def decide_claim(user, claim, approve: bool, *, account=None, note="", create_ac
         _record(claim, "Stand claim", "REJECTED", user, note)
         notify([claim.user], f"Stand claim {claim.reference} not approved", note or "Please visit the council offices with proof of ownership.")
         return claim
+    if claim.claim_type == AccountClaim.ClaimType.RENT:
+        return _approve_tenancy(user, claim, note)
     if account is None and claim.matched_property is not None:
         account = claim.matched_property.account
     if account is None:
@@ -988,6 +993,45 @@ def decide_claim(user, claim, approve: bool, *, account=None, note="", create_ac
     _record(claim, "Stand claim", "APPROVED", user, note)
     notify([claim.user], f"Stand {claim.stand_number} approved and linked", f"Account {account.account_number}. Your bills, payments and licences are now in the app.")
     return claim
+
+
+def client_own_account(user, *, created_by=None):
+    """The resident's own council account (opened from their profile if they have none)."""
+    acc = user.client_accounts.alive().filter(Q(id_number__iexact=user.national_id) if user.national_id else Q(pk__isnull=False)).first() \
+        or user.client_accounts.alive().first()
+    if acc is None and user.national_id:
+        acc = ClientAccount.objects.alive().filter(id_number__iexact=user.national_id).first()
+    if acc is None:
+        acc = ClientAccount.objects.create(name=user.get_full_name() or user.username, phone=user.phone, id_number=user.national_id or "",
+                                           email=user.email, ward=user.ward, created_by=created_by or user)
+    acc.portal_users.add(user)
+    return acc
+
+
+def _approve_tenancy(user, claim, note):
+    """A renter: linked to the stand as a tenant with their OWN account – never to the owner's account."""
+    from .models import AccountClaim, Tenancy
+
+    prop = claim.matched_property
+    if prop is None:
+        raise ValidationError("The stand is not in the council register yet – register it under its owner first, then approve the tenancy.")
+    tenant = client_own_account(claim.user, created_by=user)
+    Tenancy.objects.filter(property=prop, tenant=tenant, is_active=True).update(is_active=False, end_date=timezone.localdate())
+    Tenancy.objects.create(property=prop, tenant=tenant, user=claim.user, business_name=claim.business_name, claim=claim, created_by=user)
+    claim.account, claim.status = tenant, AccountClaim.Status.APPROVED
+    claim.save()
+    _record(claim, "Tenancy", "APPROVED", user, note)
+    notify([claim.user], f"You are registered as the tenant at stand {prop.stand_number}",
+           f"Your own account {tenant.account_number} is used for your licence and payments. The owner's bills stay with the owner.")
+    return claim
+
+
+def end_tenancy(user, tenancy):
+    if not (user.has_cap("claims.review") or tenancy.user_id == user.pk):
+        raise PermissionDenied("Only the tenant or the council can end a tenancy.")
+    tenancy.is_active, tenancy.end_date = False, timezone.localdate()
+    tenancy.save()
+    return tenancy
 
 
 def area_overview(year=None):
@@ -1180,8 +1224,8 @@ def settle_paid_items(account):
         elif not paid and fine.status == Fine.Status.PAID:
             fine.status = Fine.Status.ISSUED
             fine.save(update_fields=["status", "updated_at"])
-    try:
-        from social.services import settle_paid_items as social_settle
-    except ImportError:  # pragma: no cover
-        return
+    from departments.services import settle_stand_fees
+    from social.services import settle_paid_items as social_settle
+
     social_settle(account)
+    settle_stand_fees(account)

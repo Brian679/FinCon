@@ -124,6 +124,9 @@ class StandCreate(GenericCreateView):
     detail_url_name = "departments:stand"
     offline_capable = True
 
+    def after_save(self, obj):
+        services._join_waiting_list(obj)     # captured at the office: fee paid at the counter
+
 
 class StandDetail(GenericDetailView):
     model = StandApplication
@@ -131,33 +134,18 @@ class StandDetail(GenericDetailView):
     template_name = "departments/stand_detail.html"
     fields = [("Applicant", "applicant_name"), ("National ID", "national_id"), ("Phone", "phone"), ("Stand type", "stand_type"),
               ("Preferred location", "preferred_location"), ("Ward", "ward"), ("Allocated stand", "allocated_stand"),
-              ("Allocated by", "allocated_by"), ("Allocated at", "allocated_at"), ("Notes", "notes")]
+              ("Allocated by", "allocated_by"), ("Allocated at", "allocated_at"), ("Waiting-list number", "waiting_position"),
+              ("Application fee", "fee_bill"), ("Deposit", "deposit_bill"), ("Notes", "notes")]
 
 
 @cap_required("stands.manage")
 @require_POST
 def stand_action(request, pk):
+    from core.crud import run_action
+
     st = get_object_or_404(StandApplication, pk=pk)
-    action = request.POST.get("action")
-    if action == "shortlist":
-        st.status = StandApplication.Status.SHORTLISTED
-    elif action == "allocate":
-        if not request.user.has_cap("stands.allocate"):
-            raise PermissionDenied("Only the Director of Social Services can allocate stands.")
-        if not request.POST.get("stand"):
-            messages.error(request, "Enter the stand number.")
-            return redirect("departments:stand", pk=pk)
-        st.status = StandApplication.Status.ALLOCATED
-        st.allocated_stand = request.POST["stand"]
-        st.allocated_by = request.user
-        st.allocated_at = timezone.now()
-        notify([st.applicant], f"Stand allocated: {st.allocated_stand}", "Visit council offices to sign the agreement and pay the deposit.")
-    elif action == "reject":
-        st.status = StandApplication.Status.REJECTED
-        notify([st.applicant], f"Stand application {st.reference}", request.POST.get("note", ""))
-    st.notes = (st.notes + "\n" + request.POST.get("note", "")).strip()
-    st.save()
-    messages.success(request, "Updated.")
+    run_action(request, services.stand_action, request.user, st, request.POST.get("action"), stand=request.POST.get("stand", ""),
+               note=request.POST.get("note", ""), deposit=request.POST.get("deposit") or None, success="Updated – the applicant has been notified.")
     return redirect("departments:stand", pk=pk)
 
 

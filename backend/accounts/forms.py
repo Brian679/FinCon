@@ -73,10 +73,15 @@ class StaffUserForm(BootstrapFormMixin, forms.ModelForm):
 class ClientRegistrationForm(BootstrapFormMixin, forms.ModelForm):
     password1 = forms.CharField(label="Password", widget=forms.PasswordInput)
     password2 = forms.CharField(label="Confirm password", widget=forms.PasswordInput)
-    # Optional: the stand / shop the client owns, occupies or trades from.
-    stand_number = forms.CharField(max_length=40, required=False, label="Stand number (optional)",
-                                   help_text="If you own or run a shop/house on a council stand, enter its number to link it to your account.")
+    # How the person is connected to a stand / house / shop – owners are linked to the owner's account, renters get their own.
+    RELATIONSHIPS = [("NONE", "I don't own or rent a stand yet"), ("OWNER", "I own a stand / house"),
+                     ("SHOP", "I own a stand and run a shop / business on it"), ("RENT", "I rent a house / shop from its owner"),
+                     ("TENANT", "I lease council premises (shop / market stall)")]
+    relationship = forms.ChoiceField(choices=RELATIONSHIPS, initial="NONE", label="Your stand / property")
+    stand_number = forms.CharField(max_length=40, required=False, label="Stand number",
+                                   help_text="The stand number on your bill, lease or agreement of sale.")
     area = forms.ModelChoiceField(queryset=None, required=False, label="Shopping centre / township")
+    location = forms.CharField(max_length=200, required=False, label="…or type the place (township, village, growth point)")
     business_name = forms.CharField(max_length=200, required=False, label="Shop / business name (if any)")
 
     class Meta:
@@ -91,11 +96,15 @@ class ClientRegistrationForm(BootstrapFormMixin, forms.ModelForm):
         from finance.models import TradingArea
 
         self.fields["area"].queryset = TradingArea.objects.alive().filter(is_active=True)
+        self.order_fields(["first_name", "last_name", "username", "email", "phone", "national_id", "ward", "relationship", "stand_number", "area", "location",
+                           "business_name", "password1", "password2"])
 
     def clean(self):
         data = super().clean()
         if data.get("password1") != data.get("password2"):
             raise forms.ValidationError("The passwords do not match.")
+        if data.get("relationship", "NONE") != "NONE" and not data.get("stand_number"):
+            self.add_error("stand_number", "Enter the stand number so we can link it to you.")
         from django.contrib.auth.password_validation import validate_password
 
         if data.get("password1"):

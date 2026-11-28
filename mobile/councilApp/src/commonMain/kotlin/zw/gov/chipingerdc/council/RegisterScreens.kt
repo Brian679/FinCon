@@ -58,18 +58,24 @@ fun StandDetailScreen(ctx: Ctx, id: String) {
             SectionCard("${s.reference} – ${s.applicantName}") {
                 KeyValue("National ID", s.nationalId); KeyValue("Phone", s.phone); KeyValue("Stand type", s.standTypeLabel)
                 KeyValue("Preferred location", "${s.preferredLocation} · Ward ${s.ward ?: "-"}"); KeyValue("Allocated stand", s.allocatedStand)
+                s.waitingPosition?.let { KeyValue("Waiting-list number", it.toString()) }
+                s.fee?.let { KeyValue("Waiting-list fee", "$${money(it)}" + if (s.status == "FEE_DUE") " – not paid yet" else " – paid") }
+                s.deposit?.let { KeyValue("Deposit", "$${money(it)}" + if (s.depositPaid) " – paid" else " – not paid yet") }
                 Row { StatusChip(s.statusLabel, s.status) }
             }
+            if (s.status == "FEE_DUE") InfoBox("The applicant joins the waiting list once the waiting-list fee is paid.")
             if (s.status in listOf("RECEIVED", "SHORTLISTED") && ctx.me.can("stands.manage")) {
                 val buttons = buildList {
                     if (s.status == "RECEIVED") add("shortlist" to "Shortlist (officer)")
                     if (ctx.me.can("stands.allocate")) add("allocate" to "Allocate stand (Director)")
                     add("reject" to "Reject")
                 }
-                ActionPanel("Process application", listOf(FieldSpec("allocated_stand", "Stand number to allocate"), FieldSpec("note", "Note", "multiline")),
+                ActionPanel("Process application", listOf(FieldSpec("allocated_stand", "Stand number to allocate"),
+                    FieldSpec("deposit", "Deposit to bill on allocation (optional)", "number"), FieldSpec("note", "Note", "multiline")),
                     buttons) { action, v ->
                     ctx.sdk.enqueue("stand.action", "Stand ${s.reference}: $action", Entities.STANDS, s.id) {
                         put("stand", s.id); put("action", action); put("allocated_stand", v["allocated_stand"] ?: ""); put("note", v["note"] ?: "")
+                        v["deposit"]?.takeIf { it.isNotBlank() }?.let { put("deposit", it) }
                     }
                 }
             }

@@ -28,6 +28,7 @@ object Entities {
     const val TRADING_AREAS = "trading_areas"
     const val LEASES = "leases"
     const val CLAIMS = "claims"
+    const val TENANCIES = "tenancies"
     const val ASSETS = "assets"
     const val INCIDENTS = "incidents"
     const val ACTIVITIES = "activities"
@@ -190,6 +191,16 @@ data class StandApplication(
     val id: String, val reference: String = "", val applicantName: String = "", val nationalId: String = "", val phone: String = "",
     val standType: String = "", val standTypeLabel: String = "", val preferredLocation: String = "", val ward: Int? = null,
     val status: String = "", val statusLabel: String = "", val allocatedStand: String = "", val createdAt: String = "",
+    val account: String? = null, val feeBill: String? = null, val fee: String? = null, val depositBill: String? = null, val deposit: String? = null,
+    val depositPaid: Boolean = false, val waitingPosition: Int? = null, val joinedWaitingListAt: String? = null,
+)
+
+/** A house / shop the resident rents from its owner. Their own bills (licence, levies) are on their own account. */
+@Serializable
+data class Tenancy(
+    val id: String, val property: String = "", val tenant: String = "", val tenantAccountNumber: String = "", val standNumber: String = "",
+    val location: String = "", val areaName: String = "", val landUse: String = "", val businessName: String = "", val startDate: String? = null,
+    val endDate: String? = null, val isActive: Boolean = true,
 )
 
 @Serializable
@@ -448,5 +459,7 @@ object Choices {
     val resolutionStatuses = listOf("PENDING" to "Not started", "IN_PROGRESS" to "Being implemented", "DONE" to "Implemented")
     val projectStatuses = listOf("PLANNED" to "Planned", "PROCUREMENT" to "Procurement", "ONGOING" to "Ongoing", "COMPLETED" to "Completed", "SUSPENDED" to "Suspended")
     val taskKinds = listOf("TASK" to "Task / assignment", "REQUEST" to "Request for information / report", "MEMO" to "Memo / directive")
-    val claimTypes = listOf("OWNER" to "I own / occupy this stand", "SHOP" to "I run a shop / business at this stand", "TENANT" to "I lease these council premises")
+    val claimTypes = listOf("OWNER" to "I own this stand / house", "SHOP" to "I own this stand and run a shop / business on it",
+        "RENT" to "I rent this house / shop from its owner", "TENANT" to "I lease these council premises")
+    val relationships = listOf("NONE" to "I don't own or rent a stand yet") + claimTypes
 }

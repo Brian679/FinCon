@@ -47,6 +47,7 @@ import zw.gov.chipingerdc.shared.model.RevenueHead
 import zw.gov.chipingerdc.shared.model.ServiceRequest
 import zw.gov.chipingerdc.shared.model.ServiceStandard
 import zw.gov.chipingerdc.shared.model.StandApplication
+import zw.gov.chipingerdc.shared.model.Tenancy
 import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.ui.ChoicePicker
 import zw.gov.chipingerdc.shared.ui.CrdcColors
@@ -84,6 +85,10 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
     var ward by remember { mutableStateOf("") }
     var p1 by remember { mutableStateOf("") }
     var p2 by remember { mutableStateOf("") }
+    var rel by remember { mutableStateOf("NONE") }
+    var stand by remember { mutableStateOf("") }
+    var place by remember { mutableStateOf("") }
+    var business by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     AppScreen("Create account", onBack = onDone) {
@@ -96,14 +101,28 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
             Field("Mobile number", phone, { phone = it })
             Field("National ID", nid, { nid = it })
             Field("Ward (optional)", ward, { ward = it }, number = true)
+            Caption("Your stand / property")
+            ChoicePicker("How are you connected to a stand?", Choices.relationships, rel) { rel = it }
+            if (rel != "NONE") {
+                Field("Stand number", stand, { stand = it })
+                Field("Township, village or growth point", place, { place = it })
+                if (rel != "OWNER") Field("Shop / business name (if any)", business, { business = it })
+                Text(when (rel) {
+                    "RENT" -> "You get your own council account for your licence and levies. The owner's rates stay on the owner's account. " +
+                        "A council officer checks your lease or rental agreement and you are notified."
+                    "TENANT" -> "Your council lease is linked once a council officer has checked it."
+                    else -> "If your details match the council register, your stand is linked straight away. Otherwise an officer checks it and you are notified."
+                }, fontSize = 11.sp, color = CrdcColors.Muted)
+            } else Text("You can still apply for a stand, pay fines and get permits. Add a stand later under My property.", fontSize = 11.sp, color = CrdcColors.Muted)
             Field("Password (min. 8 characters)", p1, { p1 = it }, password = true)
             Field("Confirm password", p2, { p2 = it }, password = true)
             msg?.let { InfoBox(it.first, if (it.second) CrdcColors.Success else CrdcColors.Danger) }
-            PrimaryButton("Create account", busy = busy, enabled = listOf(first, last, username, phone, nid, p1).all { it.isNotBlank() } && p1 == p2, onClick = {
+            PrimaryButton("Create account", busy = busy, enabled = listOf(first, last, username, phone, nid, p1).all { it.isNotBlank() } && p1 == p2 && (rel == "NONE" || stand.isNotBlank()), onClick = {
                 busy = true
                 scope.launch {
                     runCatching {
-                        sdk.register(sdk.session.baseUrl, RegisterRequest(first, last, username, email, phone, nid, ward, p1, p2))
+                        sdk.register(sdk.session.baseUrl, RegisterRequest(first, last, username, email, phone, nid, ward, p1, p2,
+                            relationship = rel, standNumber = stand.takeIf { rel != "NONE" } ?: "", location = place, businessName = business))
                         sdk.login(sdk.session.baseUrl, username, p1)
                     }.onFailure { msg = (it.message ?: ONLINE_ONLY) to false }
                     busy = false
@@ -157,30 +176,53 @@ fun ClientHome(ctx: CCtx) {
     }
 }
 
-/** My accounts: what is owed on each council account (bills, levies, rent, penalties). */
+/** My bills: only what is still to be paid – rates, levies, rent, licence and stand fees, and fines (marked as fines). Tap one to pay it. */
 @Composable
 fun AccountsScreen(ctx: CCtx) {
     val accounts by ctx.sdk.observe(Entities.ACCOUNTS, ClientAccount.serializer()).collectAsState(initial = emptyList())
     val bills by ctx.sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
     val fines by ctx.sdk.observe(Entities.FINES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
     fun kotlinx.serialization.json.JsonObject.str(k: String) = (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
-    val unpaid = bills.count { it.status in listOf("UNPAID", "PART") }
-    val finesDue = fines.count { it.str("status") == "ISSUED" }
+    val fineByBill = fines.filter { it.str("bill").isNotBlank() }.associateBy { it.str("bill") }
+    val due = bills.filter { it.status in listOf("UNPAID", "PART") && (it.outstanding.toDoubleOrNull() ?: 0.0) > 0 }.sortedBy { it.dueDate ?: it.issueDate ?: "" }
+    // a fine that has no bill yet (just issued, not synced) is still shown so it can be paid
+    val unbilledFines = fines.filter { it.str("status") == "ISSUED" && it.str("bill").let { b -> b.isBlank() || due.none { d -> d.id == b } } }
+    val total = due.sumOf { it.outstanding.toDoubleOrNull() ?: 0.0 } + unbilledFines.sumOf { it.str("amount").toDoubleOrNull() ?: 0.0 }
+    var showAccounts by remember { mutableStateOf(false) }
     AppScreen("My bills", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ListScreen {
-            item {
-                IndexModule("Pay", listOf(
-                    IndexRow("Pay a bill (rates, levies, rent)", unpaid, { ctx.go(CScreen.Pay(null, null)) }),
-                    IndexRow("Pay a fine", finesDue, { ctx.go(CScreen.Fines) }),
-                ))
+            item { Caption(if (total > 0) "To pay: $${money(total.toString())}" else "Nothing to pay") }
+            if (due.isEmpty() && unbilledFines.isEmpty()) item { Empty("You have no unpaid bills or fines.") }
+            items(due, key = { it.id }) { b ->
+                val fine = fineByBill[b.id]
+                val acc = accounts.firstOrNull { it.id == b.account }
+                if (fine != null) {
+                    RowCard("Fine: ${fine.str("offence_name").ifBlank { b.description }}",
+                        "${fine.str("reference")} · ${fine.str("location").ifBlank { b.number }}\nIssued ${prettyDate(fine.str("date"))}" +
+                            (b.dueDate?.let { " · pay by ${prettyDate(it)}" } ?: ""),
+                        "$${money(b.outstanding)}", "Fine", "FINE") { ctx.go(CScreen.Pay(b.account, b.id)) }
+                } else {
+                    RowCard(b.description.ifBlank { b.revenueHead }, "${b.number}${acc?.let { " · ${it.accountNumber}" } ?: ""}" +
+                        (b.period.takeIf { it.isNotBlank() }?.let { " · $it" } ?: "") + (b.dueDate?.let { "\nDue ${prettyDate(it)}" } ?: ""),
+                        "$${money(b.outstanding)}", b.statusLabel, b.status) { ctx.go(CScreen.Pay(b.account, b.id)) }
+                }
             }
-            item { Caption("My accounts") }
-            if (accounts.isEmpty()) item { Empty("No council account linked yet.") }
-            items(accounts, key = { it.id }) { a ->
-                RowCard(a.name, a.accountNumber, if ((a.balance.toDoubleOrNull() ?: 0.0) > 0) "Owing $${money(a.balance)}" else "Paid up",
-                    a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
+            items(unbilledFines, key = { "f" + it.str("id") }) { f ->
+                RowCard("Fine: ${f.str("offence_name")}", "${f.str("reference")} · ${f.str("location")}", "$${money(f.str("amount"))}", "Fine", "FINE") {
+                    ctx.go(CScreen.Fines)
+                }
             }
-            item { SecondaryButton("Link another account", { ctx.go(CScreen.LinkAccount) }) }
+            if (due.size > 1) item { PrimaryButton("Pay all ($${money(total.toString())})", onClick = { ctx.go(CScreen.Pay(null, null)) }) }
+            item { SecondaryButton("Find a fine by its reference", { ctx.go(CScreen.Fines) }) }
+            item { SecondaryButton(if (showAccounts) "Hide my accounts" else "My accounts & statements", { showAccounts = !showAccounts }) }
+            if (showAccounts) {
+                if (accounts.isEmpty()) item { Empty("No council account linked yet.") }
+                items(accounts, key = { it.id }) { a ->
+                    RowCard(a.name, a.accountNumber, if ((a.balance.toDoubleOrNull() ?: 0.0) > 0) "Owing $${money(a.balance)}" else "Paid up",
+                        a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
+                }
+                item { SecondaryButton("Link another account", { ctx.go(CScreen.LinkAccount) }) }
+            }
         }
     }
 }
@@ -457,6 +499,7 @@ fun ApplyLicenceScreen(ctx: CCtx) {
     var account by remember { mutableStateOf<ClientAccount?>(null) }
     if (account == null && accounts.isNotEmpty()) account = accounts.first()
     val props by ctx.sdk.observe(Entities.PROPERTIES, Property.serializer()).collectAsState(initial = emptyList())
+    val rented by ctx.sdk.observe(Entities.TENANCIES, Tenancy.serializer()).collectAsState(initial = emptyList())
     var stand by remember { mutableStateOf<Property?>(null) }
     var type by remember { mutableStateOf("SHOP") }
     var name by remember { mutableStateOf("") }
@@ -471,10 +514,15 @@ fun ApplyLicenceScreen(ctx: CCtx) {
                 return@ScrollColumn
             }
             Picker("Council account", accounts, account, { "${it.accountNumber} – ${it.name}" }, { account = it })
-            Picker("Stand / shop", props.filter { it.account == account?.id }, stand, { "Stand ${it.standNumber} ${it.areaName} ${it.businessName}" }, {
-                stand = it
-                if (name.isBlank()) name = it.businessName
-                if (premises.isBlank()) premises = "Stand ${it.standNumber}, ${it.areaName.ifBlank { it.location }}"
+            val places = props.filter { it.account == account?.id }.map { Triple(it.id, "Stand ${it.standNumber} ${it.areaName} ${it.businessName}".trim(), it) } +
+                rented.filter { it.tenant == account?.id && it.isActive }.map {
+                    Triple(it.property, "Stand ${it.standNumber} ${it.areaName} (rented)", Property(id = it.property, standNumber = it.standNumber,
+                        areaName = it.areaName, location = it.location, businessName = it.businessName))
+                }
+            Picker("Stand / shop", places, places.firstOrNull { it.first == stand?.id }, { it.second }, { (_, _, p) ->
+                stand = p
+                if (name.isBlank()) name = p.businessName
+                if (premises.isBlank()) premises = "Stand ${p.standNumber}, ${p.areaName.ifBlank { p.location }}"
             })
             ChoicePicker("Licence type", Choices.licenceTypes, type) { type = it }
             Field("Business / trading name", name, { name = it })
@@ -597,13 +645,40 @@ fun NewFeedbackScreen(ctx: CCtx) {
 @Composable
 fun StandsScreen(ctx: CCtx) {
     val list by ctx.sdk.observe(Entities.STANDS, StandApplication.serializer()).collectAsState(initial = emptyList())
+    val bills by ctx.sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
+    fun paid(id: String?) = id != null && bills.firstOrNull { it.id == id }?.status == "PAID"
     AppScreen("Stand applications", onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
-        PrimaryButton("+ Apply for a stand", onClick = { ctx.go(CScreen.ApplyStand) })
         ListScreen {
+            item {
+                InfoBox("Apply for a stand, pay the waiting-list fee, and you are placed on the waiting list. When a stand is allocated to you, you are notified " +
+                    "and can pay the deposit here.")
+            }
+            item { PrimaryButton("Apply for a stand", onClick = { ctx.go(CScreen.ApplyStand) }) }
             if (list.isEmpty()) item { Empty("No applications.") }
-            items(list, key = { it.id }) { s ->
-                RowCard("${s.standTypeLabel} stand", "${s.reference} · ${s.preferredLocation}" +
-                    if (s.allocatedStand.isNotBlank()) "\nAllocated: ${s.allocatedStand}" else "", null, s.statusLabel, s.status)
+            items(list.sortedByDescending { it.createdAt }, key = { it.id }) { s ->
+                SectionCard("${s.standTypeLabel.ifBlank { "Stand" }} stand · ${s.reference}") {
+                    Text("Preferred place: ${s.preferredLocation}" + (s.ward?.let { " (ward $it)" } ?: ""), fontSize = 13.sp)
+                    Text("Status: ${s.statusLabel}", fontSize = 13.sp, color = when (s.status) {
+                        "FEE_DUE" -> CrdcColors.Warning; "ALLOCATED" -> CrdcColors.Success; "REJECTED" -> CrdcColors.Danger; else -> CrdcColors.Body })
+                    when (s.status) {
+                        "FEE_DUE" -> {
+                            Text("Pay the waiting-list fee of $${money(s.fee ?: "0")} to join the waiting list.", fontSize = 13.sp, color = CrdcColors.Muted)
+                            if (s.feeBill != null && !paid(s.feeBill)) PrimaryButton("Pay $${money(s.fee ?: "0")} fee", onClick = { ctx.go(CScreen.Pay(s.account, s.feeBill)) })
+                            else Text("Payment received – updating…", fontSize = 13.sp, color = CrdcColors.Muted)
+                        }
+                        "RECEIVED", "SHORTLISTED" -> s.waitingPosition?.let {
+                            Text("You are number $it on the waiting list" + (s.joinedWaitingListAt?.let { d -> " (since ${prettyDate(d)})" } ?: "") +
+                                ". You will be notified when a stand is allocated.", fontSize = 13.sp)
+                        }
+                        "ALLOCATED" -> {
+                            Text("Allocated stand: ${s.allocatedStand}", fontSize = 13.sp)
+                            if (s.depositBill != null) {
+                                if (s.depositPaid || paid(s.depositBill)) Text("Deposit of $${money(s.deposit ?: "0")} paid.", fontSize = 13.sp, color = CrdcColors.Success)
+                                else PrimaryButton("Pay deposit $${money(s.deposit ?: "0")}", onClick = { ctx.go(CScreen.Pay(s.account, s.depositBill)) })
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -625,12 +700,14 @@ fun ApplyStandScreen(ctx: CCtx) {
                 val id = ctx.sdk.newId()
                 val optimistic = buildJsonObject {
                     put("id", id); put("reference", "(sending)"); put("stand_type", type); put("preferred_location", location)
-                    put("status", "RECEIVED"); put("status_label", "Waiting to send"); put("updated_at", ctx.sdk.nowIso())
+                    put("status", "FEE_DUE"); put("status_label", "Waiting to send"); put("updated_at", ctx.sdk.nowIso())
                 }
                 ctx.sdk.enqueue("stand.create", "Stand application", Entities.STANDS, id, optimistic) {
                     put("id", id); put("stand_type", type); put("preferred_location", location); put("national_id", nid)
                     put("phone", ctx.me.phone); ward.toIntOrNull()?.let { put("ward", it) }
                 }
+                // the waiting-list fee bill (and the account it is on) arrive with the next sync
+                listOf(Entities.ACCOUNTS, Entities.BILLS).forEach { ctx.sdk.store.resetCursor(it) }
                 ctx.back()
             })
         }

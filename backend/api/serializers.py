@@ -216,10 +216,19 @@ class ServiceRequestSerializer(SyncSerializer):
 
 
 class StandApplicationSerializer(SyncSerializer):
+    waiting_position = serializers.IntegerField(read_only=True)
+    fee = serializers.DecimalField(source="fee_bill.amount", max_digits=14, decimal_places=2, read_only=True, default=None)
+    deposit = serializers.DecimalField(source="deposit_bill.amount", max_digits=14, decimal_places=2, read_only=True, default=None)
+    deposit_paid = serializers.SerializerMethodField()
+
     class Meta:
         model = StandApplication
         fields = _sync_fields(StandApplication, ["reference", "applicant_name", "national_id", "phone", "stand_type", "preferred_location", "ward",
-                                                 "status", "allocated_stand"])
+                                                 "status", "allocated_stand", "account", "fee_bill", "fee", "deposit_bill", "deposit", "deposit_paid",
+                                                 "waiting_position", "joined_waiting_list_at"])
+
+    def get_deposit_paid(self, obj):
+        return bool(obj.deposit_bill_id and obj.deposit_bill.status == "PAID")
 
 
 class ProjectSerializer(SyncSerializer):
@@ -747,3 +756,19 @@ EngagementSerializer = _reg_serializer(dm.Engagement, ["reference", "title", "ki
 NoticeSerializer = _reg_serializer(dm.PublicNotice, ["title", "category", "body", "ward", "publish_from", "expires_on", "is_published", "posted_by"])
 AuditEngagementSerializer = _reg_serializer(dm.AuditEngagement, ["reference", "title", "audit_type", "department", "quarter", "auditor", "status", "scope",
                                                                  "conclusion"])
+
+
+from finance.models import Tenancy  # noqa: E402
+
+
+class TenancySerializer(SyncSerializer):
+    stand_number = serializers.CharField(source="property.stand_number", read_only=True)
+    location = serializers.CharField(source="property.location", read_only=True)
+    area_name = serializers.CharField(source="property.area.name", read_only=True, default="")
+    land_use = serializers.CharField(source="property.get_land_use_display", read_only=True)
+    tenant_account_number = serializers.CharField(source="tenant.account_number", read_only=True)
+
+    class Meta:
+        model = Tenancy
+        fields = _sync_fields(Tenancy, ["property", "tenant", "tenant_account_number", "stand_number", "location", "area_name", "land_use",
+                                        "business_name", "start_date", "end_date", "is_active"])

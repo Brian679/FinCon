@@ -230,8 +230,63 @@ def respond_finding(user, f, *, response, date=None):
 
 
 @transaction.atomic
-def stand_action(user, st, action, *, stand="", note=""):
+def apply_for_stand(user, *, stand_type, preferred_location, ward=None, notes="", applicant_name="", national_id="", phone="", app_id=None):
+    """Stand application. From the residents' app the waiting-list fee is billed to the applicant's own account and the
+    application joins the waiting list once it is paid; one captured at the council office joins at once (fee paid there)."""
+    from finance.models import Bill, RevenueHead
+    from finance.services import client_own_account
+
+    kwargs = {"id": app_id} if app_id else {}
+    if user.is_client:
+        if StandApplication.objects.alive().filter(applicant=user, status__in=[StandApplication.Status.FEE_DUE, StandApplication.Status.RECEIVED,
+                                                                              StandApplication.Status.SHORTLISTED], stand_type=stand_type).exists():
+            raise ValidationError("You are already on the waiting list for this type of stand.")
+        acc = client_own_account(user)
+        st = StandApplication.objects.create(applicant=user, applicant_name=user.get_full_name() or user.username, national_id=user.national_id or national_id,
+                                             phone=user.phone or phone, stand_type=stand_type, preferred_location=preferred_location, ward=ward,
+                                             notes=notes, account=acc, status=StandApplication.Status.FEE_DUE, created_by=user, **kwargs)
+        head = RevenueHead.objects.filter(code="STAND-APP").first()
+        fee = head.default_amount if head else 0
+        if head and fee > 0:
+            st.fee_bill = Bill.objects.create(account=acc, revenue_head=head, amount=fee, created_by=user,
+                                              description=f"Stand application {st.reference} – waiting-list fee",
+                                              due_date=timezone.localdate() + timezone.timedelta(days=30))
+            st.save(update_fields=["fee_bill", "updated_at"])
+            acc.recalculate()
+            notify([user], f"Stand application {st.reference} received",
+                   f"Pay the waiting-list fee of USD {fee:,.2f} in the app to join the waiting list.")
+        else:
+            _join_waiting_list(st)
+        return st
     _need(user, "stands.manage")
+    st = StandApplication.objects.create(applicant_name=applicant_name, national_id=national_id, phone=phone, stand_type=stand_type,
+                                         preferred_location=preferred_location, ward=ward, notes=notes, created_by=user, **kwargs)
+    _join_waiting_list(st)
+    return st
+
+
+def _join_waiting_list(st):
+    st.status, st.joined_waiting_list_at = StandApplication.Status.RECEIVED, timezone.now()
+    st.save(update_fields=["status", "joined_waiting_list_at", "updated_at"])
+    if st.applicant_id:
+        notify([st.applicant], f"You are on the stand waiting list – number {st.waiting_position}",
+               f"{st.get_stand_type_display()} stand, {st.preferred_location}. You will be notified when a stand is allocated to you.")
+    managers = [u for u in get_user_model().objects.filter(is_active=True) if u.has_cap("stands.allocate")]
+    notify(managers, f"New stand application on the waiting list: {st.reference}", f"{st.applicant_name} – {st.preferred_location}",
+           f"/staff/growth-points/stands/{st.pk}/")
+
+
+def settle_stand_fees(account):
+    """After a receipt / void on the account: a paid waiting-list fee puts the application on the waiting list."""
+    for st in StandApplication.objects.alive().filter(account=account, status=StandApplication.Status.FEE_DUE).select_related("fee_bill"):
+        if st.fee_bill_id and st.fee_bill.status == "PAID":
+            _join_waiting_list(st)
+
+
+def stand_action(user, st, action, *, stand="", note="", deposit=None):
+    _need(user, "stands.manage")
+    if action in ("shortlist", "allocate") and st.status == StandApplication.Status.FEE_DUE:
+        raise ValidationError("The application fee has not been paid yet – the applicant is not on the waiting list.")
     if action == "shortlist":
         st.status = StandApplication.Status.SHORTLISTED
     elif action == "allocate":
@@ -240,7 +295,24 @@ def stand_action(user, st, action, *, stand="", note=""):
         if not stand:
             raise ValidationError("Enter the stand number.")
         st.status, st.allocated_stand, st.allocated_by, st.allocated_at = StandApplication.Status.ALLOCATED, stand, user, timezone.now()
-        notify([st.applicant], f"Stand allocated: {stand}", "Visit council offices to sign the agreement and pay the deposit.")
+        msg = "Visit the council offices to sign the agreement of sale."
+        if deposit not in (None, "") and st.account_id:
+            from decimal import Decimal
+
+            from finance.models import Bill, RevenueHead
+
+            amount = Decimal(str(deposit))
+            if amount > 0:
+                st.deposit_bill = Bill.objects.create(account=st.account, revenue_head=RevenueHead.objects.get(code="STAND"), amount=amount, created_by=user,
+                                                      description=f"Deposit – stand {stand} ({st.reference})",
+                                                      due_date=timezone.localdate() + timezone.timedelta(days=30))
+                st.account.recalculate()
+                msg = f"Pay the deposit of USD {amount:,.2f} in the app or at the council offices, then sign the agreement of sale."
+        from core.messaging import notify_client
+
+        notify_client(users=[st.applicant] if st.applicant_id else [], phone=st.phone, subject=f"Stand allocated to you: {stand}",
+                      body=f"Good news – stand {stand} ({st.preferred_location}) has been allocated to you. {msg}", sent_by=user,
+                      campaign="Stand allocation")
     elif action == "reject":
         st.status = StandApplication.Status.REJECTED
         notify([st.applicant], f"Stand application {st.reference}", note)

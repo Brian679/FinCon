@@ -227,6 +227,7 @@ def client_entities(user):
         "fines": (s.Fine.objects.filter(account__in=accounts).select_related("offence", "issued_by"), s.FineSerializer),
         "resource_permits": (s.sm.ResourcePermit.objects.filter(holder__in=accounts).prefetch_related("extractions"), s.PermitSerializer),
         "public_notices": (_public_notices(user), s.NoticeSerializer),
+        "tenancies": (s.Tenancy.objects.filter(tenant__in=accounts).select_related("property__area", "tenant"), s.TenancySerializer),
     }
 
 
@@ -390,7 +391,10 @@ def op_licence_apply(user, p):
     if p.get("property"):
         from finance.models import Property
 
-        prop = _get(Property, p["property"], Property.objects.filter(account=account))
+        from finance.models import Tenancy
+
+        rented = Tenancy.objects.filter(tenant=account, is_active=True).values("property")
+        prop = _get(Property, p["property"], Property.objects.filter(Q(account=account) | Q(pk__in=rented)))
     lic = fin.apply_licence(user, account=account, licence_type=p["licence_type"], business_name=p["business_name"], premises=p["premises"],
                             business_activity=p.get("business_activity", ""), ward=p.get("ward"), licence_id=p.get("id"), property=prop)
     return "licences", s.LicenceSerializer(lic).data
@@ -412,12 +416,9 @@ def op_leave_apply(user, p):
 
 
 def op_stand_create(user, p):
-    data = _clean(p, {"id", "applicant_name", "national_id", "phone", "stand_type", "preferred_location", "ward", "notes"})
-    if user.is_client:
-        data.update(applicant=user, applicant_name=user.get_full_name())
-    elif not user.has_cap("stands.manage"):
-        raise PermissionDenied("You cannot capture stand applications.")
-    st = StandApplication.objects.create(created_by=user, **data)
+    st = dept.apply_for_stand(user, stand_type=p.get("stand_type", "RES"), preferred_location=p.get("preferred_location", ""), ward=p.get("ward") or None,
+                              notes=p.get("notes", ""), applicant_name=p.get("applicant_name", ""), national_id=p.get("national_id", ""),
+                              phone=p.get("phone", ""), app_id=p.get("id"))
     return "stands", s.StandApplicationSerializer(st).data
 
 
@@ -464,7 +465,8 @@ def op_task_create(user, p):
 
 
 def op_stand_action(user, p):
-    st = dept.stand_action(user, _get(StandApplication, p["stand"]), p["action"], stand=p.get("allocated_stand", ""), note=p.get("note", ""))
+    st = dept.stand_action(user, _get(StandApplication, p["stand"]), p["action"], stand=p.get("allocated_stand", ""), note=p.get("note", ""),
+                           deposit=p.get("deposit") or None)
     return "stands", s.StandApplicationSerializer(st).data
 
 

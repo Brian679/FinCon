@@ -90,4 +90,9 @@ data class RegisterRequest(
     val ward: String = "",
     val password1: String,
     val password2: String,
+    /** How the person is connected to a stand: NONE, OWNER, SHOP, RENT (renting from the owner) or TENANT (council premises). */
+    val relationship: String = "NONE",
+    val standNumber: String = "",
+    val location: String = "",
+    val businessName: String = "",
 )
