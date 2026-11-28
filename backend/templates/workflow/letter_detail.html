@@ -4,19 +4,11 @@
 {% endblock %}
 {% block actions %}
 {% if can_route %}
-<div class="module"><h2>Give to a department as a task</h2><form method="post" class="p-2">{% csrf_token %}
-<label class="form-label">Department</label><select name="department" class="form-select mb-2" required><option value="">—</option>{% for v, l in departments %}<option value="{{ v }}">{{ l }}</option>{% endfor %}</select>
-<label class="form-label">Officer (optional – the head of department if empty)</label><select name="to_user" class="form-select mb-2"><option value="">—</option>{% for s in staff %}<option value="{{ s.pk }}">{{ s.get_full_name }} – {{ s.get_role_display }}</option>{% endfor %}</select>
-<label class="form-label">What must be done</label><input name="title" class="form-control mb-2" placeholder="{{ object.subject }}">
-<label class="form-label">Due date</label><input type="date" name="due_date" class="form-control mb-2">
-<textarea name="note" class="form-control mb-2" rows="2" placeholder="Instructions"></textarea>
-<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="task">Give task</button></div></form></div>
-<div class="module"><h2>Send to another officer</h2><form method="post" class="p-2">{% csrf_token %}
-<select name="to_user" class="form-select mb-2" required><option value="">—</option>{% for s in staff %}<option value="{{ s.pk }}">{{ s.get_full_name }} – {{ s.get_role_display }}</option>{% endfor %}</select>
-<input name="note" class="form-control mb-2" placeholder="Note">
-<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="forward">Send</button></div></form></div>
-<div class="module"><h2>Reply or file</h2><form method="post" class="p-2">{% csrf_token %}
-<textarea name="note" class="form-control mb-2" rows="2" placeholder="What was replied"></textarea>
-<div class="submit-row m-0"><button class="btn btn-primary" name="action" value="respond">Record reply</button> <button class="btn btn-outline-primary" name="action" value="file" formnovalidate>File it</button></div></form></div>
+<div class="module"><h2>What to do with this letter</h2><div class="p-2 d-grid gap-2">
+<a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'task' %}">Give task to a department</a>
+<a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'respond' %}">Reply to sender</a>
+<a class="btn btn-primary" href="{% url 'workflow:letter_action' object.pk 'forward' %}">Send to another officer</a>
+<form method="post" class="d-grid">{% csrf_token %}<button class="btn btn-outline-primary" name="action" value="file">File it</button></form>
+</div></div>
 {% endif %}
 {% endblock %}

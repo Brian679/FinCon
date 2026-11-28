@@ -233,3 +233,21 @@ class ScanIsReadOnlyForRecipientTests(CouncilTestCase):
         self.assertFalse(att.can_attach(self.user("ceo"), "correspondence", c))
         with self.assertRaises(PermissionDenied):
             att.add(self.user("ceo"), "correspondence", c, pdf())
+
+
+@override_settings(MEDIA_ROOT=MEDIA)
+class LetterActionPagesTests(CouncilTestCase):
+    def test_letter_page_has_buttons_and_each_action_has_its_own_page(self):
+        from django.test import Client
+
+        c = wf.log_correspondence(self.user("reception"), sender="ZESA", subject="Outage", department="EXEC", addressed_to=self.user("ceo"))
+        w = Client()
+        w.login(username="ceo", password=PW)
+        page = w.get(f"/staff/correspondence/{c.pk}/view/")
+        self.assertContains(page, "Give task to a department")
+        self.assertNotContains(page, "What must be done")
+        for a in ("task", "respond", "forward"):
+            self.assertEqual(w.get(f"/staff/correspondence/{c.pk}/{a}/").status_code, 200)
+        w.post(f"/staff/correspondence/{c.pk}/view/", {"action": "respond", "note": "Noted, thank you."})
+        c.refresh_from_db()
+        self.assertEqual(c.status, Correspondence.Status.RESPONDED)

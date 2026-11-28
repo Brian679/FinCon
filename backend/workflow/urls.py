@@ -17,6 +17,7 @@ urlpatterns = [
     path("correspondence/new/", v.CorrespondenceCreate.as_view(), name="correspondence_new"),
     path("correspondence/<uuid:pk>/", v.CorrespondenceUpdate.as_view(), name="correspondence_edit"),
     path("correspondence/<uuid:pk>/view/", v.letter_detail, name="letter"),
+    path("correspondence/<uuid:pk>/<str:action>/", v.letter_action, name="letter_action"),
     path("correspondence/incoming/", v.letter_new, name="letter_new"),
     path("incoming-mail/", v.InTray.as_view(), name="in_tray"),
     path("phone-messages/", v.phone_messages, name="phone_messages"),

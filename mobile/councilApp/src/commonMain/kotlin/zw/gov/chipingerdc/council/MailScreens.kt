@@ -200,15 +200,10 @@ fun LetterDetailScreen(ctx: Ctx, id: String) {
             }
             FilesCard(ctx.sdk, "correspondence", c.id, c.attachments, c.localNote == null && me.can("correspondence.manage"), "SCAN", "Scanned letter")
             if (canRoute) {
-                ActionPanel("Give to a department as a task", listOf(
-                    FieldSpec("department", "Department", "choice", Choices.departments, c.department.takeIf { it != "EXEC" } ?: "TECH"),
-                    FieldSpec("title", "What must be done", initial = c.subject),
-                    FieldSpec("due_date", "Due date (YYYY-MM-DD)"),
-                    FieldSpec("note", "Instructions", "multiline")), listOf("task" to "Give task")) { a, v -> route(a, v, "Task queued") }
-                ActionPanel("Send to another officer", listOf(FieldSpec("to_user", "Send to", "choice", staffChoices(staff, me.id)),
-                    FieldSpec("note", "Note")), listOf("forward" to "Send")) { a, v -> route(a, v, "Sending queued") }
-                ActionPanel("Reply or file", listOf(FieldSpec("note", "What was replied", "multiline")),
-                    listOf("respond" to "Record reply", "file" to "File it")) { a, v -> route(a, v, if (a == "file") "Filing queued" else "Reply queued") }
+                PrimaryButton("Give task to a department", onClick = { ctx.go(Screen.LetterAction(c.id, "task")) })
+                PrimaryButton("Reply to sender", onClick = { ctx.go(Screen.LetterAction(c.id, "respond")) })
+                PrimaryButton("Send to another officer", onClick = { ctx.go(Screen.LetterAction(c.id, "forward")) })
+                SecondaryButton("File it", { route("file", emptyMap(), "Filing queued") })
             }
         }
     }
@@ -321,6 +316,53 @@ fun NewPhoneMessageScreen(ctx: Ctx) {
                 ctx.sdk.enqueue("phone_message.create", "Phone message from $caller", Entities.PHONE_MESSAGES, id, optimistic) {
                     put("id", id); put("caller_name", caller); put("caller_phone", phone); put("message", message); put("call_back", callBack)
                     forUser.toLongOrNull()?.let { put("for_user", it) }; put("for_department", forDept)
+                }
+                ctx.back()
+            })
+        }
+    }
+}
+
+
+/** One thing to do with a letter, on its own screen: give it to a department as a task, reply to the sender, or send it on. */
+@Composable
+fun LetterActionScreen(ctx: Ctx, id: String, action: String) {
+    val cc by ctx.sdk.observeOne(Entities.CORRESPONDENCE, id, Correspondence.serializer()).collectAsState(initial = null)
+    val staff by ctx.sdk.observe(Entities.STAFF, StaffMember.serializer()).collectAsState(initial = emptyList())
+    val title = when (action) { "task" -> "Give task to a department"; "respond" -> "Reply to sender"; else -> "Send to another officer" }
+    var department by remember { mutableStateOf("TECH") }
+    var toUser by remember { mutableStateOf("") }
+    var what by remember { mutableStateOf("") }
+    var due by remember { mutableStateOf("") }
+    var note by remember { mutableStateOf("") }
+    AppScreen(title, onBack = ctx::back, sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+        val c = cc ?: return@AppScreen Empty("Not found")
+        if (what.isBlank() && action == "task") what = c.subject
+        ScrollColumn {
+            SectionCard(c.reference) {
+                Text(c.subject, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                Text("From ${c.sender}", fontSize = 13.sp, color = CrdcColors.Muted)
+            }
+            when (action) {
+                "task" -> {
+                    ChoicePicker("Department", Choices.departments, department) { department = it }
+                    Field("What must be done", what, { what = it })
+                    Field("Due date (YYYY-MM-DD)", due, { due = it })
+                    Field("Instructions", note, { note = it }, singleLine = false, minLines = 3)
+                }
+                "respond" -> Field("What was replied", note, { note = it }, singleLine = false, minLines = 4)
+                else -> {
+                    ChoicePicker("Send to", listOf("" to "—") + staffChoices(staff, ctx.me.id), toUser) { toUser = it }
+                    Field("Note", note, { note = it }, singleLine = false, minLines = 2)
+                }
+            }
+            val ok = when (action) { "respond" -> note.isNotBlank(); "forward" -> toUser.isNotBlank(); else -> department.isNotBlank() }
+            PrimaryButton(when (action) { "task" -> "Give task"; "respond" -> "Save reply"; else -> "Send" }, enabled = ok, onClick = {
+                ctx.sdk.markPending(Entities.CORRESPONDENCE, c.id, when (action) { "task" -> "Task queued"; "respond" -> "Reply queued"; else -> "Sending queued" })
+                ctx.sdk.enqueue("letter.route", "Letter ${c.reference}: $action", Entities.CORRESPONDENCE, c.id) {
+                    put("id", c.id); put("action", action); put("note", note)
+                    if (action == "task") { put("department", department); put("title", what); if (due.isNotBlank()) put("due_date", due) }
+                    if (action == "forward") put("to_user", toUser)
                 }
                 ctx.back()
             })

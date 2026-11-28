@@ -124,6 +124,7 @@ sealed interface Screen {
     data class CorrespondenceDetail(val id: String) : Screen
     data object NewCorrespondence : Screen
     data object InTray : Screen
+    data class LetterAction(val id: String, val action: String) : Screen
     data object PhoneMessages : Screen
     data object NewPhoneMessage : Screen
     data object Staff : Screen
@@ -322,6 +323,7 @@ private fun CouncilScreens(ctx: Ctx) {
         is Screen.CorrespondenceDetail -> LetterDetailScreen(ctx, s.id)
         Screen.NewCorrespondence -> IncomingLetterScreen(ctx)
         Screen.InTray -> InTrayScreen(ctx)
+        is Screen.LetterAction -> LetterActionScreen(ctx, s.id, s.action)
         Screen.PhoneMessages -> PhoneMessagesScreen(ctx)
         Screen.NewPhoneMessage -> NewPhoneMessageScreen(ctx)
         Screen.Staff -> StaffScreen(ctx)

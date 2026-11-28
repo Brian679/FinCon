@@ -211,6 +211,18 @@ def letter_new(request):
     return render(request, "generic/form.html", {"form": form, "title": "Incoming letter – scan and send", "multipart": True})
 
 
+LETTER_ACTIONS = {"task": "Give task to a department", "respond": "Reply to sender", "forward": "Send to another officer"}
+
+
+@staff_required
+def letter_action(request, pk, action):
+    c = get_object_or_404(services.letter_scope(request.user, Correspondence.objects.alive()), pk=pk)
+    if action not in LETTER_ACTIONS:
+        raise PermissionDenied("Unknown action.")
+    return render(request, "workflow/letter_action.html", {
+        "object": c, "action": action, "title": LETTER_ACTIONS[action], "departments": Department.choices, "staff": forms.staff_queryset()})
+
+
 @staff_required
 def letter_detail(request, pk):
     from . import attachments as att
