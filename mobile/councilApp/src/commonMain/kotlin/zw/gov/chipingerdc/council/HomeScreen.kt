@@ -48,6 +48,9 @@ import zw.gov.chipingerdc.shared.ui.PrimaryButton
 import zw.gov.chipingerdc.shared.ui.isPast
 import zw.gov.chipingerdc.shared.ui.money
 
+/** Lets tooling (e.g. the screenshot harness) read the menu as shown to the signed-in user. Unused in the app. */
+var menuListener: ((List<Pair<String, List<Pair<String, Screen>>>>) -> Unit)? = null
+
 private data class Tile(val label: String, val screen: Screen, val badge: Int = 0, val add: Screen? = null)
 
 /**
@@ -202,6 +205,7 @@ fun CouncilMenu(ctx: Ctx) {
             add("By-law enforcement" to listOf(Tile("Fines I have issued", Screen.Register("fines"), add = Screen.NewFine)))
         if (me.can("audit.view_trail")) add("Governance" to listOf(Tile("Audit trail", Screen.AuditTrail)))
     }.filter { it.second.isNotEmpty() }
+    menuListener?.invoke(sections.map { (title, tiles) -> title to tiles.map { it.label to it.screen } })
 
     var find by remember { mutableStateOf("") }
     Column(Modifier.fillMaxSize().background(Color.White).verticalScroll(rememberScrollState()).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
