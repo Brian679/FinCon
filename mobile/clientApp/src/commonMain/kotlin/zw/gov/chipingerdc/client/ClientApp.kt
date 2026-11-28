@@ -7,7 +7,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import zw.gov.chipingerdc.shared.CouncilSdk
+import zw.gov.chipingerdc.shared.ui.AppScreen
 import zw.gov.chipingerdc.shared.PlatformBackHandler
 import zw.gov.chipingerdc.shared.model.Me
 import zw.gov.chipingerdc.shared.sync.SyncState
@@ -62,8 +64,16 @@ sealed interface CScreen {
     data object Notices : CScreen
 }
 
-class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false) {
-    fun go(s: CScreen) = if (fromMenu) { nav.replaceAll(CScreen.Home); nav.push(s) } else nav.push(s)
+class CCtx(val sdk: CouncilSdk, val nav: Navigator<CScreen>, val me: Me, val sync: SyncState, val pending: Long, val fromMenu: Boolean = false,
+           val afterGo: () -> Unit = {}) {
+    fun go(s: CScreen) {
+        when {
+            fromMenu && s == CScreen.Home -> nav.replaceAll(CScreen.Home)
+            fromMenu -> { nav.replaceAll(CScreen.Home); nav.push(s) }
+            else -> nav.push(s)
+        }
+        afterGo()
+    }
     fun back() = nav.pop()
     fun syncNow() { sdk.syncNow() }
 }
@@ -93,7 +103,7 @@ fun ClientApp(sdk: CouncilSdk) {
 
 /** Shows the screen on top of the back stack (also used to render screens for documentation). */
 @Composable
-fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false) {
+fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false, menuOpen: Boolean = false) {
     val unread by ctx.sdk.observe(zw.gov.chipingerdc.shared.model.Entities.NOTIFICATIONS, zw.gov.chipingerdc.shared.model.AppNotification.serializer())
         .collectAsState(initial = emptyList())
     val n = unread.count { !it.isRead }
@@ -111,18 +121,37 @@ fun ClientRouter(ctx: CCtx, profileOpen: Boolean = false) {
     CompositionLocalProvider(LocalProfile provides profile) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             if (maxWidth >= 900.dp) {
+                // Desktop / tablet: the menu on the left, the dashboard or the open service on the right.
                 Row(Modifier.fillMaxSize()) {
-                    Box(Modifier.width(380.dp).fillMaxHeight()) {
-                        CompositionLocalProvider(LocalProfile provides null) { ClientHome(CCtx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true)) }
+                    Box(Modifier.width(360.dp).fillMaxHeight()) {
+                        CompositionLocalProvider(LocalProfile provides null) {
+                            AppScreen("Menu") { ClientMenu(CCtx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true)) }
+                        }
                     }
                     Box(Modifier.width(1.dp).fillMaxHeight().background(CrdcColors.Border))
                     Box(Modifier.weight(1f).fillMaxHeight()) {
-                        CompositionLocalProvider(LocalSiteName provides "") {
-                            if (ctx.nav.current == CScreen.Home) MyStandsScreen(ctx) else ClientScreens(ctx)
-                        }
+                        CompositionLocalProvider(LocalSiteName provides "") { ClientScreens(ctx) }
                     }
                 }
-            } else ClientScreens(ctx)
+            } else {
+                // Phone: the dashboard first; the menu slides in from the menu icon (top left).
+                val drawer = androidx.compose.material3.rememberDrawerState(
+                    if (menuOpen) androidx.compose.material3.DrawerValue.Open else androidx.compose.material3.DrawerValue.Closed)
+                val scope = androidx.compose.runtime.rememberCoroutineScope()
+                androidx.compose.material3.ModalNavigationDrawer(drawerState = drawer, drawerContent = {
+                    androidx.compose.material3.ModalDrawerSheet(Modifier.width(320.dp), drawerContainerColor = androidx.compose.ui.graphics.Color.White,
+                        windowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)) {
+                        CompositionLocalProvider(LocalProfile provides null) {
+                            AppScreen("Menu") {
+                                ClientMenu(CCtx(ctx.sdk, ctx.nav, ctx.me, ctx.sync, ctx.pending, fromMenu = true,
+                                    afterGo = { scope.launch { drawer.close() } }))
+                            }
+                        }
+                    }
+                }) {
+                    CompositionLocalProvider(zw.gov.chipingerdc.shared.ui.LocalMenuOpener provides { scope.launch { drawer.open() } }) { ClientScreens(ctx) }
+                }
+            }
         }
     }
 }

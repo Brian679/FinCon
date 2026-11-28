@@ -1,6 +1,8 @@
 package zw.gov.chipingerdc.client
 
 import kotlinx.datetime.toLocalDateTime
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.padding
 import zw.gov.chipingerdc.shared.model.shopStatus
 import zw.gov.chipingerdc.shared.model.Lease
 import androidx.compose.foundation.layout.Arrangement
@@ -111,34 +113,53 @@ fun RegisterScreen(sdk: CouncilSdk, onDone: () -> Unit) {
 }
 
 // ---------------------------------------------------------------------- home
+/** What a resident sees after logging in: the dashboard. Every service is in the menu (menu icon, top left). */
 @Composable
 fun ClientHome(ctx: CCtx) {
     val sdk = ctx.sdk
     val accounts by sdk.observe(Entities.ACCOUNTS, ClientAccount.serializer()).collectAsState(initial = emptyList())
     val bills by sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
-    val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
-    val unpaid = bills.filter { it.status in listOf("UNPAID", "PART") }
-    val total = accounts.sumOf { it.balance.toDoubleOrNull() ?: 0.0 }
+    val receipts by sdk.observe(Entities.RECEIPTS, Receipt.serializer()).collectAsState(initial = emptyList())
     val fines by sdk.observe(Entities.FINES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
     val permits by sdk.observe(Entities.RESOURCE_PERMITS, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
     val notices by sdk.observe(Entities.PUBLIC_NOTICES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
     fun kotlinx.serialization.json.JsonObject.str(k: String) = (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
-    AppScreen("My council", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
+    val unpaid = bills.filter { it.status in listOf("UNPAID", "PART") }
+    val total = accounts.sumOf { it.balance.toDoubleOrNull() ?: 0.0 }
+    val finesDue = fines.filter { it.str("status") == "ISSUED" }
+    val permitsDue = permits.filter { it.str("status") == "APPROVED" }
+    AppScreen("Dashboard", sync = ctx.sync, pending = ctx.pending, onSync = ctx::syncNow) {
         ScrollColumn {
-            if (notices.isNotEmpty()) SectionCard("Council notices") {
-                notices.sortedByDescending { it.str("publish_from") }.take(3).forEach { NoticeRow(it) }
-                if (notices.size > 3) androidx.compose.material3.TextButton(onClick = { ctx.go(CScreen.Notices) }) { Text("All ${notices.size} notices") }
-            }
             if (accounts.isEmpty()) {
                 InfoBox("Register your stand or shop, or link your council account using the account number on your bill.")
                 PrimaryButton("Register my stand / shop", onClick = { ctx.go(CScreen.RegisterStand) })
                 PrimaryButton("Link with account number", color = CrdcColors.Blue, onClick = { ctx.go(CScreen.LinkAccount) })
             } else {
-                Kpi("Total amount due", "$${money(total.toString())}", "${unpaid.size} unpaid bill(s)", if (total > 0) CrdcColors.Danger else CrdcColors.Green, Modifier.fillMaxWidth())
-                PrimaryButton("Pay now (EcoCash / OneMoney / InnBucks)", onClick = { ctx.go(CScreen.Pay(null, null)) })
-                accounts.forEach { a ->
-                    RowCard(a.name, a.accountNumber, if ((a.balance.toDoubleOrNull() ?: 0.0) > 0) "Owing $${money(a.balance)}" else "Paid up",
-                        a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
+                Kpi("Total amount due", "$${money(total.toString())}", "${unpaid.size} unpaid bill(s)", if (total > 0) CrdcColors.Danger else CrdcColors.Green,
+                    Modifier.fillMaxWidth())
+                if (total > 0) PrimaryButton("Pay now (EcoCash / OneMoney / InnBucks)", onClick = { ctx.go(CScreen.Pay(null, null)) })
+            }
+            if (finesDue.isNotEmpty() || permitsDue.isNotEmpty()) SectionCard("Waiting for payment") {
+                finesDue.forEach { f ->
+                    RowCard("Fine ${f.str("reference")}", f.str("offence_name").substringBefore(" ("), "$${money(f.str("amount"))}", "Unpaid", "UNPAID") {
+                        ctx.go(CScreen.Pay(f.str("account"), f.str("bill")))
+                    }
+                }
+                permitsDue.forEach { p ->
+                    RowCard("Permit ${p.str("reference")}", "${p.str("permit_type_label")} – approved, pay to receive it", "$${money(p.str("fee"))}",
+                        "Awaiting payment", "PENDING") { ctx.go(CScreen.Pay(p.str("holder"), p.str("bill"))) }
+                }
+            }
+            if (notices.isNotEmpty()) SectionCard("Council notices") {
+                notices.sortedByDescending { it.str("publish_from") }.take(3).forEach { NoticeRow(it) }
+                if (notices.size > 3) androidx.compose.material3.TextButton(onClick = { ctx.go(CScreen.Notices) }) { Text("All ${notices.size} notices") }
+            }
+            if (accounts.isNotEmpty()) {
+                SectionCard("My accounts") {
+                    accounts.forEach { a ->
+                        RowCard(a.name, a.accountNumber, if ((a.balance.toDoubleOrNull() ?: 0.0) > 0) "Owing $${money(a.balance)}" else "Paid up",
+                            a.statusLabel, a.status) { ctx.go(CScreen.Account(a.id)) }
+                    }
                 }
                 val props by sdk.observe(Entities.PROPERTIES, Property.serializer()).collectAsState(initial = emptyList())
                 val licences by sdk.observe(Entities.LICENCES, Licence.serializer()).collectAsState(initial = emptyList())
@@ -146,31 +167,64 @@ fun ClientHome(ctx: CCtx) {
                 val today = kotlinx.datetime.Clock.System.now().toLocalDateTime(kotlinx.datetime.TimeZone.of("Africa/Harare")).date.toString()
                 props.take(3).forEach { p -> ShopCard(ctx, shopStatus(p, bills, licences, leases, today), bills) }
             }
-            IndexModule("Pay", listOf(
-                IndexRow("Pay rates, levies & bills", unpaid.size, { ctx.go(CScreen.Pay(null, null)) }),
-                IndexRow("Pay a fine", fines.count { it.str("status") == "ISSUED" }, { ctx.go(CScreen.Fines) }, { ctx.go(CScreen.FindFine) }),
-                IndexRow("Sand & natural resource permits", permits.count { it.str("status") == "APPROVED" }, { ctx.go(CScreen.Permits) },
-                    { ctx.go(CScreen.ApplyPermit) }),
-            ))
-            IndexModule("My council", listOf(
-                IndexRow("My stands & shops", 0, { ctx.go(CScreen.MyStands) }, { ctx.go(CScreen.RegisterStand) }),
-                IndexRow("Payment history", 0, { ctx.go(CScreen.Receipts) }),
-                IndexRow("Licences", 0, { ctx.go(CScreen.Licences) }, { ctx.go(CScreen.ApplyLicence) }),
-                IndexRow("Building plans", 0, { ctx.go(CScreen.Plans) }, { ctx.go(CScreen.NewPlan) }),
-                IndexRow("Stand applications", 0, { ctx.go(CScreen.Stands) }, { ctx.go(CScreen.ApplyStand) }),
-                IndexRow("Link another account", 0, { ctx.go(CScreen.LinkAccount) }),
-            ))
-            IndexModule("Report & feedback", listOf(
-                IndexRow("Problems I reported", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
-                IndexRow("Complaints & feedback", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
-                IndexRow("Notifications", notes.count { !it.isRead }, { ctx.go(CScreen.Notifications) }),
-                IndexRow("Council notices", 0, { ctx.go(CScreen.Notices) }),
-            ))
-            IndexModule("About", listOf(
-                IndexRow("Client Charter", 0, { ctx.go(CScreen.Charter) }),
-                IndexRow("Sync status", 0, { ctx.go(CScreen.SyncCentre) }),
-            ))
+            if (receipts.isNotEmpty()) SectionCard("Recent payments") {
+                receipts.sortedByDescending { it.createdAt }.take(3).forEach { r ->
+                    RowCard(r.revenueHeadName.ifBlank { r.number }, "${r.number} · ${prettyDate(r.createdAt)}", "${r.currency} ${money(r.amount)}", null, null) {
+                        ctx.go(CScreen.Receipt(r.id))
+                    }
+                }
+            }
         }
+    }
+}
+
+/** The menu (menu icon, top left): every service in the app, Django admin index style. */
+@Composable
+fun ClientMenu(ctx: CCtx) {
+    val sdk = ctx.sdk
+    val bills by sdk.observe(Entities.BILLS, Bill.serializer()).collectAsState(initial = emptyList())
+    val notes by sdk.observe(Entities.NOTIFICATIONS, AppNotification.serializer()).collectAsState(initial = emptyList())
+    val fines by sdk.observe(Entities.FINES, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
+    val permits by sdk.observe(Entities.RESOURCE_PERMITS, kotlinx.serialization.json.JsonObject.serializer()).collectAsState(initial = emptyList())
+    fun kotlinx.serialization.json.JsonObject.str(k: String) = (this[k] as? kotlinx.serialization.json.JsonPrimitive)?.content ?: ""
+    val unpaid = bills.count { it.status in listOf("UNPAID", "PART") }
+    var find by remember { mutableStateOf("") }
+    val modules = listOf(
+        "Home" to listOf(IndexRow("Dashboard", 0, { ctx.go(CScreen.Home) })),
+        "Pay" to listOf(
+            IndexRow("Pay rates, levies & bills", unpaid, { ctx.go(CScreen.Pay(null, null)) }),
+            IndexRow("Fines", fines.count { it.str("status") == "ISSUED" }, { ctx.go(CScreen.Fines) }, { ctx.go(CScreen.FindFine) }),
+            IndexRow("Payment history", 0, { ctx.go(CScreen.Receipts) }),
+        ),
+        "Licences & permits" to listOf(
+            IndexRow("Licences", 0, { ctx.go(CScreen.Licences) }, { ctx.go(CScreen.ApplyLicence) }),
+            IndexRow("Sand & natural resource permits", permits.count { it.str("status") == "APPROVED" }, { ctx.go(CScreen.Permits) }, { ctx.go(CScreen.ApplyPermit) }),
+            IndexRow("Building plans", 0, { ctx.go(CScreen.Plans) }, { ctx.go(CScreen.NewPlan) }),
+        ),
+        "Stands & shops" to listOf(
+            IndexRow("My stands & shops", 0, { ctx.go(CScreen.MyStands) }, { ctx.go(CScreen.RegisterStand) }),
+            IndexRow("Stand applications", 0, { ctx.go(CScreen.Stands) }, { ctx.go(CScreen.ApplyStand) }),
+            IndexRow("Link another account", 0, { ctx.go(CScreen.LinkAccount) }),
+        ),
+        "Report & feedback" to listOf(
+            IndexRow("Problems I reported", 0, { ctx.go(CScreen.Problems) }, { ctx.go(CScreen.ReportProblem) }),
+            IndexRow("Complaints & feedback", 0, { ctx.go(CScreen.Feedback) }, { ctx.go(CScreen.NewFeedback) }),
+        ),
+        "Council" to listOf(
+            IndexRow("Council notices", 0, { ctx.go(CScreen.Notices) }),
+            IndexRow("Notifications", notes.count { !it.isRead }, { ctx.go(CScreen.Notifications) }),
+            IndexRow("Client Charter", 0, { ctx.go(CScreen.Charter) }),
+            IndexRow("Sync status", 0, { ctx.go(CScreen.SyncCentre) }),
+        ),
+    )
+    androidx.compose.foundation.layout.Column(
+        Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(12.dp),
+        verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
+    ) {
+        Field("Filter", find, { find = it })
+        modules.map { (t, rows) -> t to rows.filter { find.isBlank() || it.label.contains(find.trim(), ignoreCase = true) } }
+            .filter { it.second.isNotEmpty() }
+            .forEach { (t, rows) -> IndexModule(t, rows) }
     }
 }
 
