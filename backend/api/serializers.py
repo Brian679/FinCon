@@ -470,12 +470,18 @@ class FundsRequestSerializer(SyncSerializer):
     deciders = serializers.SerializerMethodField()
     payee_differs = serializers.BooleanField(read_only=True)
     voucher_number = serializers.CharField(source="voucher.number", read_only=True, default="")
+    attachments = serializers.SerializerMethodField()
+
+    def get_attachments(self, obj):
+        from workflow import attachments as att
+
+        return att.as_list("funds", obj)
     voucher_status = serializers.CharField(source="voucher.get_status_display", read_only=True, default="")
     vote = serializers.CharField(source="budget_line.vote_code", read_only=True, default="")
 
     class Meta:
         model = FundsRequest
-        fields = _sync_fields(FundsRequest, ["reference", "request_type", "title", "purpose", "department", "requested_by", "requested_by_name",
+        fields = _sync_fields(FundsRequest, ["attachments", "purchase_confirmed_at", "confirmation_note", "reference", "request_type", "title", "purpose", "department", "requested_by", "requested_by_name",
                                              "destination", "depart_date", "return_date", "travellers", "currency", "total", "needed_by",
                                              "requires_payment", "payee_name", "payment_method", "payment_details", "vote", "status", "submitted_at",
                                              "stage_since", "last_reminder_at", "decision_note", "voucher_number", "voucher_status", "completed_at",
@@ -567,11 +573,27 @@ class BankAccountSerializer(SyncSerializer):
 
 class CorrespondenceSerializer(SyncSerializer):
     assigned_to_name = serializers.CharField(source="assigned_to.get_full_name", read_only=True, default="")
+    addressed_to_name = serializers.CharField(source="addressed_to.get_full_name", read_only=True, default="")
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+    department_label = serializers.CharField(source="get_department_display", read_only=True)
+    task_reference = serializers.CharField(source="task.reference", read_only=True, default="")
+    received_by_name = serializers.SerializerMethodField()
+    attachments = serializers.SerializerMethodField()
 
     class Meta:
         model = Correspondence
-        fields = _sync_fields(Correspondence, ["reference", "sender", "sender_contact", "subject", "date_received", "department", "assigned_to",
-                                               "assigned_to_name", "status", "response_due", "responded_at", "response_summary", "file_reference"])
+        fields = _sync_fields(Correspondence, ["reference", "sender", "sender_contact", "subject", "date_received", "department", "department_label",
+                                               "assigned_to", "assigned_to_name", "addressed_to", "addressed_to_name", "status", "status_label",
+                                               "response_due", "responded_at", "response_summary", "file_reference", "routing_note", "task",
+                                               "task_reference", "received_by_name", "attachments"])
+
+    def get_received_by_name(self, obj):
+        return obj.created_by.get_full_name() if obj.created_by_id else ""
+
+    def get_attachments(self, obj):
+        from workflow import attachments as att
+
+        return att.as_list("correspondence", obj)
 
 
 
@@ -846,3 +868,18 @@ class AvailableStandSerializer(SyncSerializer):
         model = AvailableStand
         fields = _sync_fields(AvailableStand, ["stand_number", "area", "area_name", "stand_type", "stand_type_label", "size_sqm", "price", "status",
                                                "status_label", "application", "applicant_name", "notes"])
+
+
+from workflow.models import PhoneMessage  # noqa: E402
+
+
+class PhoneMessageSerializer(SyncSerializer):
+    for_user_name = serializers.CharField(source="for_user.get_full_name", read_only=True, default="")
+    for_department_label = serializers.CharField(source="get_for_department_display", read_only=True)
+    taken_by_name = serializers.CharField(source="taken_by.get_full_name", read_only=True, default="")
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = PhoneMessage
+        fields = _sync_fields(PhoneMessage, ["caller_name", "caller_phone", "for_user", "for_user_name", "for_department", "for_department_label",
+                                             "message", "call_back", "taken_by_name", "status", "status_label", "done_at", "done_note", "created_at"])

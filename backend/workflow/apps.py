@@ -11,4 +11,4 @@ class WorkflowConfig(AppConfig):
 
         from . import models as m
 
-        audit.register(m.Task, m.Complaint, m.ServiceRequest, m.Correspondence)
+        audit.register(m.Task, m.Complaint, m.ServiceRequest, m.Correspondence, m.Attachment, m.PhoneMessage)

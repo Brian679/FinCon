@@ -219,6 +219,7 @@ class Correspondence(SyncModel):
     class Status(models.TextChoices):
         RECEIVED = "RECEIVED", "Received"
         ASSIGNED = "ASSIGNED", "Assigned"
+        TASKED = "TASKED", "Task given to a department"
         RESPONDED = "RESPONDED", "Responded"
         FILED = "FILED", "Filed (no response needed)"
 
@@ -234,6 +235,11 @@ class Correspondence(SyncModel):
     responded_at = models.DateTimeField(null=True, blank=True)
     response_summary = models.TextField(blank=True)
     file_reference = models.CharField(max_length=60, blank=True)
+    # Reception scans the letter and sends it to the person it is for (e.g. the CEO), who can give it to a department as a task.
+    addressed_to = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="letters_in",
+                                     help_text="Person the letter was sent to (in-tray)")
+    routing_note = models.TextField(blank=True)
+    task = models.ForeignKey("Task", null=True, blank=True, on_delete=models.SET_NULL, related_name="letters")
 
     class Meta:
         ordering = ["-date_received", "-created_at"]
@@ -278,8 +284,10 @@ class FundsRequest(SyncModel):
         DRAFT = "DRAFT", "Draft"
         PENDING_HOD = "P_HOD", "Waiting for Head of Department"
         PENDING_ADMIN = "P_ADMIN", "Waiting for Administration Officer"
+        PENDING_ACCOUNTANT = "P_ACC", "Waiting for Accountant"
         PENDING_TREASURER = "P_TREAS", "Waiting for Treasurer"
         PENDING_CEO = "P_CEO", "Waiting for CEO"
+        PENDING_CONFIRMATION = "P_CONF", "Approved – confirm the purchase (invoice / delivery note)"
         PENDING_PAYMENT = "P_PAY", "Approved – Finance to prepare payment"
         PAYMENT_PROCESSING = "PAYING", "Payment voucher in approval"
         PAID = "PAID", "Paid – completed"
@@ -294,8 +302,8 @@ class FundsRequest(SyncModel):
         MOBILE = "MOBILE", "Mobile money (EcoCash / OneMoney)"
         CHEQUE = "CHEQUE", "Cheque"
 
-    PENDING = ("P_HOD", "P_ADMIN", "P_TREAS", "P_CEO")
-    OPEN = PENDING + ("P_PAY", "PAYING")
+    PENDING = ("P_HOD", "P_ADMIN", "P_ACC", "P_TREAS", "P_CEO")
+    OPEN = PENDING + ("P_CONF", "P_PAY", "PAYING")
 
     reference = models.CharField(max_length=30, unique=True, editable=False)
     request_type = models.CharField(max_length=10, choices=RequestType.choices, default=RequestType.TRAVEL)
@@ -312,6 +320,9 @@ class FundsRequest(SyncModel):
     currency = models.CharField(max_length=3, default="USD", choices=[("USD", "USD"), ("ZWG", "ZWG")])
     total = models.DecimalField(max_digits=14, decimal_places=2, default=0, editable=False)
     needed_by = models.DateField("Needed by", null=True, blank=True)
+    purchase_confirmed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    purchase_confirmed_at = models.DateTimeField(null=True, blank=True)
+    confirmation_note = models.CharField(max_length=255, blank=True)
     requires_payment = models.BooleanField("Money must be paid out", default=True,
                                            help_text="Untick if the request is for an item from stores or a service with no payment.")
     payee_name = models.CharField("Pay to", max_length=200, blank=True)
@@ -439,3 +450,56 @@ class MemoReply(SyncModel):
 
     class Meta:
         ordering = ["created_at"]
+
+
+
+class Attachment(SyncModel):
+    """A scanned letter, quotation, invoice, delivery note or photo attached to a request for funds or an incoming letter."""
+
+    class Kind(models.TextChoices):
+        SCAN = "SCAN", "Scanned letter / document"
+        EVIDENCE = "EVIDENCE", "Supporting document / evidence"
+        QUOTATION = "QUOTE", "Quotation"
+        INVOICE = "INVOICE", "Invoice"
+        DELIVERY = "DELIVERY", "Delivery note / proof of service"
+        PHOTO = "PHOTO", "Photo"
+        OTHER = "OTHER", "Other"
+
+    target_type = models.CharField(max_length=20, db_index=True)      # "funds" | "correspondence"
+    target_id = models.UUIDField(db_index=True)
+    file = models.FileField(upload_to="attachments/%Y/%m/")
+    name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.EVIDENCE)
+    size = models.PositiveIntegerField(default=0)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_kind_display()})"
+
+
+class PhoneMessage(SyncModel):
+    """Reception: a call taken for an officer (or a department) – they are told at once and mark it done when handled."""
+
+    class Status(models.TextChoices):
+        NEW = "NEW", "New"
+        DONE = "DONE", "Done"
+
+    caller_name = models.CharField(max_length=150)
+    caller_phone = models.CharField(max_length=30, blank=True)
+    for_user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="phone_messages")
+    for_department = models.CharField(max_length=10, choices=Department.choices, blank=True)
+    message = models.TextField()
+    call_back = models.BooleanField(default=True, help_text="The caller asked to be called back")
+    taken_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name="+")
+    status = models.CharField(max_length=5, choices=Status.choices, default=Status.NEW, db_index=True)
+    done_at = models.DateTimeField(null=True, blank=True)
+    done_note = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Call from {self.caller_name}"

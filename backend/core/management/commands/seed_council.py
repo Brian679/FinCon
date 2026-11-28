@@ -422,6 +422,13 @@ class Command(BaseCommand):
             for desc, qty, cost in lines:
                 FundsRequestLine.objects.create(request=req, description=desc, quantity=Decimal(str(qty)), unit_cost=Decimal(str(cost)))
             req.recalc_total()
+            if rtype in ("PURCHASE", "FUEL", "REPAIRS", "TRAINING"):        # the quotation goes with the request
+                from django.core.files.uploadedfile import SimpleUploadedFile
+
+                from workflow import attachments as att
+
+                att.add(u[who], "funds", req, SimpleUploadedFile(f"Quotation – {title[:40]}.pdf", b"%PDF-1.4\n% demo quotation\n",
+                                                                  content_type="application/pdf"), "QUOTE")
             return req
 
         # 1. Technical officer's T&S – approved by HOD, now with the Administration Officer (reminder sent)
@@ -445,12 +452,13 @@ class Command(BaseCommand):
                   destination="Mutare", depart_date=today + timedelta(days=12), return_date=today + timedelta(days=13), travellers="Ruvimbo Mhlanga")
         fr.submit(u["hr.officer"], r3)
         fr.decide(u["admin.officer"], r3, "approve", "Approved – within training budget.")
+        fr.decide(u["accountant"], r3, "approve", "Vote 0130 (staff training) has funds.")
         # 4. Social officer's advance – fully approved, paid
         r4 = make("social.officer", "ADVANCE", "Cash advance – drought relief food distribution, Ward 21",
                   "Transport and casual labour for food distribution to 300 households.",
                   [("Truck hire – 1 day", 1, 250), ("Casual labourers – 6 × 2 days", 12, 10)], payment_method="CASH", needed_by=today - timedelta(days=2))
         fr.submit(u["social.officer"], r4)
-        for who in ("social.director", "admin.officer", "treasurer", "ceo"):
+        for who in ("social.director", "admin.officer", "accountant", "treasurer", "ceo"):
             fr.decide(u[who], r4, "approve")
         try:
             from finance import services as fin
@@ -469,8 +477,16 @@ class Command(BaseCommand):
         r5 = make("engineer", "FUEL", "Diesel for grader – Ward 7 road programme", "Grading of 12 km of the Ward 7 feeder road.",
                   [("Diesel (litres)", 400, 1.55)], payee_name="Zuva Petroleum Chipinge", payment_method="EFT")
         fr.submit(u["engineer"], r5)
-        for who in ("admin.officer", "treasurer", "ceo"):
+        for who in ("admin.officer", "accountant", "treasurer", "ceo"):
             fr.decide(u[who], r5, "approve")
+        # the fuel was bought: invoice attached, purchase confirmed – now with Finance to prepare the payment
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from workflow import attachments as att
+
+        att.add(u["engineer"], "funds", r5, SimpleUploadedFile("Zuva Petroleum invoice 4471.pdf", b"%PDF-1.4\n% demo invoice\n",
+                                                                content_type="application/pdf"), "INVOICE")
+        fr.confirm_purchase(u["engineer"], r5, "400 litres delivered to the Chipinge depot.")
         # 6. Cashier's request returned for changes
         r6 = make("cashier", "PURCHASE", "Receipt book printing", "Manual receipt books for offline collection at Checheche.",
                   [("Receipt books (100 leaves)", 20, 6.5)])

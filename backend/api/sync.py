@@ -151,9 +151,9 @@ def staff_entities(user):
         "purchase_orders": (s.PurchaseOrder.objects.select_related("supplier", "requisition"), s.PurchaseOrderSerializer)
         if c("procurement.order", "finance.view_all", "voucher.prepare") else None,
         "bank_accounts": (s.BankAccount.objects.filter(is_active=True), s.BankAccountSerializer) if c("voucher.pay", "bank.manage", "finance.view_all") else None,
-        "correspondence": ((s.Correspondence.objects.select_related("assigned_to") if c("correspondence.manage") or user.sees_all_departments()
-                            else s.Correspondence.objects.filter(Q(department=user.department) | Q(assigned_to=user)).select_related("assigned_to")),
-                           s.CorrespondenceSerializer) if (c("correspondence.manage") or user.is_head) else None,
+        "correspondence": (wf.letter_scope(user, s.Correspondence.objects.select_related("assigned_to", "addressed_to", "task", "created_by")),
+                           s.CorrespondenceSerializer),
+        "phone_messages": (wf.phone_message_scope(user, s.PhoneMessage.objects.select_related("for_user", "taken_by")), s.PhoneMessageSerializer),
         # fines & Social Services registers (CAMPFIRE, natural resources, farms, water)
         "offences": (s.Offence.objects.all(), s.OffenceSerializer) if c("fines.issue", "fines.view") else None,
         "fines": (_fine_scope(user), s.FineSerializer) if c("fines.issue", "fines.view") else None,
@@ -655,6 +655,8 @@ def op_funds_action(user, p):
         fr.cancel(user, req, note)
     elif a == "pay":
         fr.prepare_payment(user, req, method=p.get("method") or None)
+    elif a == "confirm":
+        fr.confirm_purchase(user, req, note)
     else:
         raise ValidationError("Unknown action.")
     req.refresh_from_db()
@@ -735,10 +737,36 @@ def op_po_receive(user, p):
 def op_correspondence_create(user, p):
     from accounts.models import User
 
+    to = User.objects.filter(pk=p.get("addressed_to") or 0, user_type=User.UserType.STAFF).first()
     c = wf.log_correspondence(user, sender=p["sender"], sender_contact=p.get("sender_contact", ""), subject=p["subject"],
-                              department=p["department"], assigned_to=User.objects.filter(pk=p.get("assigned_to") or 0).first(),
-                              file_reference=p.get("file_reference", ""), corr_id=p.get("id"))
+                              department=p.get("department") or (to.department if to else "") or "EXEC",
+                              assigned_to=User.objects.filter(pk=p.get("assigned_to") or 0).first(),
+                              file_reference=p.get("file_reference", ""), corr_id=p.get("id"), addressed_to=to, routing_note=p.get("note", ""))
     return "correspondence", s.CorrespondenceSerializer(c).data
+
+
+def op_letter_route(user, p):
+    from accounts.models import User
+
+    to = User.objects.filter(pk=p.get("to_user") or 0, user_type=User.UserType.STAFF).first()
+    c = wf.route_letter(user, _get(s.Correspondence, p["id"]), p.get("action", ""), to_user=to, department=p.get("department", ""),
+                        title=p.get("title", ""), due_date=parse_date(p["due_date"]) if p.get("due_date") else None, note=p.get("note", ""))
+    return "correspondence", s.CorrespondenceSerializer(c).data
+
+
+def op_phone_message_create(user, p):
+    from accounts.models import User
+
+    m = wf.take_phone_message(user, caller_name=p.get("caller_name", ""), caller_phone=p.get("caller_phone", ""), message=p.get("message", ""),
+                              for_user=User.objects.filter(pk=p.get("for_user") or 0, user_type=User.UserType.STAFF).first(),
+                              for_department=p.get("for_department", ""), call_back=p.get("call_back", True) not in (False, "false"),
+                              msg_id=p.get("id"))
+    return "phone_messages", s.PhoneMessageSerializer(m).data
+
+
+def op_phone_message_done(user, p):
+    m = wf.phone_message_done(user, _get(s.PhoneMessage, p["id"]), p.get("note", ""))
+    return "phone_messages", s.PhoneMessageSerializer(m).data
 
 
 def op_correspondence_update(user, p):
@@ -927,6 +955,9 @@ STAFF_OPS = {
     "po.receive": op_po_receive,
     "correspondence.create": op_correspondence_create,
     "correspondence.update": op_correspondence_update,
+    "letter.route": op_letter_route,
+    "phone_message.create": op_phone_message_create,
+    "phone_message.done": op_phone_message_done,
     "funds.create": op_funds_create,
     "funds.action": op_funds_action,
     "memo.create": op_memo_create,

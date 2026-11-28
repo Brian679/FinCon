@@ -206,6 +206,7 @@ ROLE_CAPS = {
     },
     "ACCOUNTANT": FINANCE_READ
     | {
+        "funds.accountant_approve",
         "receipt.create",
         "receipt.void_approve",
         "accounts.manage",
@@ -282,6 +283,10 @@ ROLE_CAPS = {
 for _role in ("TREASURER", "ACCOUNTANT", "REVENUE_CLERK", "ADMIN_OFFICER", "LAND_OFFICER", "RECORDS_CLERK", "RECEPTIONIST", "SOCIAL_HEAD",
               "HEALTH_OFFICER", "GROWTH_POINT_MANAGER", "CEO"):
     ROLE_CAPS[_role] = set(ROLE_CAPS[_role]) | {"certificates.issue"}
+
+# Reception: phone messages for officers.
+for _role in ("RECEPTIONIST", "EXEC_ASSISTANT", "RECORDS_CLERK"):
+    ROLE_CAPS[_role] = set(ROLE_CAPS[_role]) | {"calls.log"}
 
 CLIENT_CAPS = {"portal.use"}
 

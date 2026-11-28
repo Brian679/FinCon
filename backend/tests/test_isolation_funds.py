@@ -135,6 +135,8 @@ class FundsRequestFlowTests(CouncilTestCase):
         self.assertEqual(req.status, FundsRequest.Status.PENDING_ADMIN)
         self.assertTrue(Notification.objects.filter(recipient=officer, title__contains="Administration Officer").exists())
         fr.decide(self.user("admin.officer"), req, "approve")
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_ACCOUNTANT)
+        fr.decide(self.user("accountant"), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_TREASURER)
         fr.decide(self.user("treasurer"), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_CEO)
@@ -163,7 +165,7 @@ class FundsRequestFlowTests(CouncilTestCase):
         officer = self.user("social.officer")
         req = self.make(officer, payment=False)
         fr.submit(officer, req)
-        for name in ("social.director", "admin.officer", "treasurer", "ceo"):
+        for name in ("social.director", "admin.officer", "accountant", "treasurer", "ceo"):
             fr.decide(self.user(name), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.COMPLETED)
 
@@ -172,7 +174,7 @@ class FundsRequestFlowTests(CouncilTestCase):
         req = self.make(hr)
         fr.submit(hr, req)
         fr.decide(self.user("admin.officer"), req, "approve")  # as HOD
-        self.assertEqual(req.status, FundsRequest.Status.PENDING_TREASURER)  # admin stage skipped
+        self.assertEqual(req.status, FundsRequest.Status.PENDING_ACCOUNTANT)  # admin stage skipped
         acc = self.user("accountant")
         req2 = self.make(acc)
         fr.submit(acc, req2)
@@ -554,7 +556,7 @@ class LoopholeTests(CouncilTestCase):
         req = FundsRequest.objects.create(requested_by=clerk, created_by=clerk, request_type="ADVANCE", title="Float", purpose="Petty cash float")
         FundsRequestLine.objects.create(request=req, description="Float", quantity=1, unit_cost=Decimal("50"))
         fr.submit(clerk, req)
-        for name in ("treasurer", "admin.officer", "ceo"):
+        for name in ("treasurer", "admin.officer", "accountant", "ceo"):
             if req.status in FundsRequest.PENDING:
                 fr.decide(self.user(name), req, "approve")
         self.assertEqual(req.status, FundsRequest.Status.PENDING_PAYMENT)

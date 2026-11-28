@@ -1,10 +1,9 @@
 """Requests for funds / purchases raised by any department.
 
-Route: requester -> Head of Department -> Administration Officer -> Treasurer
--> CEO -> (if money is paid out) payment voucher: Finance prepares it, the
-Accountant checks it, the Treasurer approves the payment again (and the CEO
-authorises it when it is above the threshold), the cashier pays -> the
-requester is told it is done.
+Route: requester (with the quotation / supporting documents attached) -> Head of Department -> Administration Officer
+-> Accountant -> Treasurer -> CEO -> for purchases, fuel and repairs: the purchase is confirmed (invoice / delivery note
+attached) -> payment voucher: Finance prepares it, the Accountant checks it, the Treasurer approves the payment again (and
+the CEO authorises it when it is above the threshold), the cashier pays -> the requester is told it is done.
 
 Every move is written to the approval history and the audit trail, the next
 approvers are notified, and the requester is told where the request is. The
@@ -33,11 +32,16 @@ S = FundsRequest.Status
 STAGES = [
     (S.PENDING_HOD, "Head of Department"),
     (S.PENDING_ADMIN, "Administration Officer"),
+    (S.PENDING_ACCOUNTANT, "Accountant"),
     (S.PENDING_TREASURER, "Treasurer"),
     (S.PENDING_CEO, "Chief Executive Officer"),
 ]
 STAGE_LABEL = dict(STAGES)
-STAGE_CAP = {S.PENDING_ADMIN: "funds.admin_approve", S.PENDING_TREASURER: "funds.treasurer_approve", S.PENDING_CEO: "funds.ceo_approve"}
+STAGE_CAP = {S.PENDING_ADMIN: "funds.admin_approve", S.PENDING_ACCOUNTANT: "funds.accountant_approve", S.PENDING_TREASURER: "funds.treasurer_approve",
+             S.PENDING_CEO: "funds.ceo_approve"}
+# Requests that buy something: evidence (quotation) at submission, and the purchase is confirmed (invoice / delivery note) before payment.
+PURCHASE_TYPES = ("PURCHASE", "FUEL", "REPAIRS", "TRAINING")
+CONFIRM_TYPES = ("PURCHASE", "FUEL", "REPAIRS")
 REMINDER_COOLDOWN = timedelta(hours=getattr(settings, "FUNDS_REMINDER_COOLDOWN_HOURS", 24))
 
 
@@ -77,6 +81,9 @@ def current_holder(req):
     """(where the request is now, [officers holding it])."""
     if req.status in STAGE_LABEL:
         return STAGE_LABEL[req.status], [u for u in eligible(req) if u.pk != req.requested_by_id]
+    if req.status == S.PENDING_CONFIRMATION:
+        return "Confirm the purchase – attach the invoice / delivery note", [req.requested_by] + [
+            u for u in _staff() if u.has_cap("procurement.order")]
     if req.status == S.PENDING_PAYMENT:
         from finance.services import users_with_cap
 
@@ -161,7 +168,11 @@ def _advance(req, actor):
             return req
         idx += 1
     # all approvals done
-    if req.requires_payment and req.total > 0:
+    if req.requires_payment and req.total > 0 and req.request_type in CONFIRM_TYPES and not req.purchase_confirmed_at:
+        _move_to(req, S.PENDING_CONFIRMATION, actor)
+        _tell([req.requested_by] + [u for u in _staff() if u.has_cap("procurement.order")], f"Request {req.reference} approved – confirm the purchase",
+              "Attach the invoice or delivery note and confirm the purchase; Finance then prepares the payment.", req)
+    elif req.requires_payment and req.total > 0:
         from finance.services import users_with_cap
 
         _move_to(req, S.PENDING_PAYMENT, actor)
@@ -190,7 +201,7 @@ def funds_scope(user, qs):
     if user.is_client:
         return qs.none()
     mine = Q(requested_by=user)
-    if user.has_cap("funds.view_all", "funds.admin_approve") or user.sees_all_departments():
+    if user.has_cap("funds.view_all", "funds.admin_approve", "funds.accountant_approve", "procurement.order") or user.sees_all_departments():
         return qs.filter(mine | ~Q(status=S.DRAFT))
     if user.is_head:
         return qs.filter(mine | (Q(department=user.department) & ~Q(status=S.DRAFT)))
@@ -212,6 +223,10 @@ def submit(user, req):
     req.recalc_total()
     if not req.lines.exists():
         raise ValidationError("Add at least one line (what you need and how much) before submitting.")
+    from . import attachments as att
+
+    if req.request_type in PURCHASE_TYPES and not att.for_object("funds", req).exists():
+        raise ValidationError("Attach the quotation or other supporting document before submitting.")
     if req.request_type == FundsRequest.RequestType.TRAVEL and not (req.destination and req.depart_date):
         raise ValidationError("Travel & subsistence requests need the destination and departure date.")
     resubmitted = req.status == S.RETURNED
@@ -294,6 +309,29 @@ def remind(user, req, message=""):
     req.last_reminder_at = timezone.now()
     req.save(update_fields=["last_reminder_at", "updated_at"])
     _record(req, label, "REMINDER", user, message or f"Reminder sent after {days} day(s).")
+    return req
+
+
+@transaction.atomic
+def confirm_purchase(user, req, note=""):
+    """After approval: the goods / service were bought – with the invoice or delivery note attached Finance may pay."""
+    from . import attachments as att
+    from .models import Attachment
+
+    if req.status != S.PENDING_CONFIRMATION:
+        raise ValidationError("This request is not waiting for the purchase to be confirmed.")
+    if not (req.requested_by_id == user.pk or user.has_cap("procurement.order")):
+        raise PermissionDenied("Only the requester or Procurement can confirm the purchase.")
+    if not att.for_object("funds", req).filter(kind__in=[Attachment.Kind.INVOICE, Attachment.Kind.DELIVERY]).exists():
+        raise ValidationError("Attach the invoice or delivery note first.")
+    req.purchase_confirmed_by, req.purchase_confirmed_at, req.confirmation_note = user, timezone.now(), note[:255]
+    req.save()
+    _record(req, "Purchase confirmed", "CONFIRMED", user, note)
+    from finance.services import users_with_cap
+
+    _move_to(req, S.PENDING_PAYMENT, user)
+    _tell(users_with_cap("voucher.prepare", Department.FINANCE), f"Request {req.reference} – purchase confirmed, prepare payment",
+          f"Pay {req.payee_name or req.requested_by.get_full_name()} {req.currency} {req.total:,.2f} for: {req.title}. Invoice attached.", req)
     return req
 
 
@@ -382,6 +420,16 @@ def route(req):
             rows.append({"label": label, "state": state, "who": r.user if state != "skipped" else "—", "when": r.timestamp, "note": r.comment})
         else:
             rows.append({"label": label, "state": "waiting", "who": "", "when": None, "note": ""})
+    if req.requires_payment and req.request_type in CONFIRM_TYPES:
+        if req.status == S.PENDING_CONFIRMATION:
+            _l, people = current_holder(req)
+            rows.append({"label": "Purchase confirmed – invoice / delivery note", "state": "current",
+                         "who": ", ".join(p.get_full_name() or p.username for p in people), "when": req.stage_since, "note": _waiting(req)})
+        elif req.purchase_confirmed_at:
+            rows.append({"label": "Purchase confirmed – invoice / delivery note", "state": "done", "who": req.purchase_confirmed_by,
+                         "when": req.purchase_confirmed_at, "note": req.confirmation_note})
+        else:
+            rows.append({"label": "Purchase confirmed – invoice / delivery note", "state": "waiting", "who": "", "when": None, "note": ""})
     if req.requires_payment:
         v = req.voucher
         from finance.models import ApprovalRecord, PaymentVoucher as PV

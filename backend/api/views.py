@@ -401,3 +401,59 @@ class LetterLinkView(AuditActorMixin, APIView):
             return Response({"detail": "Not your letter."}, status=403)
         token = signing.dumps(str(c.pk), salt=LETTER_LINK_SALT)
         return Response({"url": request.build_absolute_uri(reverse("letter_public", args=[token]))})
+
+
+
+class AttachmentUploadView(AuditActorMixin, APIView):
+    """POST multipart: target_type (funds | correspondence), target_id, kind, file – a scan, quotation, invoice or photo."""
+    from rest_framework.parsers import MultiPartParser
+
+    parser_classes = [MultiPartParser]
+
+    def post(self, request):
+        from workflow import attachments as att
+
+        try:
+            obj = att.target(request.data.get("target_type", ""), request.data.get("target_id", ""))
+            upload = request.FILES.get("file")
+            if upload is None:
+                raise ValidationError("Choose the file.")
+            a = att.add(request.user, request.data["target_type"], obj, upload, request.data.get("kind", ""), request.data.get("name", ""))
+        except (ValidationError, PermissionDenied) as exc:
+            return Response({"detail": " ".join(exc.messages) if hasattr(exc, "messages") else str(exc)}, status=400)
+        return Response({"id": str(a.pk), "name": a.name, "kind": a.kind, "kind_label": a.get_kind_display(), "size": a.size,
+                         "uploaded_by_name": request.user.get_full_name(), "created_at": a.created_at.isoformat()}, status=201)
+
+
+ATTACHMENT_SALT = "crdc-attachment"
+
+
+class AttachmentLinkView(AuditActorMixin, APIView):
+    """POST: a one-hour link to open the file in the phone's browser / viewer."""
+
+    def post(self, request, pk):
+        from django.core import signing
+        from django.urls import reverse
+
+        from workflow import attachments as att
+        from workflow.models import Attachment
+
+        a = get_object_or_404(Attachment.objects.alive(), pk=pk)
+        if not att.can_view(request.user, a.target_type, att.target(a.target_type, a.target_id)):
+            return Response({"detail": "You cannot open this file."}, status=403)
+        token = signing.dumps(str(a.pk), salt=ATTACHMENT_SALT)
+        return Response({"url": request.build_absolute_uri(reverse("attachment_public", args=[token]))})
+
+
+def attachment_public(request, token):
+    from django.core import signing
+    from django.http import FileResponse, Http404
+
+    from workflow.models import Attachment
+
+    try:
+        pk = signing.loads(token, salt=ATTACHMENT_SALT, max_age=60 * 60)
+    except signing.BadSignature:
+        raise Http404("This link has expired.")
+    a = get_object_or_404(Attachment.objects.alive(), pk=pk)
+    return FileResponse(a.file.open("rb"), filename=a.name if "." in a.name else a.file.name.rsplit("/", 1)[-1])

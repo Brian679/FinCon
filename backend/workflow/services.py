@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from core import audit
@@ -209,7 +210,8 @@ def _can_correspond(user, department=None):
 
 
 @transaction.atomic
-def log_correspondence(user, *, sender, subject, department, sender_contact="", assigned_to=None, file_reference="", corr_id=None):
+def log_correspondence(user, *, sender, subject, department, sender_contact="", assigned_to=None, file_reference="", corr_id=None,
+                       addressed_to=None, routing_note=""):
     from .models import Correspondence
 
     if not _can_correspond(user, department):
@@ -217,8 +219,8 @@ def log_correspondence(user, *, sender, subject, department, sender_contact="", 
     extra = {"id": corr_id} if corr_id else {}
     c = Correspondence.objects.create(sender=sender, sender_contact=sender_contact, subject=subject, department=department, assigned_to=assigned_to,
                                       file_reference=file_reference, status=Correspondence.Status.ASSIGNED if assigned_to else Correspondence.Status.RECEIVED,
-                                      created_by=user, **extra)
-    targets = [assigned_to] if assigned_to else [u for u in User.objects.filter(department=department, is_active=True) if u.is_head]
+                                      addressed_to=addressed_to, routing_note=routing_note, created_by=user, **extra)
+    targets = [addressed_to] if addressed_to else [assigned_to] if assigned_to else [u for u in User.objects.filter(department=department, is_active=True) if u.is_head]
     notify(targets, f"Letter {c.reference} from {sender}: {subject}", f"Reply due {timezone.localtime(c.response_due):%d %b %Y}" if c.response_due else "",
            "/staff/correspondence/")
     return c
@@ -241,3 +243,103 @@ def update_correspondence(user, c, *, status="", response_summary=""):
     c.save()
     audit.log(AuditLog.Action.UPDATE, c, user=user, message=f"Correspondence {c.reference}: {c.get_status_display()}")
     return c
+
+
+
+# ------------------------------------------------------------ in-tray (incoming letters)
+def letter_scope(user, qs):
+    """Letters a user may see: reception / registry and the CEO see all; others the ones sent or assigned to them, heads their department's."""
+    if user.has_cap("correspondence.manage") or user.sees_all_departments():
+        return qs
+    q = Q(addressed_to=user) | Q(assigned_to=user)
+    if user.is_head:
+        q |= Q(department=user.department)
+    return qs.filter(q)
+
+
+def in_tray(user):
+    from .models import Correspondence
+
+    open_ = [Correspondence.Status.RECEIVED, Correspondence.Status.ASSIGNED]
+    return Correspondence.objects.alive().filter(status__in=open_).filter(Q(addressed_to=user) | Q(assigned_to=user, addressed_to__isnull=True))
+
+
+@transaction.atomic
+def route_letter(user, c, action, *, to_user=None, department="", title="", due_date=None, note=""):
+    """What the person a letter was sent to does with it: give it to a department as a task, forward it, file it, or record the reply."""
+    from .models import Correspondence
+
+    if not (c.addressed_to_id == user.pk or c.assigned_to_id == user.pk or user.has_cap("correspondence.manage") or user.sees_all_departments()
+            or (user.is_head and c.department == user.department)):
+        raise PermissionDenied("This letter was not sent to you.")
+    if action == "task":
+        dept = department or (to_user.department if to_user else "")
+        if not dept:
+            raise ValidationError("Choose the department.")
+        if to_user is None:
+            to_user = next((u for u in User.objects.filter(department=dept, is_active=True, user_type=User.UserType.STAFF) if u.is_head), None)
+        task = create_task(user, title=(title or f"Letter {c.reference}: {c.subject}")[:200], department=dept, assigned_to=to_user,
+                           description=f"Letter {c.reference} from {c.sender} (received {c.date_received:%d %b %Y}). {note}".strip() +
+                           "\nThe scanned letter is attached to the letter in the in-tray.", due_date=due_date or None)
+        c.task, c.department, c.assigned_to, c.status = task, dept, to_user, Correspondence.Status.TASKED
+    elif action == "forward":
+        if to_user is None:
+            raise ValidationError("Choose who to send it to.")
+        c.addressed_to = to_user
+        c.department = to_user.department or c.department
+        notify([to_user], f"Letter {c.reference} sent to you by {user.get_full_name()}", f"From {c.sender}: {c.subject}. {note}".strip(),
+               f"/staff/correspondence/{c.pk}/view/")
+    elif action == "file":
+        c.status = Correspondence.Status.FILED
+    elif action == "respond":
+        if not note:
+            raise ValidationError("Write what was replied.")
+        c.status, c.responded_at, c.response_summary = Correspondence.Status.RESPONDED, timezone.now(), note
+    else:
+        raise ValidationError("Unknown action.")
+    if note and action != "respond":
+        c.routing_note = (c.routing_note + f"\n{timezone.localtime():%d %b %H:%M} {user.get_full_name()}: {note}").strip()
+    c.save()
+    audit.log(AuditLog.Action.UPDATE, c, user=user, message=f"Letter {c.reference}: {action}")
+    return c
+
+
+# ------------------------------------------------------------------ phone messages
+@transaction.atomic
+def take_phone_message(user, *, caller_name, message, caller_phone="", for_user=None, for_department="", call_back=True, msg_id=None):
+    from .models import PhoneMessage
+
+    if not user.has_cap("calls.log"):
+        raise PermissionDenied("Only reception takes phone messages.")
+    if not (caller_name and message):
+        raise ValidationError("Enter who called and the message.")
+    if for_user is None and not for_department:
+        raise ValidationError("Choose who the message is for.")
+    extra = {"id": msg_id} if msg_id else {}
+    m = PhoneMessage.objects.create(caller_name=caller_name, caller_phone=caller_phone, for_user=for_user,
+                                    for_department=for_department or (for_user.department if for_user else ""), message=message,
+                                    call_back=call_back, taken_by=user, created_by=user, **extra)
+    to = [for_user] if for_user else [u for u in User.objects.filter(department=for_department, is_active=True) if u.is_head]
+    notify(to, f"Phone message from {caller_name}" + (f" ({caller_phone})" if caller_phone else ""),
+           message + (" – please call back." if call_back else ""), "/staff/phone-messages/")
+    return m
+
+
+def phone_message_scope(user, qs):
+    if user.has_cap("calls.log") or user.sees_all_departments():
+        return qs
+    q = Q(for_user=user)
+    if user.is_head:
+        q |= Q(for_user__isnull=True, for_department=user.department)
+    return qs.filter(q)
+
+
+@transaction.atomic
+def phone_message_done(user, m, note=""):
+    from .models import PhoneMessage
+
+    if not phone_message_scope(user, PhoneMessage.objects.filter(pk=m.pk)).exists():
+        raise PermissionDenied("This message is not for you.")
+    m.status, m.done_at, m.done_note = PhoneMessage.Status.DONE, timezone.now(), note[:255]
+    m.save()
+    return m
